@@ -1,11 +1,12 @@
-# Netlify config (Bun + Vite React)
+# Netlify config (NPM + Vite React)
 [build]
-  command = "bun install && bun run build"
+  command = "npm run build"
   publish = "dist"
 
 [build.environment]
-  BUN_VERSION = "1.1.30"
+  NODE_VERSION = "20"
 
+# SPA fallback (Vite)
 [[redirects]]
   from = "/*"
   to = "/index.html"
