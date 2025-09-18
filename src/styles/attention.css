@@ -41,3 +41,7 @@
   100% { transform: translateX(0); }
 }
 body.shake-animation { animation: body-shake-kf 600ms ease-in-out; }
+
+
+/* Shake específico para o card de notificação de atenção */
+.attention-toast-shake { animation: attention-shake-kf 600ms ease-in-out; }

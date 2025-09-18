@@ -44,7 +44,7 @@ export const useAttentionCalls = () => {
         const createdAt = new Date((payload.new as any)?.created_at ?? Date.now());
         if (createdAt < sessionStartRef.current) return;
         setLastIncoming(payload.new);
-        toast.success('Alguém está chamando sua atenção!', { duration: 2500 });
+        toast.success('Contato está chamando sua atenção!', { duration: 2500 });
       })
       .subscribe();
     return () => { try { supabase.removeChannel(ch); } catch {} };
@@ -58,9 +58,9 @@ export const useAttentionCalls = () => {
     } catch (e: any) {
       const msg = (e?.message || '').toLowerCase();
       if (msg.includes('receiver is offline')) {
-        toast.error('Contato está offline. Não é possível chamar atenção agora.');
+        
       } else {
-        toast.error('Erro ao chamar atenção');
+        
       }
       throw e;
     }

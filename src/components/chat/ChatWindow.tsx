@@ -19,7 +19,8 @@ import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from '@/components/ui/dropdown-menu';
 import { BlockContactButton } from './BlockContactButton';
-import { isOnline } from '@/lib/presence';
+import { isOnline as isOnlineByTTL } from '@/lib/presence';
+import { useRealtimePresence } from '@/hooks/useRealtimePresence';
 
 interface ChatWindowProps {
   contact?: any;
@@ -47,8 +48,8 @@ export const ChatWindow = ({
   onContactBlock,
 }: ChatWindowProps) => {
   const { contactOnline, status, lastSeen } = useContactPresence(contact?.id);
-  const headerOnline = isOnline(status, lastSeen || null);
-
+  const { isOnline } = useRealtimePresence();
+  const headerOnline = isOnline(contact?.id) || isOnlineByTTL(status, lastSeen || null);
   const [newMessage, setNewMessage] = useState('');
   const inputRef = useRef<HTMLInputElement>(null);
   const bottomRef = useRef<HTMLDivElement>(null);

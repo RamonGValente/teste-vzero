@@ -10,10 +10,15 @@ import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
-import { AttentionCallNotification } from "@/components/notifications/AttentionCallNotification";
+import { useRealtimePresence } from '@/hooks/useRealtimePresence';
+import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
+
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
+
+function PresenceInitializer(){ useRealtimePresence(); return null; }
+
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -31,11 +36,12 @@ const App = () => (
       <LanguageProvider>
         <AuthProvider>
           <NotificationProvider>
+          <PresenceInitializer />
             <UserActivityTracker />
             <TooltipProvider>
               <Toaster />
               <Sonner />
-              <AttentionCallNotification />
+              <RealtimeAttentionListener />
               <BrowserRouter>
                 <Routes>
                   <Route path="/" element={<Index />} />
