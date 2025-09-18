@@ -2,53 +2,50 @@ import { useEffect, useRef } from 'react';
 import { supabase } from '@/lib/supabase';
 
 /**
- * Mantém o usuário ONLINE enquanto o app/aba existir (mesmo em segundo plano).
- * Só marca OFFLINE ao fechar o PWA/aba/navegador (beforeunload) ou desmontar o app.
- * Mantém heartbeat periódico para atualizar last_seen.
- * Usa RPC public.set_presence(p_online boolean).
+ * Mantém o usuário online com heartbeat e marca offline ao sair/ocultar.
+ * Usa RPC set_presence(p_online) (security definer) e faz fallback para update direto.
  */
 export function useOnlineStatus() {
+  const hideTimer = useRef<number | null>(null);
   const heartbeat = useRef<number | null>(null);
 
   useEffect(() => {
     const setPresence = async (online: boolean) => {
       try {
-        await supabase.rpc('set_presence', { p_online: online });
-      } catch (e) {
-        // best-effort
-        console.warn('set_presence failed', e);
+        const { error } = await supabase.rpc('set_presence', { p_online: online });
+        if (!error) return;
+      } catch {}
+      // fallback
+      try {
+        const { data } = await supabase.auth.getUser();
+        const uid = data.user?.id;
+        if (!uid) return;
+        await supabase
+          .from('profiles')
+          .update({ status: online ? 'online' : 'offline', last_seen: new Date().toISOString(), updated_at: new Date().toISOString() })
+          .eq('id', uid);
+      } catch {}
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState === 'hidden') {
+        hideTimer.current = window.setTimeout(() => setPresence(false), 65_000) as unknown as number;
+      } else {
+        if (hideTimer.current) { clearTimeout(hideTimer.current!); hideTimer.current = null; }
+        setPresence(true);
       }
     };
 
-    const goOnline = () => {
-      setPresence(true);
-      if (heartbeat.current) window.clearInterval(heartbeat.current);
-      // Mantém last_seen atualizado. 30s costuma ser OK com throttling de background.
-      heartbeat.current = window.setInterval(() => setPresence(true), 30_000) as any;
-    };
-
-    const goOffline = () => {
-      if (heartbeat.current) {
-        window.clearInterval(heartbeat.current);
-        heartbeat.current = null;
-      }
-      setPresence(false);
-    };
-
-    // Inicializa como ONLINE ao montar
-    goOnline();
-
-    // Ao fechar a aba/PWA/navegador, tenta registrar OFFLINE
-    const handleBeforeUnload = () => {
-      // melhor esforço; alguns navegadores podem ignorar requisições async aqui
-      goOffline();
-    };
-    window.addEventListener('beforeunload', handleBeforeUnload);
+    setPresence(true);
+    heartbeat.current = window.setInterval(() => setPresence(true), 20_000);
+    document.addEventListener('visibilitychange', onVisible);
+    window.addEventListener('beforeunload', () => { void setPresence(false); });
 
     return () => {
-      window.removeEventListener('beforeunload', handleBeforeUnload);
-      // Ao desmontar o app (logout/navegação fora do app), marca OFFLINE
-      goOffline();
+      document.removeEventListener('visibilitychange', onVisible);
+      if (heartbeat.current) clearInterval(heartbeat.current);
+      if (hideTimer.current) clearTimeout(hideTimer.current);
+      setPresence(false);
     };
   }, []);
 }
