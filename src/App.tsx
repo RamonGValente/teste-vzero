@@ -7,18 +7,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter, Routes, Route } from "react-router-dom";
 import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
-import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
-import { useRealtimePresence } from '@/hooks/useRealtimePresence';
+// import { AttentionCallNotification } from "@/components/notifications/AttentionCallNotification"; // <-- REMOVIDO
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
-
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
-
-function PresenceInitializer(){ useRealtimePresence(); return null; }
-
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,11 +31,11 @@ const App = () => (
       <LanguageProvider>
         <AuthProvider>
           <NotificationProvider>
-          <PresenceInitializer />
             <UserActivityTracker />
             <TooltipProvider>
               <Toaster />
               <Sonner />
+              {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
               <RealtimeAttentionListener />
               <BrowserRouter>
                 <Routes>

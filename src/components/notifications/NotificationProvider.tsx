@@ -1,4 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+
+import { createContext, useContext, useEffect, useState } from 'react';
 import { toast } from 'sonner';
 import { useNotificationSounds } from '@/hooks/useNotificationSounds';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -13,7 +14,7 @@ const NotificationContext = createContext<NotificationContextType | undefined>(u
 
 export const NotificationProvider = ({ children }: { children: React.ReactNode }) => {
   const [permission, setPermission] = useState<NotificationPermission>('default');
-  const { playSound: playFromSettings } = useNotificationSounds();
+  const { playSound: playCustomSound } = useNotificationSounds();
 
   useEffect(() => {
     if ('Notification' in window) {
@@ -21,50 +22,45 @@ export const NotificationProvider = ({ children }: { children: React.ReactNode }
     }
   }, []);
 
-  const requestPermission = useCallback(async () => {
-    if (!('Notification' in window)) return;
-    try {
-      const p = await Notification.requestPermission();
-      setPermission(p);
-    } catch {}
-  }, []);
+  const playSound = (soundType: 'message' | 'attention') => {
+    playCustomSound(soundType);
+  };
 
-  const playSound = useCallback((soundType: 'message' | 'attention') => {
-    try {
-      playFromSettings(soundType);
-    } catch (e) {
-      console.warn('Sound play failed', e);
+  const requestPermission = async () => {
+    if ('Notification' in window) {
+      const result = await Notification.requestPermission();
+      setPermission(result);
     }
-  }, [playFromSettings]);
+  };
 
-  const showNotification = useCallback((title: string, body: string, avatar?: string, soundType: 'message' | 'attention' = 'message') => {
-    // toast in-app (shake e som apenas na notificação)
-    toast.custom(() => (
-      <div className={soundType === 'attention' ? 'attention-toast-shake' : undefined}>
-        <div className="flex items-center gap-3">
-          <Avatar className="h-8 w-8">
-            {avatar ? <AvatarImage src={avatar} alt="" /> : <AvatarFallback>{title.slice(0,2).toUpperCase()}</AvatarFallback>}
-          </Avatar>
-          <div className="flex flex-col">
-            <strong className="text-sm">{title}</strong>
-            <span className="text-xs opacity-80">{body}</span>
-          </div>
-        </div>
-      </div>
-    ), { duration: 4000 });
+  const showNotification = (title: string, body: string, avatar?: string, soundType: 'message' | 'attention' = 'message') => {
+    // Play sound
+    playSound(soundType);
 
-    // system notification (quando permitido) — sem shake/som global
-    if ('Notification' in window && permission === 'granted') {
-      try {
-        new Notification(title, { body, icon: avatar });
-      } catch {}
+    if (permission === 'granted') {
+      new Notification(title, {
+        body,
+        icon: avatar || '/favicon.ico',
+        badge: '/favicon.ico',
+      });
+    } else {
+      // Show visual toast with avatar
+      toast(title, { 
+        description: body,
+        action: avatar ? {
+          label: <Avatar className="h-6 w-6">
+            <AvatarImage src={avatar} />
+            <AvatarFallback className="text-xs">
+              {title.charAt(0).toUpperCase()}
+            </AvatarFallback>
+          </Avatar>,
+          onClick: () => {}
+        } : undefined
+      });
     }
+  };
 
-    // Som apenas para o alerta de atenção (não no body)
-    if (soundType) playSound(soundType);
-  }, [permission, playSound]);
-
-  const value: NotificationContextType = {
+  const value = {
     playSound,
     requestPermission,
     showNotification,

@@ -14,12 +14,15 @@ export const AttentionCallNotification = () => {
     if (lastIdRef.current === lastIncoming.id) return;
     lastIdRef.current = lastIncoming.id;
 
-    const sender = contacts.find(c => c.contact_id === lastIncoming.sender_id || c.user_id === lastIncoming.sender_id);
-    const senderName = sender?.profiles?.full_name || sender?.profiles?.username || 'Contato';
-    const avatar = sender?.profiles?.avatar_url || undefined;
+    const senderContact = contacts.find(c => c.id === lastIncoming.sender_id);
+    const senderName = senderContact?.full_name || 'Alguém';
+    const senderAvatar = senderContact?.avatar_url;
 
-    showNotification(senderName, `${senderName} está chamando sua atenção!`, avatar, 'attention');
-  }, [lastIncoming, contacts, showNotification]);
+    document.body.classList.add('shake-animation');
+    showNotification(`${senderName} está chamando sua atenção!`, 'Clique para ver a conversa', senderAvatar, 'attention');
+    const t = setTimeout(() => document.body.classList.remove('shake-animation'), 1000);
+    return () => clearTimeout(t);
+  }, [lastIncoming, showNotification, contacts]);
 
   return null;
 };
