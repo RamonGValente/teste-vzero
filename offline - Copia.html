@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1"/>
+  <title>Offline • Undoing</title>
+  <meta name="theme-color" content="#0f172a"/>
+  <link rel="manifest" href="/manifest.webmanifest">
+  <style>
+    html,body{height:100%;margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif}
+    .wrap{min-height:100%;display:grid;place-items:center;padding:24px}
+    .card{max-width:560px;background:#0f172a;border-radius:16px;padding:20px;border:1px solid rgba(255,255,255,.06)}
+    h1{margin:0 0 8px 0;font-size:24px}
+    p{margin:8px 0 0 0;opacity:.9;line-height:1.5}
+    .hint{margin-top:12px;font-size:14px;opacity:.8}
+    .btn{display:inline-block;margin-top:14px;background:#22c55e;color:#081019;border:0;border-radius:12px;padding:10px 14px;font-weight:700;cursor:pointer;text-decoration:none}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1>Você está offline</h1>
+      <p>O Undoing precisa de conexão para sincronizar parte dos dados. Assim que a rede voltar, tente novamente.</p>
+      <p class="hint">Dica: instalando como PWA, você mantém o app aberto e mais páginas disponíveis offline.</p>
+      <a class="btn" href="/">Tentar novamente</a>
+    </div>
+  </div>
+</body>
+</html>
