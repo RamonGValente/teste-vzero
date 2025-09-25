@@ -85,3 +85,8 @@ Data (UTC): 2025-09-16T19:09:56.531075Z
 1. Crie `.env` baseado em `.env.example` e preencha as chaves do Supabase.
 2. `npm i`
 3. `npm run dev` para desenvolvimento ou `npm run build && npm run preview` para testar o build.
+
+
+## Deploy notes (auto)
+- Update marker: 2025-09-25 01:52:59 UTC-03:00-0300
+- Change: Version bump + Netlify PWA fixes (public/pwa assets, SW path, SPA redirects).

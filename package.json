@@ -1,7 +1,7 @@
 {
   "name": "vite_react_shadcn_ts",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "type": "module",
   "packageManager": "npm@10.9.3",
   "scripts": {
@@ -89,5 +89,8 @@
   },
   "engines": {
     "node": ">=18"
+  },
+  "metadata": {
+    "lastUpdateIso": "2025-09-25T04:52:59.548605Z"
   }
 }
