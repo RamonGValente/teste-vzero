@@ -1,44 +1,63 @@
 {
-  "name": "UndoinG",
-  "short_name": "UndoinG",
+  "name": "Seu App (PWA)",
+  "short_name": "SeuApp",
+  "description": "Aplicativo instalável e rápido em qualquer desktop e celular.",
   "id": "/",
-  "start_url": "/",
+  "start_url": "/?source=pwa",
   "scope": "/",
   "display": "standalone",
-  "orientation": "portrait",
-  "background_color": "#0a0a0b",
-  "theme_color": "#7c3aed",
-  "description": "Mensagens que se apagam na memória. Acesse com sigilo e privacidade pelo App (PWA).",
+  "background_color": "#ffffff",
+  "theme_color": "#0f172a",
+  "lang": "pt-BR",
+  "dir": "ltr",
+  "categories": [
+    "productivity",
+    "business"
+  ],
+  "orientation": "any",
+  "prefer_related_applications": false,
+  "protocol_handlers": [
+    {
+      "protocol": "web+seuapp",
+      "url": "/open?url=%s"
+    }
+  ],
   "icons": [
     {
       "src": "/icons/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-256.png",
       "sizes": "256x256",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-384.png",
       "sizes": "384x384",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
     },
     {
       "src": "/icons/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Abrir painel",
+      "short_name": "Painel",
+      "url": "/dashboard"
     },
     {
-      "src": "/icons/icon-maskable-512.png",
-      "sizes": "512x512",
-      "type": "image/png",
-      "purpose": "maskable"
+      "name": "Criar novo",
+      "short_name": "Novo",
+      "url": "/new"
     }
   ]
 }

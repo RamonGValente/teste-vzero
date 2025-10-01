@@ -71,7 +71,7 @@ export const useMessageOperations = (user: any) => {
         .from('messages')
         .update({ 
           viewed_at: new Date().toISOString(),
-          auto_delete_at: new Date(Date.now() + 1000).toISOString() // Delete in 1 second
+          auto_delete_at: new Date(Date.now() + 120000).toISOString() // Delete in 1 second
         })
         .eq('id', messageId);
     } catch (error) {

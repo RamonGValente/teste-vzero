@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Button } from '@/components/ui/button';
@@ -8,6 +7,7 @@ import { cn } from '@/lib/utils';
 import { formatDistanceToNow } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 import { Download, Play, Pause, Clock, Check, CheckCheck } from 'lucide-react';
+import { AudioPlayer } from './AudioPlayer';
 
 interface MessageBubbleProps {
   message: any;
@@ -26,6 +26,25 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
   const [showCountdown, setShowCountdown] = useState(false);
   const [mediaViewed, setMediaViewed] = useState(false);
   const [isDestructing, setIsDestructing] = useState(false);
+
+  // Auto-mark TEXT as viewed when bubble enters viewport
+  useEffect(() => {
+    if (message.message_type !== 'text' || isOwn || hasBeenRead) return;
+    const el = document.getElementById(`msg-${message.id}`);
+    if (!el) return;
+    const onVisible = async () => {
+      if (hasBeenRead) return;
+      await onMarkMediaAsViewed?.(message.id);
+      setHasBeenRead(true);
+      setShowCountdown(true);
+      startTextDisappearEffect(message.content || '');
+    };
+    const obs = new IntersectionObserver(entries => {
+      entries.forEach(e => { if (e.isIntersecting) onVisible(); });
+    }, { threshold: 0.8 });
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, [message?.id, message?.message_type, isOwn, hasBeenRead, onMarkMediaAsViewed]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -47,7 +66,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
     // Type out text messages letter by letter
     let currentIndex = 0;
     const fullText = message.content;
-    
+
     const typeInterval = setInterval(() => {
       if (currentIndex <= fullText.length) {
         setDisplayText(fullText.slice(0, currentIndex));
@@ -55,7 +74,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
       } else {
         clearInterval(typeInterval);
         setHasBeenRead(true);
-        
+
         // Start countdown for text messages when viewed
         if (!isOwn && message.message_type === 'text') {
           setShowCountdown(true);
@@ -69,13 +88,13 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
 
   const startCountdown = (fullText: string) => {
     let timeRemaining = 120; // 2 minutes
-    
+
     const countdownInterval = setInterval(() => {
       timeRemaining--;
       setTimeLeft(timeRemaining);
-      
+
       if (timeRemaining <= 0) {
-      try { onDelete(message.id, 'both'); } catch (e) { console.error(e); } // delete DB after countdown
+        try { onDelete(message.id, 'both'); } catch (e) { console.error(e); } // delete DB after countdown
         clearInterval(countdownInterval);
         setIsDestructing(true);
         setTimeout(() => {
@@ -83,13 +102,13 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
         }, 2000); // Give time for animation
       }
     }, 1000);
-    
+
     return () => clearInterval(countdownInterval);
   };
 
   const startDisappearingEffect = (fullText: string) => {
     let currentLength = fullText.length;
-    
+
     const disappearInterval = setInterval(() => {
       if (currentLength > 0) {
         currentLength--;
@@ -103,6 +122,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
   };
 
   const handleMediaPlay = async () => {
+    if (isOwn) return;
     if (message.message_type === 'audio') {
       const audio = new Audio(message.file_url);
       if (isPlaying) {
@@ -127,6 +147,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
   };
 
   const handleMediaView = async () => {
+    if (isOwn) return;
     if (!mediaViewed && (message.message_type === 'image' || message.message_type === 'file')) {
       setMediaViewed(true);
       setIsDestructing(true);
@@ -170,26 +191,36 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
       );
     }
 
+    // ÁUDIO (corrigido)
     if (message.message_type === 'audio') {
       return (
-        <div className="flex items-center gap-3 min-w-[200px]">
-          <Button
-            size="sm"
-            variant="ghost"
-            onClick={handleMediaPlay}
-            className="rounded-full p-2"
-          >
-            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-          </Button>
-          <div className="flex-1">
-            <div className="h-2 bg-muted rounded-full">
-              <div className="h-2 bg-primary rounded-full w-1/3"></div>
+        <div
+          className="min-w-[220px]"
+          onClick={(e) => e.stopPropagation()}
+          onMouseDown={(e) => e.stopPropagation()}
+          onPointerDown={(e) => e.stopPropagation()}
+        >
+          <AudioPlayer
+            src={message.file_url || ''}
+            onFirstPlay={
+              !isOwn
+                ? () => {
+                    if (!mediaViewed) {
+                      setMediaViewed(true);
+                      onMarkMediaAsViewed?.(message.id);
+                      setShowCountdown(true);
+                      startCountdown(displayText || '');
+                    }
+                  }
+                : undefined
+            }
+          />
+          {!isOwn && showCountdown && (
+            <div className="flex items-center gap-2 mt-2 text-xs opacity-70">
+              <Clock className="h-3 w-3" />
+              <span>{formatTime(timeLeft)}</span>
             </div>
-            <p className="text-xs mt-1 opacity-70">Mensagem de áudio</p>
-            {message.single_view && !mediaViewed && (
-              <p className="text-xs text-yellow-500">🎵 Reprodução única</p>
-            )}
-          </div>
+          )}
         </div>
       );
     }
@@ -225,7 +256,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
   const DeliveryIcon = deliveryStatus.icon;
 
   return (
-    <div className={cn(
+    <div id={`msg-${message.id}`} className={cn(
       "flex gap-2 max-w-[80%] animate-fade-in",
       isOwn ? "ml-auto flex-row-reverse" : "mr-auto"
     )}>
@@ -234,7 +265,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
           <AvatarFallback className="text-xs">U</AvatarFallback>
         </Avatar>
       )}
-      
+
       <div className={cn(
         "relative group",
         !showAvatar && !isOwn && "ml-10"
@@ -260,7 +291,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
                 ) : (
                   <>
                     <p className="text-sm">{displayText}</p>
-                    {showCountdown && (
+                    {!isOwn && showCountdown && (
                       <div className="flex items-center gap-2 mt-2 text-xs opacity-70">
                         <Clock className="h-3 w-3" />
                         <span>{formatTime(timeLeft)}</span>
@@ -286,7 +317,7 @@ export const MessageBubble = ({ message, isOwn, onDelete, onMarkMediaAsViewed, s
                 </div>
               </div>
             </DropdownMenuTrigger>
-            
+
             <DropdownMenuContent align={isOwn ? "end" : "start"}>
               <DropdownMenuItem onClick={() => onDelete(message.id, 'me')}>
                 Apagar para mim

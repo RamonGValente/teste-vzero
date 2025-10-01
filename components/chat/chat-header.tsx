@@ -4,7 +4,7 @@ import type { Profile } from "@/lib/supabase"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, Phone, Video, MoreVertical } from "lucide-react"
+import { ArrowLeft, MoreVertical } from "lucide-react"
 
 interface ChatHeaderProps {
   contact: Profile
@@ -64,12 +64,6 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
       </div>
 
       <div className="flex items-center space-x-2">
-        <Button variant="ghost" size="sm">
-          <Phone className="h-4 w-4" />
-        </Button>
-        <Button variant="ghost" size="sm">
-          <Video className="h-4 w-4" />
-        </Button>
         <Button variant="ghost" size="sm">
           <MoreVertical className="h-4 w-4" />
         </Button>

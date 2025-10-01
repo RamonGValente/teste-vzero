@@ -8,6 +8,7 @@ import { ContactRanking } from './ContactRanking';
 import { MediaMessageInput } from './MediaMessageInput';
 import { TypingIndicator } from './TypingIndicator';
 import { AttentionCallButton } from './AttentionCallButton';
+import { AudioMessageButton } from './AudioMessageButton';
 import { Menu, ArrowLeft, MoreVertical } from 'lucide-react';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useMessageStatus } from '@/hooks/useMessageStatus';
@@ -246,6 +247,7 @@ export const ChatWindow = ({
             <Button type="submit" disabled={!newMessage.trim()}>
               Enviar
             </Button>
+            <AudioMessageButton contactId={contact.id} onSendMessage={onSendMessage} />
           </form>
         </div>
       </div>
