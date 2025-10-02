@@ -15,6 +15,8 @@ interface CallState {
   invites: Invite[]
   upsertInvite: (v: Invite) => void
   removeInvite: (id: string) => void
+  currentRoom?: string
+  setCurrentRoom: (room?: string) => void
 }
 
 export const useCallStore = create<CallState>((set) => ({
@@ -25,4 +27,6 @@ export const useCallStore = create<CallState>((set) => ({
     return { invites: [...s.invites, v] }
   }),
   removeInvite: (id) => set((s) => ({ invites: s.invites.filter(x => x.id !== id) })),
+  currentRoom: undefined,
+  setCurrentRoom: (room) => set({ currentRoom: room }),
 }))

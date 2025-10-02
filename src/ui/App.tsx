@@ -16,7 +16,7 @@ export default function App() {
   useRealtimeInvites(userId)
 
   return (
-    <div style={{ padding: 24 }}>
+    <div style={{ padding: 24, maxWidth: 720, margin: '0 auto' }}>
       <h1>UndoinG - Chamadas</h1>
       <p>Usuário atual: {userId ?? 'desconhecido'}</p>
       <AuthBox />

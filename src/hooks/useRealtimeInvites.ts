@@ -17,6 +17,7 @@ export function useRealtimeInvites(userId?: string) {
         filter: `receiver_id=eq.${userId}`,
       }, payload => {
         const row: any = payload.new ?? payload.old
+        if (!row) return
         upsertInvite({
           id: row.id,
           from_user_id: row.caller_id,
