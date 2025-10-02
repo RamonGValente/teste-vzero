@@ -84,40 +84,27 @@ export const useCall = create<CallState>((set, get) => ({
 
     set({ callId: call.id, currentRoomId: roomId })
 
-    // Listener de status da própria chamada (aceita/recusa/encerra)
-    try {
-      get()._callChannel?.unsubscribe()
-    } catch {}
+    // Listener de status da chamada
+    try { get()._callChannel?.unsubscribe() } catch {}
     const ch = supabase
       .channel('call-status-' + call.id)
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'video_calls',
-          filter: `id=eq.${call.id}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'video_calls', filter: `id=eq.${call.id}` },
         async (payload) => {
           const row: any = payload.new
           if (row.status === 'accepted') {
             try {
               const token = await getToken(call.id, row.room_id)
               set({ status: 'in-call' })
-              const container = document.getElementById('lk-media') as
-                | HTMLElement
-                | null
+              const container = document.getElementById('lk-media') as HTMLElement | null
               if (container) await connectAndAttach(token, container)
             } catch (e: any) {
               console.error(e)
               set({ error: e.message })
               alert('Falha ao conectar: ' + e.message)
             }
-          } else if (
-            row.status === 'declined' ||
-            row.status === 'ended' ||
-            row.status === 'cancelled'
-          ) {
+          } else if (['declined','ended','cancelled'].includes(row.status)) {
             set({ status: row.status })
           }
         },
@@ -130,10 +117,7 @@ export const useCall = create<CallState>((set, get) => ({
     try {
       const { data: vc, error } = await supabase
         .from('video_calls')
-        .update({
-          status: 'accepted',
-          started_at: new Date().toISOString(),
-        })
+        .update({ status: 'accepted', started_at: new Date().toISOString() })
         .eq('id', callId)
         .select('*')
         .single()
@@ -145,48 +129,29 @@ export const useCall = create<CallState>((set, get) => ({
       }
       const token = await getToken(callId, vc.room_id)
       if (container) await connectAndAttach(token, container)
-      set({
-        status: 'in-call',
-        callId,
-        currentRoomId: vc.room_id,
-        incoming: null,
-      })
+      set({ status: 'in-call', callId, currentRoomId: vc.room_id, incoming: null })
     } catch (e: any) {
       console.error('[acceptCall]', e)
       set({ error: e.message })
-      alert(
-        'Falha ao atender: ' +
-          e.message +
-          '\nA função generate-token está deployada?',
-      )
+      alert('Falha ao atender: ' + e.message + '\nA função generate-token está deployada?')
     }
   },
 
   async declineCall(callId) {
-    await supabase
-      .from('video_calls')
-      .update({ status: 'declined' })
-      .eq('id', callId)
+    await supabase.from('video_calls').update({ status: 'declined' }).eq('id', callId)
     set({ status: 'declined', incoming: null })
   },
 
   async endCall(callId) {
     const id = callId || get().callId
-    if (id)
-      await supabase
-        .from('video_calls')
-        .update({ status: 'ended', ended_at: new Date().toISOString() })
-        .eq('id', id)
-    try {
-      get()._callChannel?.unsubscribe()
-    } catch {}
+    if (id) await supabase.from('video_calls').update({ status: 'ended', ended_at: new Date().toISOString() }).eq('id', id)
+    try { get()._callChannel?.unsubscribe() } catch {}
     set({ status: 'ended', callId: undefined, currentRoomId: undefined })
   },
 
-  // >>> CORREÇÃO PRINCIPAL: catch-up + filtros
   async listenInvites(userId) {
-    // 1) Catch-up: se já existir chamada "calling" pro usuário, mostra modal
-    const { data: pendente, error: pendErr } = await supabase
+    // 1) Catch-up para não depender do timing do Realtime
+    const { data: pendente } = await supabase
       .from('video_calls')
       .select('id, caller_id, call_type')
       .eq('receiver_id', userId)
@@ -195,74 +160,42 @@ export const useCall = create<CallState>((set, get) => ({
       .limit(1)
       .maybeSingle()
 
-    if (pendErr) console.warn('catch-up invite err:', pendErr)
     if (pendente) {
       set({
-        incoming: {
-          call_id: pendente.id,
-          caller_id: pendente.caller_id,
-          call_type: pendente.call_type as CallType,
-        },
+        incoming: { call_id: pendente.id, caller_id: pendente.caller_id, call_type: pendente.call_type as CallType },
         status: 'ringing',
       })
-      try {
-        const audio = new Audio('/sounds/ringtone.mp3')
-        audio.loop = true
-        audio.play().catch(() => {})
-      } catch {}
+      try { const a = new Audio('/sounds/ringtone.mp3'); a.loop = true; a.play().catch(()=>{}) } catch {}
     }
 
-    // 2) Realtime INSERT (apenas para meu receiver_id)
-    try {
-      get()._inviteChannel?.unsubscribe()
-    } catch {}
+    // 2) Assinatura SEM filtro e filtragem no cliente (evita perdas)
+    try { get()._inviteChannel?.unsubscribe() } catch {}
     const ch = supabase
       .channel('calls-invites-' + userId)
       .on(
         'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'video_calls',
-          filter: `receiver_id=eq.${userId}`,
-        },
+        { event: 'INSERT', schema: 'public', table: 'video_calls' },
         (payload) => {
           const row: any = payload.new
+          if (row.receiver_id !== userId) return
           if (row.status === 'calling') {
             set({
-              incoming: {
-                call_id: row.id,
-                caller_id: row.caller_id,
-                call_type: row.call_type as CallType,
-              },
+              incoming: { call_id: row.id, caller_id: row.caller_id, call_type: row.call_type as CallType },
               status: 'ringing',
             })
-            try {
-              const audio = new Audio('/sounds/ringtone.mp3')
-              audio.loop = true
-              audio.play().catch(() => {})
-            } catch {}
+            try { const a = new Audio('/sounds/ringtone.mp3'); a.loop = true; a.play().catch(()=>{}) } catch {}
           }
         },
       )
-      // (opcional) caso alguém altere status para "calling" via UPDATE
       .on(
         'postgres_changes',
-        {
-          event: 'UPDATE',
-          schema: 'public',
-          table: 'video_calls',
-          filter: `receiver_id=eq.${userId}`,
-        },
+        { event: 'UPDATE', schema: 'public', table: 'video_calls' },
         (payload) => {
           const row: any = payload.new
+          if (row.receiver_id !== userId) return
           if (row.status === 'calling') {
             set({
-              incoming: {
-                call_id: row.id,
-                caller_id: row.caller_id,
-                call_type: row.call_type as CallType,
-              },
+              incoming: { call_id: row.id, caller_id: row.caller_id, call_type: row.call_type as CallType },
               status: 'ringing',
             })
           }
@@ -273,17 +206,8 @@ export const useCall = create<CallState>((set, get) => ({
   },
 
   clear() {
-    try {
-      get()._inviteChannel?.unsubscribe()
-    } catch {}
-    try {
-      get()._callChannel?.unsubscribe()
-    } catch {}
-    set({
-      status: 'idle',
-      incoming: null,
-      callId: undefined,
-      currentRoomId: undefined,
-    })
+    try { get()._inviteChannel?.unsubscribe() } catch {}
+    try { get()._callChannel?.unsubscribe() } catch {}
+    set({ status: 'idle', incoming: null, callId: undefined, currentRoomId: undefined })
   },
 }))
