@@ -5,7 +5,7 @@ export const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY as string,
   {
     auth: {
-      storageKey: 'undoing-auth', // único p/ evitar Multiple GoTrueClient
+      storageKey: 'undoing-auth',
       autoRefreshToken: true,
       persistSession: true,
       detectSessionInUrl: true,

@@ -19,18 +19,22 @@ export function IncomingList() {
   }
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <h3>Convites recebidos</h3>
-      {invites.length === 0 && <div>Nenhum convite.</div>}
-      {invites.map(i => (
-        <div key={i.id} style={{ padding: 8, border: '1px solid #ccc', marginTop: 8, borderRadius: 8 }}>
-          <div>De: {i.from_user_id}</div>
-          <div>Sala: {i.room_name}</div>
-          <div>Status: {i.status}</div>
-          <button onClick={() => accept(i.id)}>Aceitar</button>{' '}
-          <button onClick={() => decline(i.id)}>Recusar</button>
-        </div>
-      ))}
+    <div>
+      <h3 className="text-lg font-semibold mb-2">Convites recebidos</h3>
+      {invites.length === 0 && <div className="text-gray-600">Nenhum convite.</div>}
+      <div className="space-y-2">
+        {invites.map(i => (
+          <div key={i.id} className="border rounded-xl p-3">
+            <div><span className="font-medium">De:</span> {i.from_user_id}</div>
+            <div><span className="font-medium">Sala:</span> {i.room_name}</div>
+            <div><span className="font-medium">Status:</span> {i.status}</div>
+            <div className="mt-2 space-x-2">
+              <button className="btn" onClick={() => accept(i.id)}>Aceitar</button>
+              <button className="btn" onClick={() => decline(i.id)}>Recusar</button>
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }

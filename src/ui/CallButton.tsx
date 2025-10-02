@@ -21,11 +21,13 @@ export function CallButton() {
   }
 
   return (
-    <div style={{ marginTop: 12 }}>
-      <h3>Iniciar chamada</h3>
-      <input placeholder="UUID do destinatário" value={receiverId} onChange={e => setReceiverId(e.target.value)} style={{ width: 360 }} />
-      <button onClick={startCall} style={{ marginLeft: 8 }}>Chamar</button>
-      <div style={{ marginTop: 8, opacity: .7 }}>Status: {status || '—'}</div>
+    <div>
+      <h3 className="text-lg font-semibold mb-2">Iniciar chamada</h3>
+      <input className="input" placeholder="UUID do destinatário" value={receiverId} onChange={e => setReceiverId(e.target.value)} />
+      <div className="mt-2 space-x-2">
+        <button className="btn" onClick={startCall}>Chamar</button>
+      </div>
+      <div className="mt-2 text-sm text-gray-600">Status: {status || '—'}</div>
     </div>
   )
 }
