@@ -10,6 +10,7 @@ import { TypingIndicator } from './TypingIndicator';
 import { AttentionCallButton } from './AttentionCallButton';
 import { AudioMessageButton } from './AudioMessageButton';
 import { Menu, ArrowLeft, MoreVertical } from 'lucide-react';
+import { CallButtons } from '@/components/call/CallButtons';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { useMessageStatus } from '@/hooks/useMessageStatus';
 import { useAIAssistant } from '@/hooks/useAIAssistant';
@@ -185,6 +186,7 @@ export const ChatWindow = ({
 
         <div className="flex items-center gap-2">
           <ContactRanking />
+          <CallButtons contactId={contact.id} />
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
