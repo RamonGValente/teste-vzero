@@ -1,113 +1,13 @@
-<!DOCTYPE html>
-<html lang="pt">
+<!doctype html>
+<html lang="pt-br">
   <head>
-    <link rel="stylesheet" href="/pwa/pwa.css" />
-
-    <!-- CSS crítico: evita piscar/brilho e prepara overlay de segurança -->
-    <style id="pwa-critical">
-      /* Trava temporária antes do PWA/JS carregar */
-      html.pwa-locked body { overflow: hidden !important; }
-      html.pwa-locked body > *:not(.pwa-overlay) { opacity: 0 !important; pointer-events: none !important; }
-      html, body { background: #0D1117; }
-
-      /* Overlay inicial simples (mostra “preparando a tela segura…”) */
-      #pwa-early-overlay {
-        position: fixed; inset: 0; display: none; place-items: center;
-        background: rgba(2,6,23,.86); color: #E5E7EB; z-index: 2147483600;
-        font-family: system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif;
-      }
-      html.pwa-locked #pwa-early-overlay { display: grid; }
-      #pwa-early-overlay .card {
-        width: min(680px, 94vw); background:#111827; border-radius:16px; padding:18px; text-align:center;
-        box-shadow: 0 30px 80px rgba(0,0,0,.35); border:1px solid rgba(255,255,255,.06);
-      }
-      #pwa-early-overlay h1 { font-size:22px; margin:6px 0; }
-      #pwa-early-overlay p { opacity:.9; margin:6px 0; }
-    </style>
-
-    <!-- Gate inicial (trava só até o JS liberar) -->
-    <script id="pwa-early-gate">
-      (function(){
-        function isStandalone(){
-          try{ if (navigator.standalone) return true; }catch(e){}
-          try{ return matchMedia('(display-mode: standalone)').matches; }catch(e){}
-          return false;
-        }
-        if(!isStandalone()){
-          document.documentElement.classList.add('pwa-locked');
-        } else {
-          document.documentElement.classList.remove('pwa-locked');
-        }
-      })();
-    </script>
-
-    <!-- Carrega lockdown (UMA vez) -->
-    <script src="/pwa/lockdown.js"></script>
-
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <title>UndoinG - Mensagens Temporárias</title>
-    <meta name="description" content="App de mensagens que se apagam da memória" />
-    <meta name="author" content="UndoinG Team" />
-
-    <!-- PWA Meta Tags -->
-    <meta name="theme-color" content="#3b82f6" />
-    <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
-    <meta name="apple-mobile-web-app-title" content="UndoinG" />
-
-    <!-- Social/OpenGraph (se quiser manter) -->
-    <meta property="og:title" content="UndoinG - Mensagens Temporárias" />
-    <meta property="og:description" content="App de mensagens que se apagam da memória" />
-    <meta property="og:image" content="/icon-512x512.png" />
-    <meta property="og:type" content="website" />
-
-    <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="UndoinG - Mensagens Temporárias" />
-    <meta name="twitter:description" content="App de mensagens que se apagam da memória" />
-    <meta name="twitter:image" content="/icon-512x512.png" />
-
-    <!-- Manifest da raiz do `public/` -->
-    <link rel="manifest" href="/manifest.webmanifest" />
+    <title>UndoinG - Chamadas</title>
+    <!-- SW desativado para evitar erro de escopo na Netlify -->
   </head>
-
   <body>
-    <!-- Overlay leve enquanto o PWA libera a UI -->
-    <div id="pwa-early-overlay" aria-hidden="true">
-      <div class="card">
-        <h1>Undoing</h1>
-        <p>Preparando a tela segura…</p>
-      </div>
-    </div>
-
     <div id="root"></div>
-
-    <!-- Entrada Vite -->
     <script type="module" src="/src/main.tsx"></script>
-
-    <!-- Registro do Service Worker: agora aponta para /pwa/sw.js dentro de public -->
-    <script>
-      if ('serviceWorker' in navigator) {
-        window.addEventListener('load', () => {
-          navigator.serviceWorker.register('/pwa/sw.js', { scope: '/' })
-            .then(reg => console.log('SW registered:', reg))
-            .catch(err => console.log('SW registration failed:', err));
-        });
-      }
-    </script>
-
-    <!-- Carrega PWA overlay (AGORA estará em public/pwa/pwa.js) -->
-    <script defer src="/pwa/pwa.js"></script>
-
-    <!-- Failsafe: se o overlay não carregar, libera a tela mesmo assim -->
-    <script>
-      (function(){
-        function unlock(){ document.documentElement.classList.remove('pwa-locked'); }
-        document.addEventListener('DOMContentLoaded', unlock);
-        // fallback extra (2s)
-        setTimeout(unlock, 2000);
-      })();
-    </script>
   </body>
 </html>

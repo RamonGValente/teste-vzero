@@ -1,30 +1,22 @@
-import { Room, RoomEvent, RemoteTrackPublication, createLocalTracks } from 'livekit-client'
+import { Room, RoomEvent, createLocalTracks } from 'livekit-client'
 
-export async function connectAndAttach(token: string, container: HTMLElement) {
-  const room = new Room()
-  await room.connect(import.meta.env.VITE_LIVEKIT_URL, token, { autoSubscribe: true })
-
-  try {
-    const localTracks = await createLocalTracks({ audio: true, video: true })
-    for (const t of localTracks) await room.localParticipant.publishTrack(t)
-  } catch (e) {
-    console.warn('Local tracks não publicados (ok para voz):', e)
-  }
-
-  const addEl = (mediaStreamTrack: MediaStreamTrack) => {
-    const el = document.createElement(mediaStreamTrack.kind === 'video' ? 'video' : 'audio')
-    el.autoplay = true
-    el.playsInline = true
-    if (mediaStreamTrack.kind === 'video') (el as HTMLVideoElement).muted = false
-    el.srcObject = new MediaStream([mediaStreamTrack])
-    container.appendChild(el)
-  }
-
-  room.on(RoomEvent.TrackSubscribed, (_track, pub: RemoteTrackPublication) => {
-    const t = pub.track?.mediaStreamTrack
-    if (t) addEl(t)
+export async function joinRoom(roomName: string, identity: string) {
+  const res = await fetch(import.meta.env.VITE_GENERATE_TOKEN_ENDPOINT || '/functions/v1/generate-token', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ roomName, identity }),
   })
-  room.on(RoomEvent.Disconnected, () => { container.innerHTML = '' })
+  if (!res.ok) throw new Error('Falha ao gerar token')
+  const { token, url } = await res.json()
+
+  const room = new Room()
+  await room.connect(url, token)
+
+  const tracks = await createLocalTracks({ audio: true, video: true })
+  for (const t of tracks) await room.localParticipant.publishTrack(t)
+
+  room.on(RoomEvent.ParticipantConnected, p => console.log('Entrou:', p.identity))
+  room.on(RoomEvent.Disconnected, () => console.log('Saiu da sala'))
 
   return room
 }
