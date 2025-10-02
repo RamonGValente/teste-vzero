@@ -1,14 +1,7 @@
+# Netlify configuration for PWA
 [build]
-  command = "npm run build"
-  publish = "dist"
+  publish = "public"
 
-# SPA fallback for React/Vite
-[[redirects]]
-  from = "/*"
-  to = "/index.html"
-  status = 200
-
-# Optional headers for PWA assets (safe to keep even if not used)
 [[headers]]
   for = "/sw.js"
   [headers.values]
@@ -21,7 +14,14 @@
     Cache-Control = "no-cache"
     Content-Type = "application/manifest+json"
 
+# Static assets: long cache with fingerprinting recommended
 [[headers]]
   for = "/icons/*"
   [headers.values]
     Cache-Control = "public, max-age=31536000, immutable"
+
+# SPA fallback (uncomment if needed)
+#[[redirects]]
+#  from = "/*"
+#  to = "/index.html"
+#  status = 200

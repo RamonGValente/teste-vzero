@@ -11,6 +11,7 @@ import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
 // import { AttentionCallNotification } from "@/components/notifications/AttentionCallNotification"; // <-- REMOVIDO
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
+import { GlobalCallUI } from "@/components/call/GlobalCallUI";
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
@@ -37,6 +38,7 @@ const App = () => (
               <Sonner />
               {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
               <RealtimeAttentionListener />
+              <GlobalCallUI />
               <BrowserRouter>
                 <Routes>
                   <Route path="/" element={<Index />} />
