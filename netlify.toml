@@ -1,9 +1,0 @@
-[build]
-  command = "npm run build"
-  publish = "dist"
-
-[[redirects]]
-  from = "/functions/v1/generate-token"
-  to = "https://amkfdpyuaurfarxcrodx.functions.supabase.co/generate-token"
-  status = 200
-  force = true
