@@ -1,8 +1,6 @@
 import { Room, RoomEvent, createLocalTracks } from 'livekit-client'
 export async function joinRoom(roomName: string, identity: string) {
-  const res = await fetch(import.meta.env.VITE_GENERATE_TOKEN_ENDPOINT || '/functions/v1/generate-token', {
-    method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ roomName, identity }),
-  })
+  const res = await fetch(import.meta.env.VITE_GENERATE_TOKEN_ENDPOINT || '/functions/v1/generate-token', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ roomName, identity }) })
   if (!res.ok) throw new Error('Falha ao gerar token')
   const { token, url } = await res.json()
   const room = new Room()
