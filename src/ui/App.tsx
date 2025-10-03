@@ -1,47 +1,32 @@
-import React, { useEffect, useState } from 'react'
+import React, { useEffect } from 'react'
 import { supabase } from '@/lib/supabaseClient'
+import { ChatSidebar } from './ChatSidebar'
+import { ChatWindow } from './ChatWindow'
+import { useChatStore } from '@/store/chatStore'
 import { useRealtimeInvites } from '@/hooks/useRealtimeInvites'
-import { CallButton } from './CallButton'
-import { IncomingList } from './IncomingList'
-
-export default function App() {
-  const [userId, setUserId] = useState<string | undefined>(undefined)
-
-  useEffect(() => {
-    supabase.auth.getSession().then(({ data }) => setUserId(data.session?.user?.id))
-    const { data: sub } = supabase.auth.onAuthStateChange((_e, session) => setUserId(session?.user?.id))
-    return () => { sub.subscription.unsubscribe() }
-  }, [])
-
-  useRealtimeInvites(userId)
-
-  return (
-    <div className="container space-y-4">
-      <div className="card">
-        <h1 className="text-2xl font-bold">UndoinG - Chamadas</h1>
-        <p className="text-sm text-gray-600">Usuário atual: {userId ?? 'desconhecido'}</p>
-        <AuthBox />
-      </div>
-      <div className="grid md:grid-cols-2 gap-4">
-        <div className="card"><CallButton /></div>
-        <div className="card"><IncomingList /></div>
-      </div>
-    </div>
-  )
+export default function App(){
+  const setSelfId = useChatStore(s=>s.setSelfId); const selfId = useChatStore(s=>s.selfId)
+  useEffect(()=>{
+    supabase.auth.getSession().then(({data})=> setSelfId(data.session?.user?.id))
+    const { data: sub } = supabase.auth.onAuthStateChange((_e,session)=> setSelfId(session?.user?.id))
+    return ()=>{ sub.subscription.unsubscribe() }
+  },[setSelfId])
+  useRealtimeInvites(selfId)
+  return (<div className="app">
+    <div className="sidebar"><Header/><ChatSidebar/></div>
+    <div className="main"><ChatWindow/></div>
+  </div>)
 }
-
-function AuthBox() {
-  const signIn = async () => {
-    const email = prompt('Email?')
-    if (!email) return
-    await supabase.auth.signInWithOtp({ email })
-    alert('Verifique seu email (link mágico).')
-  }
-  const signOut = () => supabase.auth.signOut()
-  return (
-    <div className="mt-3 space-x-2">
-      <button className="btn" onClick={signIn}>Entrar (OTP)</button>
+function Header(){
+  const selfId = useChatStore(s=>s.selfId)
+  const signIn = async()=>{ const email = prompt('Email?'); if(!email) return; await supabase.auth.signInWithOtp({ email }); alert('Verifique seu email.') }
+  const signOut = ()=> supabase.auth.signOut()
+  return (<div className="p-4 border-b flex items-center justify-between">
+    <div className="font-semibold">UndoinG • Chat & Calls</div>
+    <div className="flex items-center gap-2 text-sm">
+      <span className="text-muted">UID:</span> <span className="font-mono">{selfId ?? '—'}</span>
+      <button className="btn" onClick={signIn}>Entrar</button>
       <button className="btn" onClick={signOut}>Sair</button>
     </div>
-  )
+  </div>)
 }

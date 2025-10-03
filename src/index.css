@@ -1,9 +1,11 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
-
-:root { --pad: 24px; }
-.container { max-width: 720px; margin: 0 auto; padding: var(--pad); }
-.card { @apply bg-white rounded-2xl shadow p-4 border border-gray-100; }
-.btn { @apply inline-flex items-center gap-2 rounded-xl border border-gray-300 px-4 py-2 hover:bg-gray-100; }
+:root { --pad: 18px; }
+.app { @apply h-screen grid grid-cols-12; }
+.sidebar { @apply col-span-3 border-r bg-white; }
+.main { @apply col-span-9; }
+.card { @apply bg-white border rounded-2xl shadow-sm; }
+.btn { @apply inline-flex items-center gap-2 rounded-xl border px-3 py-2 hover:bg-zinc-100; }
 .input { @apply border rounded-lg px-3 py-2 w-full; }
+.text-muted { @apply text-zinc-500; }

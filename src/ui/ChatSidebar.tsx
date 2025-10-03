@@ -1,0 +1,30 @@
+import React, { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import { useChatStore } from '@/store/chatStore'
+import type { ConversationPeer } from '@/types'
+export function ChatSidebar(){
+  const [loading,setLoading]=useState(false)
+  const peers = useChatStore(s=>s.peers); const setPeers=useChatStore(s=>s.setPeers)
+  const activePeerId = useChatStore(s=>s.activePeerId); const setActivePeerId=useChatStore(s=>s.setActivePeerId)
+  const selfId = useChatStore(s=>s.selfId)
+  useEffect(()=>{
+    if(!selfId) return
+    setLoading(true)
+    supabase.from('contacts').select('contact_id, profiles:contact_id(id, full_name, email, avatar_url)').eq('user_id', selfId).then(({data,error})=>{
+      setLoading(false); if(error){console.error(error); return}
+      const list:ConversationPeer[] = (data??[]).map((row:any)=>({ id: row.profiles?.id ?? row.contact_id, full_name:row.profiles?.full_name, email:row.profiles?.email, avatar_url:row.profiles?.avatar_url }))
+      setPeers(list); if(!activePeerId && list[0]) setActivePeerId(list[0].id)
+    })
+  },[selfId])
+  return (<div className="p-3 space-y-2">
+    <div className="text-xs text-muted px-1">Contatos</div>
+    {loading && <div className="px-2 text-sm">Carregando...</div>}
+    <div className="space-y-1">
+      {peers.map(p=>(<button key={p.id} onClick={()=>setActivePeerId(p.id)} className={'w-full text-left px-3 py-2 rounded-lg hover:bg-zinc-100 '+(activePeerId===p.id?'bg-zinc-100':'')}>
+        <div className="font-medium">{p.full_name ?? p.email ?? p.id}</div>
+        <div className="text-xs text-muted break-all">{p.id}</div>
+      </button>))}
+      {peers.length===0 && !loading && <div className="px-2 text-sm">Sem contatos.</div>}
+    </div>
+  </div>)
+}

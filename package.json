@@ -1,20 +1,17 @@
 {
-  "name": "undoing-video-voz-netlify-npm-tailwind",
+  "name": "undoing-video-voz-full",
   "private": true,
-  "version": "1.1.0",
+  "version": "2.0.0",
   "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "tsc": "tsc --noEmit"
-  },
+  "scripts": { "dev": "vite", "build": "vite build", "preview": "vite preview", "tsc": "tsc --noEmit" },
   "dependencies": {
     "@supabase/supabase-js": "^2.45.4",
     "livekit-client": "^2.6.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "zustand": "^4.5.2"
+    "zustand": "^4.5.2",
+    "date-fns": "^3.6.0",
+    "clsx": "^2.1.1"
   },
   "devDependencies": {
     "@types/react": "^18.3.5",
