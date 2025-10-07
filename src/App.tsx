@@ -1,4 +1,5 @@
 import "@/styles/attention.css";
+import "@/styles/robot.css"; // ← CSS DO ROBÔ ADICIONADO
 
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -9,12 +10,14 @@ import { AuthProvider } from "@/components/auth/AuthProvider";
 import { ThemeProvider } from "@/components/theme/ThemeProvider";
 import { LanguageProvider } from "@/components/i18n/LanguageProvider";
 import { NotificationProvider } from "@/components/notifications/NotificationProvider";
-// import { AttentionCallNotification } from "@/components/notifications/AttentionCallNotification"; // <-- REMOVIDO
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
 import { useUserActivity } from "@/hooks/useUserActivity";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+
+// === NOVO IMPORT DO ROBÔ ===
+import RobotChat from "@/components/RobotChat";
 
 const queryClient = new QueryClient();
 
@@ -37,6 +40,10 @@ const App = () => (
               <Sonner />
               {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
               <RealtimeAttentionListener />
+              
+              {/* === ROBÔ ASSISTENTE IA GLOBAL === */}
+              <RobotChat />
+              
               <BrowserRouter>
                 <Routes>
                   <Route path="/" element={<Index />} />

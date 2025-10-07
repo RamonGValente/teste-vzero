@@ -1,56 +1,44 @@
+// src/hooks/useAIAssistant.ts
 import { useState } from 'react';
-import { supabase } from '@/lib/supabase';
-import { useAuth } from '@/components/auth/AuthProvider';
 
 export const useAIAssistant = () => {
-  const [loading, setLoading] = useState(false);
-  const { user } = useAuth();
+  const [isProcessing, setIsProcessing] = useState(false);
 
-  const generateReplySuggestions = async (lastMessage: string, context: string[] = []) => {
-    if (!user) return { suggestions: [] };
-
-    setLoading(true);
+  const callOpenAI = async (userMessage: string, conversationHistory: any[]) => {
+    setIsProcessing(true);
+    
     try {
-      const { data, error } = await supabase.functions.invoke('ai-chat-assistant', {
-        body: {
-          action: 'suggest_replies',
-          content: lastMessage,
-          context: context.slice(-5) // Only last 5 messages for context
-        }
+      const response = await fetch('https://api.openai.com/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${import.meta.env.VITE_OPENAI_API_KEY}`
+        },
+        body: JSON.stringify({
+          model: "gpt-3.5-turbo",
+          messages: [
+            {
+              role: "system",
+              content: "Você é o RoboZ, um assistente virtual amigável e útil que fala português brasileiro. Seja natural, conversacional e prestativo."
+            },
+            ...conversationHistory,
+            { role: "user", content: userMessage }
+          ],
+          max_tokens: 150,
+          temperature: 0.7
+        })
       });
 
-      if (error) throw error;
-      return data;
+      const data = await response.json();
+      return data.choices[0].message.content;
+      
     } catch (error) {
-      console.error('Error generating reply suggestions:', error);
-      return { suggestions: [] };
+      console.error('Erro na API OpenAI:', error);
+      return "Desculpe, estou com problemas técnicos. Podemos tentar novamente?";
     } finally {
-      setLoading(false);
+      setIsProcessing(false);
     }
   };
 
-  const moderateContent = async (content: string) => {
-    if (!user) return { approved: true, reason: null };
-
-    try {
-      const { data, error } = await supabase.functions.invoke('ai-chat-assistant', {
-        body: {
-          action: 'moderate_content',
-          content
-        }
-      });
-
-      if (error) throw error;
-      return data;
-    } catch (error) {
-      console.error('Error moderating content:', error);
-      return { approved: true, reason: null };
-    }
-  };
-
-  return {
-    generateReplySuggestions,
-    moderateContent,
-    loading
-  };
+  return { callOpenAI, isProcessing };
 };
