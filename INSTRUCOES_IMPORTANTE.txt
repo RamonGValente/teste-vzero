@@ -1,0 +1,55 @@
+INTEGRAÇÃO ALERTA 'CHAMAR ATENÇÃO' — TOPO, SHAKE + SOM
+
+1) Monte o listener global no topo do app (src/App.tsx ou src/main.tsx):
+   import { GlobalBoot } from '@/components/realtime/GlobalBoot';
+   import '@/styles/attention.css';
+   export default function App() {
+     return (
+       <>
+         <GlobalBoot />
+         {/* seu layout/rotas */}
+       </>
+     );
+   }
+
+2) Publique as tabelas no Realtime (SQL Editor):
+   alter publication supabase_realtime add table public.attention_calls;
+   alter publication supabase_realtime add table public.attention_call_limits;
+   alter publication supabase_realtime add table public.attention_silence_settings;
+
+3) Policies (se RLS estiver ativo) — ajuste nomes se já existir:
+   -- attention_calls
+   create policy if not exists "ac_insert_own" on public.attention_calls
+     for insert to authenticated with check (auth.uid() = sender_id);
+   create policy if not exists "ac_select_inbox" on public.attention_calls
+     for select to authenticated using (receiver_id = auth.uid() or sender_id = auth.uid());
+   create policy if not exists "ac_update_viewed" on public.attention_calls
+     for update to authenticated using (receiver_id = auth.uid());
+
+   -- attention_call_limits
+   create policy if not exists "acl_select_mine" on public.attention_call_limits
+     for select to authenticated using (user_id = auth.uid());
+   create policy if not exists "acl_upsert_mine_ins" on public.attention_call_limits
+     for insert to authenticated with check (user_id = auth.uid());
+   create policy if not exists "acl_upsert_mine_upd" on public.attention_call_limits
+     for update to authenticated using (user_id = auth.uid());
+
+   -- attention_silence_settings
+   create policy if not exists "ass_select_mine" on public.attention_silence_settings
+     for select to authenticated using (user_id = auth.uid());
+   create policy if not exists "ass_upsert_mine_ins" on public.attention_silence_settings
+     for insert to authenticated with check (user_id = auth.uid());
+   create policy if not exists "ass_upsert_mine_upd" on public.attention_silence_settings
+     for update to authenticated using (user_id = auth.uid());
+
+   -- profiles (leitura para nome/status/last_seen)
+   create policy if not exists "profiles_read" on public.profiles
+     for select to authenticated using (true);
+
+4) Som
+   - Já incluído: public/sounds/attention.wav
+   - Opcional por usuário: setar user_notification_settings.attention_sound_url
+
+5) Teste SQL (troque pelos UUIDs REAIS):
+   insert into public.attention_calls (sender_id, receiver_id, message)
+   values ('00000000-0000-0000-0000-000000000000','11111111-1111-1111-1111-111111111111','Fulano');
