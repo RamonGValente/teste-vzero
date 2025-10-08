@@ -20,23 +20,17 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
 
   const getStatusColor = (status: string) => {
     switch (status) {
-      case "online":
-        return "bg-green-500"
-      case "busy":
-        return "bg-red-500"
-      default:
-        return "bg-gray-400"
+      case "online": return "bg-green-500"
+      case "busy": return "bg-red-500"
+      default: return "bg-gray-400"
     }
   }
 
   const getStatusText = (status: string) => {
     switch (status) {
-      case "online":
-        return "Online"
-      case "busy":
-        return "Ocupado"
-      default:
-        return "Offline"
+      case "online": return "Online"
+      case "busy": return "Ocupado"
+      default: return "Offline"
     }
   }
 
@@ -50,7 +44,6 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
         })
         return
       }
-
       await startCall(contact.id, 'video')
     } catch (error) {
       console.error('Error starting video call:', error)
@@ -72,7 +65,6 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
         })
         return
       }
-
       await startCall(contact.id, 'audio')
     } catch (error) {
       console.error('Error starting voice call:', error)
@@ -120,7 +112,7 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           onClick={handleVideoCall}
           disabled={isLoading || contact.status === 'offline'}
           className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-          title="Iniciar Videochamada"
+          title="Videochamada"
         >
           <Video className="h-4 w-4" />
         </Button>
@@ -132,12 +124,11 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           onClick={handleVoiceCall}
           disabled={isLoading || contact.status === 'offline'}
           className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-          title="Iniciar Chamada de Voz"
+          title="Chamada de Voz"
         >
           <Phone className="h-4 w-4" />
         </Button>
 
-        {/* Botão Menu */}
         <Button variant="ghost" size="sm">
           <MoreVertical className="h-4 w-4" />
         </Button>
