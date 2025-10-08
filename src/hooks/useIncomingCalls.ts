@@ -1,16 +1,16 @@
-import { createSignal, createEffect, onCleanup } from 'solid-js';
-import { supabase } from '../lib/supabase';
+import { useState, useEffect } from 'react';
+import { supabase } from '@/lib/supabase';
 
 export function useIncomingCalls() {
-  const [incomingCall, setIncomingCall] = createSignal<any>(null);
-  const [isLoading, setIsLoading] = createSignal(false);
+  const [incomingCall, setIncomingCall] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(false);
 
-  createEffect(() => {
+  useEffect(() => {
     let userId: string;
 
     const initialize = async () => {
-      const user = await supabase.auth.getUser();
-      userId = user.data.user?.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      userId = user?.id;
       
       if (!userId) return;
 
@@ -51,20 +51,20 @@ export function useIncomingCalls() {
           },
           (payload) => {
             const updatedCall = payload.new;
-            if (incomingCall()?.id === updatedCall.id && updatedCall.status !== 'calling') {
+            if (incomingCall?.id === updatedCall.id && updatedCall.status !== 'calling') {
               setIncomingCall(null);
             }
           }
         )
         .subscribe();
 
-      onCleanup(() => {
+      return () => {
         subscription.unsubscribe();
-      });
+      };
     };
 
     initialize();
-  });
+  }, [incomingCall?.id]);
 
   return {
     incomingCall,

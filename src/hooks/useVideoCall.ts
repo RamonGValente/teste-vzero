@@ -1,14 +1,14 @@
-import { createSignal, createEffect, onCleanup } from 'solid-js';
-import { liveKitService, type CallInfo } from '../lib/livekit';
-import { supabase } from '../lib/supabase';
+import { useState, useCallback } from 'react';
+import { liveKitService, type CallInfo } from '@/lib/livekit';
+import { supabase } from '@/lib/supabase';
 
 export function useVideoCall() {
-  const [isInCall, setIsInCall] = createSignal(false);
-  const [callInfo, setCallInfo] = createSignal<CallInfo | null>(null);
-  const [isLoading, setIsLoading] = createSignal(false);
-  const [error, setError] = createSignal<string | null>(null);
+  const [isInCall, setIsInCall] = useState(false);
+  const [callInfo, setCallInfo] = useState<CallInfo | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const generateToken = async (roomId: string, userId: string): Promise<string> => {
+  const generateToken = useCallback(async (roomId: string, userId: string): Promise<string> => {
     const response = await fetch('/.netlify/functions/livekit-token', {
       method: 'POST',
       headers: {
@@ -26,15 +26,15 @@ export function useVideoCall() {
 
     const data = await response.json();
     return data.token;
-  };
+  }, []);
 
-  const startCall = async (receiverId: string, callType: 'video' | 'audio') => {
+  const startCall = useCallback(async (receiverId: string, callType: 'video' | 'audio') => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const user = await supabase.auth.getUser();
-      const callerId = user.data.user?.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      const callerId = user?.id;
 
       if (!callerId) throw new Error('User not authenticated');
 
@@ -84,15 +84,15 @@ export function useVideoCall() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [generateToken]);
 
-  const acceptCall = async (callId: string) => {
+  const acceptCall = useCallback(async (callId: string) => {
     try {
       setIsLoading(true);
       setError(null);
 
-      const user = await supabase.auth.getUser();
-      const userId = user.data.user?.id;
+      const { data: { user } } = await supabase.auth.getUser();
+      const userId = user?.id;
 
       if (!userId) throw new Error('User not authenticated');
 
@@ -139,9 +139,9 @@ export function useVideoCall() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [generateToken]);
 
-  const rejectCall = async (callId: string) => {
+  const rejectCall = useCallback(async (callId: string) => {
     try {
       await supabase
         .from('video_calls')
@@ -155,9 +155,9 @@ export function useVideoCall() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao rejeitar chamada');
     }
-  };
+  }, []);
 
-  const endCall = async (callId: string) => {
+  const endCall = useCallback(async (callId: string) => {
     try {
       await supabase
         .from('video_calls')
@@ -173,9 +173,9 @@ export function useVideoCall() {
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Erro ao finalizar chamada');
     }
-  };
+  }, []);
 
-  const connectToRoom = async (token: string) => {
+  const connectToRoom = useCallback(async (token: string) => {
     try {
       await liveKitService.initializeRoom(token);
       setIsInCall(true);
@@ -183,9 +183,9 @@ export function useVideoCall() {
       setError(err instanceof Error ? err.message : 'Erro ao conectar à sala');
       throw err;
     }
-  };
+  }, []);
 
-  const sendCallNotification = async (callInfo: CallInfo) => {
+  const sendCallNotification = useCallback(async (callInfo: CallInfo) => {
     const { error } = await supabase
       .from('messages')
       .insert({
@@ -199,7 +199,15 @@ export function useVideoCall() {
     if (error) {
       console.error('Error sending call notification:', error);
     }
-  };
+  }, []);
+
+  const toggleVideo = useCallback(async () => {
+    await liveKitService.toggleVideo();
+  }, []);
+
+  const toggleAudio = useCallback(async () => {
+    await liveKitService.toggleAudio();
+  }, []);
 
   return {
     isInCall,
@@ -211,8 +219,8 @@ export function useVideoCall() {
     rejectCall,
     endCall,
     connectToRoom,
-    toggleVideo: () => liveKitService.toggleVideo(),
-    toggleAudio: () => liveKitService.toggleAudio(),
+    toggleVideo,
+    toggleAudio,
     room: liveKitService.getRoom()
   };
 }

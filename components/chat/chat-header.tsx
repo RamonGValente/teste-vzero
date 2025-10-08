@@ -88,7 +88,7 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           variant="ghost"
           size="sm"
           onClick={handleVideoCall}
-          disabled={isLoading()}
+          disabled={isLoading}
           className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
           title="Videochamada"
         >
@@ -100,18 +100,14 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           variant="ghost"
           size="sm"
           onClick={handleVoiceCall}
-          disabled={isLoading()}
+          disabled={isLoading}
           className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
           title="Chamada de Voz"
         >
           <Phone className="h-4 w-4" />
         </Button>
 
-        {/* Botão Menu (existente) */}
+        {/* Botão Menu */}
         <Button variant="ghost" size="sm">
           <MoreVertical className="h-4 w-4" />
         </Button>
-      </div>
-    </div>
-  )
-}

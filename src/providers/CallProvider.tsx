@@ -1,17 +1,30 @@
-import { Component, createContext, useContext, createSignal, Show } from 'solid-js';
-import { useVideoCall } from '../hooks/useVideoCall';
-import { useIncomingCalls } from '../hooks/useIncomingCalls';
-import { IncomingCallNotification } from '../components/IncomingCallNotification';
-import { VideoCallRoom } from '../components/VideoCallRoom';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { useVideoCall } from '@/hooks/useVideoCall';
+import { useIncomingCalls } from '@/hooks/useIncomingCalls';
+import { IncomingCallNotification } from '@/components/call/IncomingCallNotification';
+import { VideoCallRoom } from '@/components/call/VideoCallRoom';
 
-const CallContext = createContext();
+interface CallContextType {
+  videoCall: ReturnType<typeof useVideoCall>;
+  incomingCalls: {
+    call: any;
+    accept: () => Promise<void>;
+    reject: () => Promise<void>;
+  };
+}
 
-export const CallProvider: Component<{ children: any }> = (props) => {
+const CallContext = createContext<CallContextType | undefined>(undefined);
+
+interface CallProviderProps {
+  children: ReactNode;
+}
+
+export function CallProvider({ children }: CallProviderProps) {
   const videoCall = useVideoCall();
   const incomingCalls = useIncomingCalls();
 
   const handleAcceptCall = async () => {
-    const call = incomingCalls.incomingCall();
+    const call = incomingCalls.incomingCall;
     if (call) {
       try {
         const { token } = await videoCall.acceptCall(call.id);
@@ -24,14 +37,14 @@ export const CallProvider: Component<{ children: any }> = (props) => {
   };
 
   const handleRejectCall = async () => {
-    const call = incomingCalls.incomingCall();
+    const call = incomingCalls.incomingCall;
     if (call) {
       await videoCall.rejectCall(call.id);
       incomingCalls.setIncomingCall(null);
     }
   };
 
-  const value = {
+  const value: CallContextType = {
     videoCall,
     incomingCalls: {
       call: incomingCalls.incomingCall,
@@ -42,11 +55,32 @@ export const CallProvider: Component<{ children: any }> = (props) => {
 
   return (
     <CallContext.Provider value={value}>
-      {props.children}
+      {children}
       
-      <Show when={incomingCalls.incomingCall() && !videoCall.isInCall()}>
+      {incomingCalls.incomingCall && !videoCall.isInCall && (
         <IncomingCallNotification
-          callInfo={incomingCalls.incomingCall()}
+          callInfo={incomingCalls.incomingCall}
           onAccept={handleAcceptCall}
           onReject={handleRejectCall}
-          isVisible={!!incomingCalls.in
+          isVisible={!!incomingCalls.incomingCall}
+        />
+      )}
+
+      {videoCall.isInCall && videoCall.callInfo && (
+        <VideoCallRoom
+          room={videoCall.room}
+          callInfo={videoCall.callInfo}
+          onEndCall={() => videoCall.endCall(videoCall.callInfo!.callId)}
+        />
+      )}
+    </CallContext.Provider>
+  );
+}
+
+export function useCall() {
+  const context = useContext(CallContext);
+  if (context === undefined) {
+    throw new Error('useCall must be used within a CallProvider');
+  }
+  return context;
+}

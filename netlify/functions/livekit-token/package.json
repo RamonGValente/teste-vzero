@@ -1,0 +1,7 @@
+{
+  "name": "livekit-token",
+  "version": "1.0.0",
+  "dependencies": {
+    "livekit-server-sdk": "^1.16.0"
+  }
+}

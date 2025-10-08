@@ -1,14 +1,12 @@
 const { AccessToken } = require('livekit-server-sdk');
 
 exports.handler = async (event) => {
-  // Configurar CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // Handle preflight
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -49,7 +47,7 @@ exports.handler = async (event) => {
 
     const at = new AccessToken(apiKey, apiSecret, {
       identity: userId,
-      ttl: 2 * 60 * 60, // 2 horas
+      ttl: 2 * 60 * 60,
     });
 
     at.addGrant({
