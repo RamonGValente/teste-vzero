@@ -18,7 +18,7 @@ export function useVideoCall() {
     try {
       console.log('Generating token for room:', roomId, 'user:', userId);
       
-      const response = await fetch('/.netlify/functions/livekit-token', {
+      const response = await fetch(import.meta.env.VITE_LIVEKIT_TOKEN_ENDPOINT || '/.netlify/functions/livekit-token', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
