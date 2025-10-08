@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { ArrowLeft, MoreVertical, Video, Phone } from "lucide-react"
 import { useVideoCall } from "@/hooks/useVideoCall"
+import { useToast } from "@/hooks/use-toast"
 
 interface ChatHeaderProps {
   contact: Profile
@@ -15,6 +16,7 @@ interface ChatHeaderProps {
 
 export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
   const { startCall, isLoading } = useVideoCall()
+  const { toast } = useToast()
 
   const getStatusColor = (status: string) => {
     switch (status) {
@@ -40,17 +42,45 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
 
   const handleVideoCall = async () => {
     try {
+      if (contact.status === 'offline') {
+        toast({
+          title: "Usuário Offline",
+          description: "Não é possível chamar um usuário offline",
+          variant: "destructive"
+        })
+        return
+      }
+
       await startCall(contact.id, 'video')
     } catch (error) {
       console.error('Error starting video call:', error)
+      toast({
+        title: "Erro na Chamada",
+        description: "Não foi possível iniciar a videochamada",
+        variant: "destructive"
+      })
     }
   }
 
   const handleVoiceCall = async () => {
     try {
+      if (contact.status === 'offline') {
+        toast({
+          title: "Usuário Offline",
+          description: "Não é possível chamar um usuário offline",
+          variant: "destructive"
+        })
+        return
+      }
+
       await startCall(contact.id, 'audio')
     } catch (error) {
       console.error('Error starting voice call:', error)
+      toast({
+        title: "Erro na Chamada",
+        description: "Não foi possível iniciar a chamada de voz",
+        variant: "destructive"
+      })
     }
   }
 
@@ -88,9 +118,9 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           variant="ghost"
           size="sm"
           onClick={handleVideoCall}
-          disabled={isLoading}
+          disabled={isLoading || contact.status === 'offline'}
           className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-          title="Videochamada"
+          title="Iniciar Videochamada"
         >
           <Video className="h-4 w-4" />
         </Button>
@@ -100,9 +130,9 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
           variant="ghost"
           size="sm"
           onClick={handleVoiceCall}
-          disabled={isLoading}
+          disabled={isLoading || contact.status === 'offline'}
           className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
-          title="Chamada de Voz"
+          title="Iniciar Chamada de Voz"
         >
           <Phone className="h-4 w-4" />
         </Button>
@@ -111,3 +141,7 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
         <Button variant="ghost" size="sm">
           <MoreVertical className="h-4 w-4" />
         </Button>
+      </div>
+    </div>
+  )
+}

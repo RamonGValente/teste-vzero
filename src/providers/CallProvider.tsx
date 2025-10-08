@@ -27,11 +27,12 @@ export function CallProvider({ children }: CallProviderProps) {
     const call = incomingCalls.incomingCall;
     if (call) {
       try {
-        const { token } = await videoCall.acceptCall(call.id);
-        await videoCall.connectToRoom(token);
+        console.log('CallProvider: Accepting call', call.id);
+        await videoCall.acceptCall(call.id);
         incomingCalls.setIncomingCall(null);
       } catch (error) {
-        console.error('Error accepting call:', error);
+        console.error('CallProvider: Error accepting call:', error);
+        incomingCalls.setIncomingCall(null);
       }
     }
   };
@@ -39,8 +40,14 @@ export function CallProvider({ children }: CallProviderProps) {
   const handleRejectCall = async () => {
     const call = incomingCalls.incomingCall;
     if (call) {
-      await videoCall.rejectCall(call.id);
-      incomingCalls.setIncomingCall(null);
+      try {
+        console.log('CallProvider: Rejecting call', call.id);
+        await videoCall.rejectCall(call.id);
+        incomingCalls.setIncomingCall(null);
+      } catch (error) {
+        console.error('CallProvider: Error rejecting call:', error);
+        incomingCalls.setIncomingCall(null);
+      }
     }
   };
 
@@ -57,6 +64,7 @@ export function CallProvider({ children }: CallProviderProps) {
     <CallContext.Provider value={value}>
       {children}
       
+      {/* Notificação de Chamada Entrante */}
       {incomingCalls.incomingCall && !videoCall.isInCall && (
         <IncomingCallNotification
           callInfo={incomingCalls.incomingCall}
@@ -66,6 +74,7 @@ export function CallProvider({ children }: CallProviderProps) {
         />
       )}
 
+      {/* Sala de Videochamada Ativa */}
       {videoCall.isInCall && videoCall.callInfo && (
         <VideoCallRoom
           room={videoCall.room}

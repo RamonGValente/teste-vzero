@@ -16,8 +16,16 @@ import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      retry: 1,
+      refetchOnWindowFocus: false,
+    },
+  },
+});
 
+// Component to initialize user activity tracking and idle logout
 const UserActivityTracker = () => {
   useUserActivity();
   useIdleLogout();
@@ -30,11 +38,13 @@ const App = () => (
       <LanguageProvider>
         <AuthProvider>
           <NotificationProvider>
+            {/* CallProvider deve envolver componentes que usam chamadas */}
             <CallProvider>
               <UserActivityTracker />
               <TooltipProvider>
                 <Toaster />
                 <Sonner />
+                {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
                 <RealtimeAttentionListener />
                 <BrowserRouter>
                   <Routes>
