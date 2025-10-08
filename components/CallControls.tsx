@@ -22,7 +22,6 @@ interface CallControlsProps {
 export const CallControls: Component<CallControlsProps> = (props) => {
   return (
     <div class="flex items-center justify-center gap-4 p-4 bg-background/80 backdrop-blur-sm rounded-lg">
-      {/* Botão Vídeo */}
       <Button
         variant="outline"
         size="icon"
@@ -36,7 +35,6 @@ export const CallControls: Component<CallControlsProps> = (props) => {
         )}
       </Button>
 
-      {/* Botão Áudio */}
       <Button
         variant="outline"
         size="icon"
@@ -50,7 +48,6 @@ export const CallControls: Component<CallControlsProps> = (props) => {
         )}
       </Button>
 
-      {/* Botão Aceitar Chamada (apenas para receiver) */}
       {props.showAcceptButton && (
         <Button
           onClick={props.onAcceptCall}
@@ -61,7 +58,6 @@ export const CallControls: Component<CallControlsProps> = (props) => {
         </Button>
       )}
 
-      {/* Botão Finalizar Chamada */}
       <Button
         onClick={props.onEndCall}
         class="w-12 h-12 rounded-full bg-red-500 hover:bg-red-600"

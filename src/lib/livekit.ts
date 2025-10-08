@@ -1,5 +1,4 @@
-import { Room, RoomEvent, RemoteParticipant, LocalParticipant } from 'livekit-client';
-import { createSignal, createEffect, onCleanup } from 'solid-js';
+import { Room, RoomEvent, RemoteParticipant } from 'livekit-client';
 
 export interface CallInfo {
   roomId: string;
@@ -16,7 +15,6 @@ export class LiveKitService {
   async initializeRoom(token: string): Promise<Room> {
     this.room = new Room();
     
-    // Configurar eventos do room
     this.room
       .on(RoomEvent.ParticipantConnected, this.handleParticipantConnected)
       .on(RoomEvent.ParticipantDisconnected, this.handleParticipantDisconnected)
@@ -27,7 +25,6 @@ export class LiveKitService {
       await this.room.connect(import.meta.env.VITE_LIVEKIT_URL, token);
       this.isConnected = true;
       
-      // Iniciar áudio e vídeo local
       if (this.room.localParticipant) {
         await this.room.localParticipant.setCameraEnabled(true);
         await this.room.localParticipant.setMicrophoneEnabled(true);

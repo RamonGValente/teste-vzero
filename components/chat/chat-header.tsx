@@ -4,7 +4,8 @@ import type { Profile } from "@/lib/supabase"
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ArrowLeft, MoreVertical } from "lucide-react"
+import { ArrowLeft, MoreVertical, Video, Phone } from "lucide-react"
+import { useVideoCall } from "@/hooks/useVideoCall"
 
 interface ChatHeaderProps {
   contact: Profile
@@ -13,6 +14,8 @@ interface ChatHeaderProps {
 }
 
 export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
+  const { startCall, isLoading } = useVideoCall()
+
   const getStatusColor = (status: string) => {
     switch (status) {
       case "online":
@@ -32,6 +35,22 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
         return "Ocupado"
       default:
         return "Offline"
+    }
+  }
+
+  const handleVideoCall = async () => {
+    try {
+      await startCall(contact.id, 'video')
+    } catch (error) {
+      console.error('Error starting video call:', error)
+    }
+  }
+
+  const handleVoiceCall = async () => {
+    try {
+      await startCall(contact.id, 'audio')
+    } catch (error) {
+      console.error('Error starting voice call:', error)
     }
   }
 
@@ -64,6 +83,31 @@ export function ChatHeader({ contact, onBack, typingUsers }: ChatHeaderProps) {
       </div>
 
       <div className="flex items-center space-x-2">
+        {/* Botão Videochamada */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleVideoCall}
+          disabled={isLoading()}
+          className="text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+          title="Videochamada"
+        >
+          <Video className="h-4 w-4" />
+        </Button>
+
+        {/* Botão Chamada de Voz */}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={handleVoiceCall}
+          disabled={isLoading()}
+          className="text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 transition-colors"
+          title="Chamada de Voz"
+        >
+          <Phone className="h-4 w-4" />
+        </Button>
+
+        {/* Botão Menu (existente) */}
         <Button variant="ghost" size="sm">
           <MoreVertical className="h-4 w-4" />
         </Button>

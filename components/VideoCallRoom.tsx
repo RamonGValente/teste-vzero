@@ -1,12 +1,13 @@
 import { Component, createSignal, createEffect, onCleanup, onMount } from 'solid-js';
-import { Room, RemoteParticipant, LocalParticipant } from 'livekit-client';
+import { Room, RemoteParticipant } from 'livekit-client';
 import { CallControls } from './CallControls';
 import { useVideoCall } from '../hooks/useVideoCall';
 import { Button } from './ui/button';
 import { Card, CardContent } from './ui/card';
+import { Phone } from 'lucide-solid';
 
 interface VideoCallRoomProps {
-  room: Room;
+  room: Room | null;
   callInfo: any;
   onEndCall: () => void;
 }
@@ -30,7 +31,8 @@ export const VideoCallRoom: Component<VideoCallRoomProps> = (props) => {
 
   createEffect(() => {
     const room = props.room;
-    
+    if (!room) return;
+
     const updateParticipants = () => {
       setRemoteParticipants(Array.from(room.remoteParticipants.values()));
     };
@@ -38,8 +40,7 @@ export const VideoCallRoom: Component<VideoCallRoomProps> = (props) => {
     room.on('participantConnected', updateParticipants);
     room.on('participantDisconnected', updateParticipants);
 
-    // Configurar elementos de vídeo
-    setupVideoElements();
+    updateParticipants();
 
     onCleanup(() => {
       room.off('participantConnected', updateParticipants);
@@ -47,37 +48,53 @@ export const VideoCallRoom: Component<VideoCallRoomProps> = (props) => {
     });
   });
 
-  const setupVideoElements = () => {
-    const localParticipant = props.room.localParticipant;
-    
-    // Elemento de vídeo local
-    if (localParticipant && localParticipant.videoTrackPublications.size > 0) {
-      const videoTrack = Array.from(localParticipant.videoTrackPublications.values())[0].videoTrack;
-      if (videoTrack) {
-        const localVideoElement = document.getElementById('local-video') as HTMLVideoElement;
-        if (localVideoElement) {
-          videoTrack.attach(localVideoElement);
-        }
-      }
-    }
+  onMount(() => {
+    setupVideoElements();
+  });
 
-    // Elementos de vídeo remotos
-    remoteParticipants().forEach(participant => {
-      if (participant.videoTrackPublications.size > 0) {
-        const videoTrack = Array.from(participant.videoTrackPublications.values())[0].videoTrack;
-        if (videoTrack) {
-          const remoteVideoElement = document.getElementById(`remote-video-${participant.identity}`) as HTMLVideoElement;
-          if (remoteVideoElement) {
-            videoTrack.attach(remoteVideoElement);
+  const setupVideoElements = () => {
+    const room = props.room;
+    if (!room) return;
+
+    const localParticipant = room.localParticipant;
+    
+    if (localParticipant) {
+      localParticipant.videoTrackPublications.forEach((publication) => {
+        if (publication.isSubscribed && publication.videoTrack) {
+          const videoElement = document.getElementById('local-video') as HTMLVideoElement;
+          if (videoElement) {
+            publication.videoTrack.attach(videoElement);
           }
         }
-      }
+      });
+    }
+
+    remoteParticipants().forEach(participant => {
+      participant.videoTrackPublications.forEach((publication) => {
+        if (publication.isSubscribed && publication.videoTrack) {
+          const videoElement = document.getElementById(`remote-video-${participant.identity}`) as HTMLVideoElement;
+          if (!videoElement) {
+            const newVideoElement = document.createElement('video');
+            newVideoElement.id = `remote-video-${participant.identity}`;
+            newVideoElement.autoplay = true;
+            newVideoElement.playsInline = true;
+            newVideoElement.className = 'w-full h-full object-cover';
+            document.getElementById('remote-video-container')?.appendChild(newVideoElement);
+            publication.videoTrack.attach(newVideoElement);
+          } else {
+            publication.videoTrack.attach(videoElement);
+          }
+        }
+      });
     });
   };
 
+  createEffect(() => {
+    setupVideoElements();
+  });
+
   return (
     <div class="fixed inset-0 bg-background z-50 flex flex-col">
-      {/* Header */}
       <div class="flex items-center justify-between p-4 bg-background/80 backdrop-blur-sm border-b">
         <div class="flex items-center gap-3">
           <div class="w-3 h-3 rounded-full bg-red-500 animate-pulse"></div>
@@ -90,35 +107,31 @@ export const VideoCallRoom: Component<VideoCallRoomProps> = (props) => {
         </Button>
       </div>
 
-      {/* Área de Vídeo */}
       <div class="flex-1 relative bg-black">
-        {/* Vídeo Remoto */}
-        <div class="absolute inset-0 flex items-center justify-center">
-          {remoteParticipants().map(participant => (
-            <video
-              id={`remote-video-${participant.identity}`}
-              class="w-full h-full object-cover"
-              autoplay
-              playsinline
-            />
-          ))}
-        </div>
+        {props.callInfo.callType === 'video' ? (
+          <>
+            <div id="remote-video-container" class="absolute inset-0 flex items-center justify-center">
+              {remoteParticipants().map(participant => (
+                <video
+                  id={`remote-video-${participant.identity}`}
+                  class="w-full h-full object-cover"
+                  autoplay
+                  playsInline
+                />
+              ))}
+            </div>
 
-        {/* Vídeo Local (Picture-in-Picture) */}
-        {props.callInfo.callType === 'video' && (
-          <div class="absolute bottom-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden border-2 border-primary">
-            <video
-              id="local-video"
-              class="w-full h-full object-cover"
-              autoplay
-              playsinline
-              muted
-            />
-          </div>
-        )}
-
-        {/* Overlay para chamada de áudio */}
-        {props.callInfo.callType === 'audio' && (
+            <div class="absolute bottom-4 right-4 w-48 h-36 bg-gray-900 rounded-lg overflow-hidden border-2 border-primary">
+              <video
+                id="local-video"
+                class="w-full h-full object-cover"
+                autoplay
+                playsInline
+                muted
+              />
+            </div>
+          </>
+        ) : (
           <div class="absolute inset-0 flex items-center justify-center">
             <Card class="bg-background/80 backdrop-blur-sm">
               <CardContent class="p-8 text-center">
@@ -133,7 +146,6 @@ export const VideoCallRoom: Component<VideoCallRoomProps> = (props) => {
         )}
       </div>
 
-      {/* Controles */}
       <div class="absolute bottom-8 left-1/2 transform -translate-x-1/2">
         <CallControls
           onToggleVideo={handleToggleVideo}
