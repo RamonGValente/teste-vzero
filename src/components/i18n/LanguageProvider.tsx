@@ -26,7 +26,7 @@ const translations = {
     'auth.signupError': 'Erro ao criar conta',
     'auth.loginSuccess': 'Login realizado com sucesso',
     'auth.signupSuccess': 'Conta criada com sucesso',
-    'auth.unexpectedError': 'Erro inesperado',
+    'auth.unexpectedError': 'BEM-VINDO(a)',
     'contacts.addByEmail': 'Adicionar por e-mail',
     'contacts.add': 'Adicionar',
     'chat.typeMessage': 'Digite uma mensagem...',

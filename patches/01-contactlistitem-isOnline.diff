@@ -1,0 +1,14 @@
+*** Begin Patch
+*** Update File: src/components/contacts/ContactListItem.tsx
+@@
+-import React from 'react';
++import React from 'react';
++import { isOnline } from '@/lib/presence'; // <-- adicionado
+@@
+-  const status = (presence?.status ?? contact.status ?? 'offline') as string;
+-  const online = status === 'online';
+-  const lastSeen = presence?.last_seen ?? contact.last_seen ?? null;
++  const status = (presence?.status ?? contact.status ?? 'offline') as string;
++  const lastSeen = presence?.last_seen ?? contact.last_seen ?? null;
++  const online = isOnline(status, lastSeen); // <-- usa a regra correta
+*** End Patch

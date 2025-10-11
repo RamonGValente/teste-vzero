@@ -17,6 +17,14 @@ export const LoginScreen = () => {
   const { toggleTheme } = useTheme();
   const { t, toggleLanguage } = useTranslation();
 
+  const handleEmailClick = () => {
+    const emailAddress = 'sistemasrtr@gmail.com';
+    const subject = 'Contato-Undoing';
+    const mailtoLink = `mailto:${emailAddress}?subject=${encodeURIComponent(subject)}`;
+    
+    window.location.href = mailtoLink;
+  };
+
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
@@ -61,8 +69,8 @@ export const LoginScreen = () => {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md space-y-8">
+    <div className="min-h-screen flex flex-col items-center justify-center p-4">
+      <div className="w-full max-w-md space-y-8 flex-1 flex flex-col justify-center">
         <div className="text-center">
           {/* Logo levemente menor */}
           <div className="flex justify-center mb-4">
@@ -151,6 +159,16 @@ export const LoginScreen = () => {
           </CardContent>
         </Card>
       </div>
+      
+      {/* Rodapé */}
+      <footer className="w-full text-center py-4 mt-8">
+        <button
+          onClick={handleEmailClick}
+          className="text-sm text-muted-foreground hover:text-foreground transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 rounded-sm"
+        >
+          Todos os Direitos Reservados RTR-Sistemas
+        </button>
+      </footer>
     </div>
   );
 };

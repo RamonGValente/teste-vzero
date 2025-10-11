@@ -47,7 +47,7 @@ export const Sidebar = ({
   const { toggleTheme } = useTheme();
   const { t } = useTranslation();
   const { invitations } = useContactInvitations();
-  const navigate = useNavigate(); // Adicionei esta linha
+  const navigate = useNavigate();
 
   const pendingInvitations = invitations.filter(inv => 
     inv.status === 'pending' && inv.receiver_id !== inv.sender_id
@@ -134,15 +134,17 @@ export const Sidebar = ({
             <Button variant="ghost" size="sm" onClick={toggleTheme}>
               <Moon className="h-4 w-4" />
             </Button>
-            {/* CORREÇÃO AQUI: Aspas corrigidas */}
-            <Button 
-              variant="ghost" 
-              size="sm" 
-              onClick={() => navigate('/social')} 
-              title="Rede Social" 
-              aria-label="Rede Social"
+            {/* Configurações DESATIVADO (no lugar do antigo botão Rede Social) */}
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-disabled="true"
+              disabled
+              className="pointer-events-none cursor-default text-muted-foreground"
+              title="Configurações"
+              aria-label="Configurações"
             >
-              <Globe className="h-4 w-4" />
+              <Settings className="h-4 w-4" />
             </Button>
           </div>
         </div>
@@ -172,13 +174,16 @@ export const Sidebar = ({
               </Badge>
             )}
           </Button>
+          {/* Troca: aqui entra Rede Social (no lugar do antigo Configurações) */}
           <Button
-            variant={currentView === 'settings' ? 'default' : 'ghost'}
+            variant="ghost"
             size="sm"
-            onClick={() => setCurrentView('settings')}
+            onClick={() => navigate('/social')}
             className="flex-1"
+            title="Rede Social"
+            aria-label="Rede Social"
           >
-            <Settings className="h-4 w-4" />
+            <Globe className="h-4 w-4" />
           </Button>
         </div>
       </div>

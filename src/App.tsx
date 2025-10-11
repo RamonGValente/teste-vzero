@@ -1,3 +1,4 @@
+import { useOnlineStatus } from '@/hooks/useOnlineStatus';
 import "@/styles/attention.css";
 
 import { Toaster } from "@/components/ui/toaster";
@@ -14,48 +15,57 @@ import { useUserActivity } from "@/hooks/useUserActivity";
 import { useIdleLogout } from "@/hooks/useIdleLogout";
 import Index from "./pages/Index";
 import NotFound from "./pages/NotFound";
+// Opcional: se existir esse hook no seu projeto, manter a importação
+import { useOnlinePresence } from "@/hooks/useOnlinePresence";
 
-// IMPORTE O SOCIALNETWORK - TENTE ESTES CAMINHOS:
-import SocialNetwork from "@/components/Social/SocialNetwork"; // Opção 1
-// ou
-// import SocialNetwork from "./components/Social/SocialNetwork"; // Opção 2
-// ou
-// import SocialNetwork from "../components/Social/SocialNetwork"; // Opção 3
+// SocialNetwork: ajuste o caminho conforme sua estrutura.
+// Aqui uso o padrão: pasta 'components/social' (minúscula).
+import SocialNetwork from "@/components/social/SocialNetwork";
 
 const queryClient = new QueryClient();
 
-// Component to initialize user activity tracking and idle logout
+// Componente para iniciar rastreio de atividade e logout por ociosidade
 const UserActivityTracker = () => {
   useUserActivity();
   useIdleLogout();
   return null;
 };
 
-const App = () => (
-  <QueryClientProvider client={queryClient}>
-    <ThemeProvider>
-      <LanguageProvider>
-        <AuthProvider>
-          <NotificationProvider>
-            <UserActivityTracker />
-            <TooltipProvider>
-              <Toaster />
-              <Sonner />
-              {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
-              <RealtimeAttentionListener />
-              <BrowserRouter>
-                <Routes>
-                  <Route path="/" element={<Index />} />
-                  <Route path="/social" element={<SocialNetwork />} />
-                  <Route path="*" element={<NotFound />} />
-                </Routes>
-              </BrowserRouter>
-            </TooltipProvider>
-          </NotificationProvider>
-        </AuthProvider>
-      </LanguageProvider>
-    </ThemeProvider>
-  </QueryClientProvider>
-);
+function App() {
+  // Inicializa presença do usuário (heartbeat/visibilidade/unload)
+  useOnlineStatus();
+  // Se o projeto tiver um hook adicional de presença, mantenha a chamada.
+  try {
+    // @ts-ignore - pode não existir em todos os projetos
+    useOnlinePresence?.();
+  } catch {}
+
+  return (
+    <QueryClientProvider client={queryClient}>
+      <ThemeProvider>
+        <LanguageProvider>
+          <AuthProvider>
+            <NotificationProvider>
+              <UserActivityTracker />
+              <TooltipProvider>
+                <Toaster />
+                <Sonner />
+                {/* Listener GLOBAL que mostra a notificação em qualquer rota */}
+                <RealtimeAttentionListener />
+                <BrowserRouter>
+                  <Routes>
+                    <Route path="/" element={<Index />} />
+                    <Route path="/social" element={<SocialNetwork />} />
+                    <Route path="*" element={<NotFound />} />
+                  </Routes>
+                </BrowserRouter>
+              </TooltipProvider>
+            </NotificationProvider>
+          </AuthProvider>
+        </LanguageProvider>
+      </ThemeProvider>
+    </QueryClientProvider>
+  );
+}
 
 export default App;
