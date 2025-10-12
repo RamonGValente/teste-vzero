@@ -158,18 +158,8 @@ export default function PostComponent({ post }: PostProps) {
           .update({ status: 'deleted' })
           .eq('id', post.id);
 
-        // Aplicar penalidade de 6 horas
-        const penaltyExpires = new Date();
-        penaltyExpires.setHours(penaltyExpires.getHours() + 6);
-
-        await supabase
-          .from('user_penalties')
-          .insert([{
-            user_id: post.user_id,
-            reason: 'Post com avaliação negativa',
-            expires_at: penaltyExpires.toISOString()
-          }]);
-      }
+        // Penalidade desativada no cliente (RLS) 
+}
     } catch (error) {
       console.error('Erro ao processar resultado:', error);
     }

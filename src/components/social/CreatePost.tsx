@@ -124,14 +124,14 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
       const filePath = `post-media/${fileName}`;
 
       const { data, error } = await supabase.storage
-        .from('posts')
-        .upload(filePath, file);
+        .from('post-images')
+        .upload(filePath, file, { contentType: file.type || 'application/octet-stream', upsert: true });
 
       if (error) throw error;
 
       // Obter URL pública
       const { data: { publicUrl } } = supabase.storage
-        .from('posts')
+        .from('post-images')
         .getPublicUrl(filePath);
 
       return publicUrl;
@@ -201,7 +201,7 @@ export default function CreatePost({ onPostCreated }: CreatePostProps) {
       
     } catch (error) {
       console.error('Erro ao criar post:', error);
-      setError('Erro ao criar postagem');
+      setError(`Erro ao criar postagem: ${error?.message ?? ''}`);
     } finally {
       setUploading(false);
     }

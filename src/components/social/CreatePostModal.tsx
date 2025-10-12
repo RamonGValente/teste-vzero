@@ -121,20 +121,21 @@ export default function CreatePostModal({ open, onOpenChange, onPostCreated }: C
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${Math.random().toString(36).substring(2)}-${Date.now()}.${fileExt}`;
-      const bucketName = 'message-files';
+      const bucketName = 'post-images';
       const filePath = `post-media/${fileName}`;
 
       const { data, error } = await supabase.storage
         .from(bucketName)
-        .upload(filePath, file);
+        .upload(filePath, file, { contentType: file.type || 'application/octet-stream', upsert: true });
 
       if (error) throw error;
 
       const { data: { publicUrl } } = supabase.storage
-        .from(bucketName)
-        .getPublicUrl(filePath);
+  .from('post-images')
+  .getPublicUrl(filePath);
+return publicUrl;
 
-      return publicUrl;
+
     } catch (error) {
       console.error('Erro no upload:', error);
       throw new Error('Falha no upload da mídia');
@@ -206,7 +207,7 @@ export default function CreatePostModal({ open, onOpenChange, onPostCreated }: C
       
     } catch (error) {
       console.error('Erro ao criar post:', error);
-      setError('Erro ao criar postagem');
+      setError(`Erro ao criar postagem: ${error?.message ?? ''}`);
     } finally {
       setUploading(false);
     }
