@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Download, ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { isStandalone } from "@/utils/pwa";
 import { Card } from "@/components/ui/card";
 
 interface BeforeInstallPromptEvent extends Event {
@@ -9,6 +10,15 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function PWAInstallPrompt() {
+  useEffect(() => {
+    try {
+      if (isStandalone()) {
+        setIsInstalled(true);
+        setShowPrompt(false);
+      }
+    } catch {}
+  }, []);
+
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);

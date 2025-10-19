@@ -1,6 +1,8 @@
 import { VitePWAOptions } from 'vite-plugin-pwa';
 
 export const pwaOptions: Partial<VitePWAOptions> = {
+  injectRegister: 'script',
+  devOptions: { enabled: true },
   registerType: 'autoUpdate',
   includeAssets: ['favicon.ico'],
   manifest: {
