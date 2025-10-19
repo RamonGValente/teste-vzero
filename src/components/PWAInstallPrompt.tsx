@@ -108,7 +108,7 @@ export function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    setDismissed(true);
+    setDismissed(true); setTimeout(() => setShowPrompt(true), 20000);
     localStorage.setItem('pwa-prompt-dismissed', 'true');
   };
 
