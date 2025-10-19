@@ -37,7 +37,7 @@ export const MentionText: React.FC<MentionTextProps> = ({ text }) => {
     const uname = m[1];
     if (start > last) parts.push(<span key={last}>{text.slice(last, start)}</span>);
     const id = map.get(uname);
-    parts.push(id ? <UserLink key={start} userId={id} username={uname} /> : <span key={start}>@{uname}</span>);
+    parts.push(id ? <UserLink key={start} userId={id} username={uname} className="text-primary font-semibold hover:underline" /> : <span key={start}>@{uname}</span>);
     last = rx.lastIndex;
   }
   if (last < text.length) parts.push(<span key={last}>{text.slice(last)}</span>);

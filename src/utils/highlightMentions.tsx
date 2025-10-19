@@ -17,7 +17,7 @@ function MentionUsername({ username }: { username: string }) {
     },
   });
   if (!data) return <>@{username}</>;
-  return <UserLink userId={data.id} username={data.username} />;
+  return <UserLink userId={data.id} username={data.username} className="text-primary font-semibold hover:underline" />;
 }
 
 export function highlightMentions(text: string) {
@@ -32,7 +32,7 @@ export function highlightMentions(text: string) {
     if (start > last) parts.push(text.slice(last, start));
     const handle = m[1];
     const username = handle.slice(1);
-    parts.push(<MentionUsername key={start} username={username} />);
+    parts.push(<span className="text-primary font-semibold"><MentionUsername key={start} username={username} /></span>);
     last = end;
   }
   if (last < text.length) parts.push(text.slice(last));
