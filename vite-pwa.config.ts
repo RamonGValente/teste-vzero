@@ -6,9 +6,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   registerType: 'autoUpdate',
   includeAssets: ['favicon.ico'],
   manifest: {
-    name: 'Community Sync Flow',
-    short_name: 'SyncFlow',
-    description: 'Chat social e comunidades em tempo real',
+    name: 'UDG',
+    short_name: 'UDG',
+    description: 'UDG',
     theme_color: '#9F7AEA',
     background_color: '#1A1626',
     display: 'standalone',
