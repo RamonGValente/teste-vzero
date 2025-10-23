@@ -26,7 +26,6 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { MentionText } from "@/components/MentionText";
 
-// shadcn/ui
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -54,13 +53,11 @@ export default function Feed() {
   const [uploading, setUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // ---- STATES para Editar/Comentários ----
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
   const [openingCommentsFor, setOpeningCommentsFor] = useState<PostRow | null>(null);
   const [newCommentText, setNewCommentText] = useState("");
 
-  // Mark feed as viewed when user visits
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -79,13 +76,10 @@ export default function Feed() {
     queryKey: ["posts", user?.id],
     queryFn: async () => {
       if (!user) return [];
-
-      // Get user's friends
       const { data: friendships } = await supabase
         .from("friendships")
         .select("friend_id")
         .eq("user_id", user.id);
-
       const friendIds = friendships?.map((f) => f.friend_id) || [];
       const allowedUserIds = [user.id, ...friendIds];
 
@@ -99,9 +93,7 @@ export default function Feed() {
           post_votes (id, user_id, vote_type)
         `)
         .or(
-          `user_id.in.(${allowedUserIds.join(
-            ","
-          )}),is_community_approved.eq.true,voting_period_active.eq.true`
+          `user_id.in.(${allowedUserIds.join(",")}),is_community_approved.eq.true,voting_period_active.eq.true`
         )
         .order("created_at", { ascending: false });
 
@@ -111,7 +103,6 @@ export default function Feed() {
     enabled: !!user,
   });
 
-  // Real-time updates
   useEffect(() => {
     const channel = supabase
       .channel("feed-realtime")
@@ -125,7 +116,6 @@ export default function Feed() {
     };
   }, [refetch]);
 
-  // Process expired posts every minute
   useEffect(() => {
     const processVotes = async () => {
       try {
@@ -144,7 +134,6 @@ export default function Feed() {
     const validFiles = files.filter(
       (file) => file.type.startsWith("image/") || file.type.startsWith("video/")
     );
-
     if (validFiles.length !== files.length) {
       toast({
         variant: "destructive",
@@ -152,55 +141,30 @@ export default function Feed() {
         description: "Apenas imagens e vídeos são permitidos.",
       });
     }
-
     setMediaFiles((prev) => [...prev, ...validFiles]);
   };
-
-  const removeFile = (index: number) => {
-    setMediaFiles((prev) => prev.filter((_, i) => i !== index));
-  };
+  const removeFile = (index: number) => setMediaFiles((prev) => prev.filter((_, i) => i !== index));
 
   const handleCreatePost = async () => {
     if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
-      toast({
-        variant: "destructive",
-        title: "Erro",
-        description: "Adicione um título ou conteúdo para publicar.",
-      });
+      toast({ variant: "destructive", title: "Erro", description: "Adicione um título ou conteúdo para publicar." });
       return;
     }
-
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
-
-      // Upload media files
       for (const file of mediaFiles) {
         const fileExt = file.name.split(".").pop();
         const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
         const filePath = `${fileName}`;
-
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(filePath, file);
-
+        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file);
         if (uploadError) throw uploadError;
-
-        const {
-          data: { publicUrl },
-        } = supabase.storage.from("media").getPublicUrl(filePath);
-
+        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         mediaUrls.push(publicUrl);
       }
-
-      // Create post with 1 hour voting period
       const votingEndsAt = new Date();
       votingEndsAt.setHours(votingEndsAt.getHours() + 1);
-
-      const postContent = postTitle.trim()
-        ? `${postTitle}\n\n${newPost}`
-        : newPost;
-
+      const postContent = postTitle.trim() ? `${postTitle}\n\n${newPost}` : newPost;
       const { data: postData, error } = await supabase
         .from("posts")
         .insert({
@@ -212,31 +176,18 @@ export default function Feed() {
         })
         .select()
         .single();
-
       if (error) throw error;
 
-      // Save mentions
       if (postData && user) {
         const { saveMentions } = await import("@/utils/mentionsHelper");
         await saveMentions(postData.id, "post", postContent, user.id);
       }
-
-      toast({
-        title: "Post criado!",
-        description: "Sua postagem entrará em votação por 1 hora.",
-      });
-
-      setPostTitle("");
-      setNewPost("");
-      setMediaFiles([]);
+      toast({ title: "Post criado!", description: "Sua postagem entrará em votação por 1 hora." });
+      setPostTitle(""); setNewPost(""); setMediaFiles([]);
       refetch();
     } catch (error) {
       console.error("Error creating post:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro",
-        description: "Não foi possível criar o post.",
-      });
+      toast({ variant: "destructive", title: "Erro", description: "Não foi possível criar o post." });
     } finally {
       setUploading(false);
     }
@@ -244,65 +195,39 @@ export default function Feed() {
 
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
-      const existingVote = posts
-        ?.find((p) => p.id === postId)
-        ?.post_votes?.find((v: any) => v.user_id === user?.id);
-
+      const existingVote = posts?.find((p) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
       if (existingVote) {
         if (existingVote.vote_type === voteType) {
-          const { error } = await supabase
-            .from("post_votes")
-            .delete()
-            .match({ post_id: postId, user_id: user?.id });
+          const { error } = await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
           if (error) throw error;
         } else {
-          const { error } = await supabase
-            .from("post_votes")
-            .update({ vote_type: voteType })
-            .match({ post_id: postId, user_id: user?.id });
+          const { error } = await supabase.from("post_votes").update({ vote_type: voteType }).match({ post_id: postId, user_id: user?.id });
           if (error) throw error;
         }
       } else {
-        const { error } = await supabase
-          .from("post_votes")
-          .insert({ post_id: postId, user_id: user?.id, vote_type: voteType });
+        const { error } = await supabase.from("post_votes").insert({ post_id: postId, user_id: user?.id, vote_type: voteType });
         if (error) throw error;
       }
       refetch();
     } catch (error) {
       console.error("Erro ao votar:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao votar",
-        description:
-          "Você precisa ser amigo do autor para votar nesta publicação.",
-      });
+      toast({ variant: "destructive", title: "Erro ao votar", description: "Você precisa ser amigo do autor para votar nesta publicação." });
     }
   };
 
   const handleLike = async (postId: string, hasLiked: boolean) => {
     try {
       if (hasLiked) {
-        const { error } = await supabase
-          .from("likes")
-          .delete()
-          .match({ post_id: postId, user_id: user?.id });
+        const { error } = await supabase.from("likes").delete().match({ post_id: postId, user_id: user?.id });
         if (error) throw error;
       } else {
-        const { error } = await supabase
-          .from("likes")
-          .insert({ post_id: postId, user_id: user?.id });
+        const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: user?.id });
         if (error) throw error;
       }
       refetch();
     } catch (error) {
       console.error("Erro ao curtir:", error);
-      toast({
-        variant: "destructive",
-        title: "Erro ao curtir",
-        description:
-          "Você precisa ser amigo do autor para curtir esta publicação.",
-      });
+      toast({ variant: "destructive", title: "Erro ao curtir", description: "Você precisa ser amigo do autor para curtir esta publicação." });
     }
   };
 
@@ -310,91 +235,54 @@ export default function Feed() {
     const now = new Date();
     const end = new Date(votingEndsAt);
     const diff = end.getTime() - now.getTime();
-
     if (diff <= 0) return "Votação encerrada";
-
     const minutes = Math.floor(diff / 60000);
     const hours = Math.floor(minutes / 60);
     const mins = minutes % 60;
-
     return `${hours}h ${mins}m restantes`;
   };
 
-  // ---------------- EDITAR POST ----------------
-  const openEdit = (post: PostRow) => {
-    setEditingPost(post);
-    setEditContent(post.content || "");
-  };
+  const openEdit = (post: PostRow) => { setEditingPost(post); setEditContent(post.content || ""); };
   const editMutation = useMutation({
     mutationFn: async () => {
       if (!editingPost) return;
-      const { error } = await supabase
-        .from("posts")
-        .update({ content: editContent, updated_at: new Date().toISOString() })
-        .eq("id", editingPost.id);
+      const { error } = await supabase.from("posts").update({ content: editContent, updated_at: new Date().toISOString() }).eq("id", editingPost.id);
       if (error) throw error;
     },
-    onSuccess: () => {
-      setEditingPost(null);
-      queryClient.invalidateQueries({ queryKey: ["posts", user?.id] });
-      toast({ title: "Post atualizado!" });
-    },
-    onError: (e: any) => {
-      toast({
-        variant: "destructive",
-        title: "Erro ao atualizar",
-        description: e?.message ?? "Tente novamente.",
-      });
-    },
+    onSuccess: () => { setEditingPost(null); queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }); toast({ title: "Post atualizado!" }); },
+    onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao atualizar", description: e?.message ?? "Tente novamente." }); },
   });
 
-  // ---------------- EXCLUIR POST ----------------
   const deleteMutation = useMutation({
     mutationFn: async (postId: string) => {
-      // Ordem segura para evitar FK: comments -> likes -> post_votes -> posts
       const tasks = [
         supabase.from("comments").delete().eq("post_id", postId),
         supabase.from("likes").delete().eq("post_id", postId),
         supabase.from("post_votes").delete().eq("post_id", postId),
       ];
-      for (const t of tasks) {
-        const { error } = await t;
-        if (error) throw error;
-      }
+      for (const t of tasks) { const { error } = await t; if (error) throw error; }
       const { error: delPostError } = await supabase.from("posts").delete().eq("id", postId);
       if (delPostError) throw delPostError;
     },
-    onSuccess: () => {
-      toast({ title: "Post excluído." });
-      queryClient.invalidateQueries({ queryKey: ["posts", user?.id] });
-    },
-    onError: (e: any) => {
-      toast({
-        variant: "destructive",
-        title: "Erro ao excluir",
-        description: e?.message ?? "Tente novamente.",
-      });
-    },
+    onSuccess: () => { toast({ title: "Post excluído." }); queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }); },
+    onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message ?? "Tente novamente." }); },
   });
 
-  // ---------------- COMENTÁRIOS ----------------
-  // Busca comentários do post aberto (lazy, habilita quando abrir)
+  // ----- COMMENTS (busca lazy) -----
   const { data: openPostComments, refetch: refetchComments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id],
     enabled: !!openingCommentsFor?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("comments")
-        .select(
-          `
+        .select(`
           id,
           post_id,
           user_id,
           content,
           created_at,
           author:profiles!comments_user_id_fkey(id, username, full_name, avatar_url)
-        `
-        )
+        `)
         .eq("post_id", openingCommentsFor!.id)
         .order("created_at", { ascending: true });
       if (error) throw error;
@@ -403,11 +291,11 @@ export default function Feed() {
   });
 
   const addComment = useMutation({
+    // ⚠️ NÃO enviamos user_id — o trigger e a política garantem auth.uid()
     mutationFn: async () => {
       if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return;
       const { error } = await supabase.from("comments").insert({
         post_id: openingCommentsFor.id,
-        user_id: user.id,
         content: newCommentText.trim(),
       });
       if (error) throw error;
@@ -416,14 +304,14 @@ export default function Feed() {
       setNewCommentText("");
       await Promise.all([
         refetchComments(),
-        queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }), // atualiza contador
+        queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }),
       ]);
     },
     onError: (e: any) => {
       toast({
         variant: "destructive",
         title: "Erro ao comentar",
-        description: e?.message ?? "Tente novamente.",
+        description: e?.message ?? "Verifique as políticas RLS de comments.",
       });
     },
   });
@@ -434,7 +322,7 @@ export default function Feed() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Create Post */}
+        {/* Criar Post */}
         <Card className="border shadow-sm bg-card">
           <CardContent className="pt-6">
             <div className="flex gap-3">
@@ -464,11 +352,7 @@ export default function Feed() {
                       <div key={index} className="relative">
                         <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                           {file.type.startsWith("image/") ? (
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt="Preview"
-                              className="w-full h-full object-cover"
-                            />
+                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
                           ) : (
                             <ImageIcon className="h-8 w-8 text-muted-foreground" />
                           )}
@@ -496,21 +380,14 @@ export default function Feed() {
                       multiple
                       onChange={handleFileSelect}
                     />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      className="text-muted-foreground"
-                      onClick={() => fileInputRef.current?.click()}
-                    >
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
                       <Upload className="h-4 w-4 mr-2" />
                       Adicionar mídia
                     </Button>
                   </div>
                   <Button
                     onClick={handleCreatePost}
-                    disabled={
-                      (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading
-                    }
+                    disabled={(!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading}
                     className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
                   >
                     {uploading ? "Publicando..." : "Publicar"}
@@ -521,30 +398,20 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Posts Feed */}
+        {/* Feed */}
         {posts?.map((post) => {
           const isOwnPost = post.user_id === user?.id;
           const hasLiked = post.likes?.some((like: any) => like.user_id === user?.id);
           const likesCount = post.likes?.length || 0;
           const commentsCount = post.comments?.length || 0;
-
-          const heartVotes =
-            post.post_votes?.filter((v: any) => v.vote_type === "heart").length || 0;
-          const bombVotes =
-            post.post_votes?.filter((v: any) => v.vote_type === "bomb").length || 0;
+          const heartVotes = post.post_votes?.filter((v: any) => v.vote_type === "heart").length || 0;
+          const bombVotes = post.post_votes?.filter((v: any) => v.vote_type === "bomb").length || 0;
           const userVote = post.post_votes?.find((v: any) => v.user_id === user?.id);
           const isVotingActive = post.voting_period_active && post.voting_ends_at;
 
           return (
-            <Card
-              key={post.id}
-              className={cn(
-                "border shadow-sm bg-card hover:shadow-md transition-shadow",
-                post.is_community_approved && "border-primary/50"
-              )}
-            >
+            <Card key={post.id} className={cn("border shadow-sm bg-card hover:shadow-md transition-shadow", post.is_community_approved && "border-primary/50")}>
               <CardContent className="pt-6 space-y-4">
-                {/* Post Header */}
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar>
@@ -554,19 +421,13 @@ export default function Feed() {
                       </AvatarFallback>
                     </Avatar>
                     <div>
-                      <UserLink
-                        userId={post.user_id}
-                        username={post.profiles?.username || ""}
-                      >
+                      <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
                         {post.profiles?.username}
                       </UserLink>
-                      <p className="text-xs text-muted-foreground">
-                        {fmtDate(post.created_at)}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("pt-BR")}</p>
                     </div>
                   </div>
 
-                  {/* ⋮ apenas para o dono do post */}
                   {isOwnPost && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
@@ -575,10 +436,7 @@ export default function Feed() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem
-                          onClick={() => openEdit(post)}
-                          className="cursor-pointer"
-                        >
+                        <DropdownMenuItem onClick={() => openEdit(post)} className="cursor-pointer">
                           <Pencil className="h-4 w-4 mr-2" /> Editar postagem
                         </DropdownMenuItem>
                         <DropdownMenuItem
@@ -592,19 +450,16 @@ export default function Feed() {
                   )}
                 </div>
 
-                {/* Selo aprovado */}
                 {post.is_community_approved && (
                   <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary">
                     ✓ Aprovado pela Comunidade
                   </Badge>
                 )}
 
-                {/* Conteúdo */}
                 <p className="text-foreground leading-relaxed">
                   <MentionText text={post.content ?? ""} />
                 </p>
 
-                {/* Media */}
                 {post.media_urls && post.media_urls.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     {post.media_urls.map((url: string, index: number) => (
@@ -619,85 +474,45 @@ export default function Feed() {
                   </div>
                 )}
 
-                {/* Votação */}
                 {isVotingActive && (
                   <div className="bg-muted/50 rounded-lg p-3 space-y-2">
                     <div className="flex items-center justify-between text-sm">
-                      <span className="text-muted-foreground">
-                        {getTimeRemaining(post.voting_ends_at)}
-                      </span>
+                      <span className="text-muted-foreground">{getTimeRemaining(post.voting_ends_at)}</span>
                       <div className="flex gap-3 text-xs">
-                        <span className="flex items-center gap-1">
-                          <Heart className="h-3 w-3 fill-red-500 text-red-500" />
-                          {heartVotes}
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Bomb className="h-3 w-3 fill-orange-500 text-orange-500" />
-                          {bombVotes}
-                        </span>
+                        <span className="flex items-center gap-1"><Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}</span>
+                        <span className="flex items-center gap-1"><Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}</span>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
                         variant="outline"
                         size="sm"
-                        className={cn(
-                          "flex-1",
-                          userVote?.vote_type === "heart" &&
-                            "bg-red-500/10 border-red-500 text-red-500"
-                        )}
+                        className={cn("flex-1", userVote?.vote_type === "heart" && "bg-red-500/10 border-red-500 text-red-500")}
                         onClick={() => handleVote(post.id, "heart")}
                       >
-                        <Heart
-                          className={cn(
-                            "h-4 w-4 mr-2",
-                            userVote?.vote_type === "heart" && "fill-current"
-                          )}
-                        />
+                        <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-current")} />
                         Aprovar
                       </Button>
                       <Button
                         variant="outline"
                         size="sm"
-                        className={cn(
-                          "flex-1",
-                          userVote?.vote_type === "bomb" &&
-                            "bg-orange-500/10 border-orange-500 text-orange-500"
-                        )}
+                        className={cn("flex-1", userVote?.vote_type === "bomb" && "bg-orange-500/10 border-orange-500 text-orange-500")}
                         onClick={() => handleVote(post.id, "bomb")}
                       >
-                        <Bomb
-                          className={cn(
-                            "h-4 w-4 mr-2",
-                            userVote?.vote_type === "bomb" && "fill-current"
-                          )}
-                        />
+                        <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-current")} />
                         Rejeitar
                       </Button>
                     </div>
                   </div>
                 )}
 
-                {/* Ações */}
                 <div className="flex items-center gap-4 pt-2 border-t">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => handleLike(post.id, hasLiked)}
-                    className={hasLiked ? "text-red-500 hover:text-red-600" : ""}
-                  >
-                    <Heart
-                      className={cn("h-5 w-5 mr-2", hasLiked && "fill-current")}
-                    />
+                  <Button variant="ghost" size="sm" onClick={() => handleLike(post.id, hasLiked)} className={hasLiked ? "text-red-500 hover:text-red-600" : ""}>
+                    <Heart className={cn("h-5 w-5 mr-2", hasLiked && "fill-current")} />
                     {likesCount}
                   </Button>
 
-                  {/* Comentários: contador + abrir dialog com lista e input */}
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setOpeningCommentsFor(post)}
-                  >
+                  <Button variant="ghost" size="sm" onClick={() => setOpeningCommentsFor(post)}>
                     <MessageCircle className="h-5 w-5 mr-2" />
                     {commentsCount}
                   </Button>
@@ -718,47 +533,27 @@ export default function Feed() {
 
         {posts?.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">
-              Nenhum post ainda. Seja o primeiro a publicar!
-            </p>
+            <p className="text-muted-foreground">Nenhum post ainda. Seja o primeiro a publicar!</p>
           </div>
         )}
       </div>
 
-      {/* ------------ DIALOG EDITAR POST ------------ */}
+      {/* Dialog Editar */}
       <Dialog open={!!editingPost} onOpenChange={(o) => !o && setEditingPost(null)}>
         <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>Editar postagem</DialogTitle>
-          </DialogHeader>
-          <Textarea
-            value={editContent}
-            onChange={(e) => setEditContent(e.target.value)}
-            rows={8}
-            placeholder="Edite o conteúdo da postagem"
-          />
+          <DialogHeader><DialogTitle>Editar postagem</DialogTitle></DialogHeader>
+          <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} placeholder="Edite o conteúdo da postagem" />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingPost(null)}>
-              Cancelar
-            </Button>
+            <Button variant="outline" onClick={() => setEditingPost(null)}>Cancelar</Button>
             <Button onClick={() => editMutation.mutate()}>Salvar alterações</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
-      {/* ------------ DIALOG COMENTÁRIOS ------------ */}
-      <Dialog
-        open={!!openingCommentsFor}
-        onOpenChange={(o) => {
-          if (!o) setOpeningCommentsFor(null);
-        }}
-      >
+      {/* Dialog Comentários */}
+      <Dialog open={!!openingCommentsFor} onOpenChange={(o) => { if (!o) setOpeningCommentsFor(null); }}>
         <DialogContent className="max-w-xl">
-          <DialogHeader>
-            <DialogTitle>Comentários</DialogTitle>
-          </DialogHeader>
-
-          {/* Lista de comentários */}
+          <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
           <div className="max-h-[50vh] overflow-auto space-y-4 pr-1">
             {loadingComments ? (
               <p className="text-sm text-muted-foreground">Carregando comentários...</p>
@@ -769,9 +564,7 @@ export default function Feed() {
                 <div key={c.id} className="flex items-start gap-3">
                   <Avatar className="h-8 w-8">
                     <AvatarImage src={c.author?.avatar_url || ""} />
-                    <AvatarFallback>
-                      {c.author?.username?.[0]?.toUpperCase()}
-                    </AvatarFallback>
+                    <AvatarFallback>{c.author?.username?.[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -780,9 +573,7 @@ export default function Feed() {
                           {c.author?.full_name || c.author?.username}
                         </UserLink>
                       </span>
-                      <span className="text-xs text-muted-foreground">
-                        {fmtDate(c.created_at)}
-                      </span>
+                      <span className="text-xs text-muted-foreground">{fmtDate(c.created_at)}</span>
                     </div>
                     <p className="text-sm whitespace-pre-wrap">{c.content}</p>
                   </div>
@@ -790,20 +581,10 @@ export default function Feed() {
               ))
             )}
           </div>
-
-          {/* Novo comentário */}
           <div className="mt-2 space-y-2">
-            <Textarea
-              value={newCommentText}
-              onChange={(e) => setNewCommentText(e.target.value)}
-              placeholder="Escreva um comentário…"
-              rows={3}
-            />
+            <Textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder="Escreva um comentário…" rows={3} />
             <div className="flex justify-end">
-              <Button
-                onClick={() => addComment.mutate()}
-                disabled={!newCommentText.trim() || !openingCommentsFor}
-              >
+              <Button onClick={() => addComment.mutate()} disabled={!newCommentText.trim() || !openingCommentsFor}>
                 Comentar
               </Button>
             </div>
