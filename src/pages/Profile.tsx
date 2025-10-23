@@ -1,8 +1,18 @@
 import { useState, useRef, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
-import { Camera, Settings, UserPlus, UserMinus, Calendar, Copy, Check } from "lucide-react";
-import { useParams } from "react-router-dom";
+import {
+  Camera,
+  Settings,
+  UserPlus,
+  UserMinus,
+  Calendar,
+  Copy,
+  Check,
+  Heart,
+  Bomb,
+} from "lucide-react";
+import { useParams, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -12,9 +22,18 @@ import { useToast } from "@/hooks/use-toast";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
+type MiniProfile = {
+  id: string;
+  username: string;
+  full_name: string | null;
+  avatar_url: string | null;
+};
 
 export default function Profile() {
   const { userId } = useParams<{ userId?: string }>();
+  const navigate = useNavigate();
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -85,6 +104,25 @@ export default function Profile() {
     enabled: !!profileId,
   });
 
+  // ===== Contadores persistidos: aprovadas/removidas =====
+  const { data: moderationStats } = useQuery({
+    queryKey: ["profileModerationStats", profileId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("profile_moderation_stats")
+        .select("approved_count, removed_count")
+        .eq("user_id", profileId)
+        .maybeSingle();
+      if (error) throw error;
+      return {
+        approved: data?.approved_count ?? 0,
+        removed: data?.removed_count ?? 0,
+      };
+    },
+    enabled: !!profileId,
+  });
+
+  // ===== Follow state =====
   const { data: isFollowing } = useQuery({
     queryKey: ["isFollowing", profileId, user?.id],
     queryFn: async () => {
@@ -101,7 +139,7 @@ export default function Profile() {
     enabled: !!user?.id && !!profileId && !isOwnProfile,
   });
 
-  // Já são amigos? (continua checando nas duas direções)
+  // ===== Friendship state =====
   const { data: isFriend } = useQuery({
     queryKey: ["isFriend", user?.id, profileId],
     queryFn: async () => {
@@ -119,7 +157,6 @@ export default function Profile() {
     enabled: !!user?.id && !!profileId && user?.id !== profileId,
   });
 
-  // Pedido pendente (qualquer direção)
   const { data: pendingBetween } = useQuery({
     queryKey: ["pendingFriendRequestBetween", user?.id, profileId],
     queryFn: async () => {
@@ -138,7 +175,7 @@ export default function Profile() {
     enabled: !!user?.id && !!profileId && user?.id !== profileId,
   });
 
-  // ===== Follow =====
+  // ===== Follow actions =====
   const followMutation = useMutation({
     mutationFn: async () => {
       if (!user?.id || !profileId) return;
@@ -210,7 +247,6 @@ export default function Profile() {
     mutationFn: async () => {
       if (!user?.id || !profileId || user.id === profileId) throw new Error("Operação inválida.");
 
-      // Já amigos?
       const { data: already, error: fErr } = await supabase
         .from("friendships")
         .select("id")
@@ -221,7 +257,6 @@ export default function Profile() {
       if (fErr) throw fErr;
       if (already) return { action: "already-friends" as const };
 
-      // Existe pendente?
       const { data: pending, error: pErr } = await supabase
         .from("friend_requests")
         .select("id,sender_id,receiver_id,status")
@@ -232,19 +267,13 @@ export default function Profile() {
         .maybeSingle();
       if (pErr) throw pErr;
 
-      // Aceitar se o outro já convidou
       if (pending && pending.sender_id === profileId && pending.receiver_id === user.id) {
-        // Tenta RPC para criar par
-        const { error: rpcErr } = await supabase.rpc("create_friendship_pair", {
-          a: user.id,
-          b: profileId,
-        });
+        const { error: rpcErr } = await supabase.rpc("create_friendship_pair", { a: user.id, b: profileId });
         if (rpcErr) {
-          // fallback direcional (caso RPC não exista)
           const { error: ins1 } = await supabase
             .from("friendships")
             .insert({ user_id: user.id, friend_id: profileId });
-          if (ins1) throw rpcErr; // preferir erro original
+          if (ins1) throw rpcErr;
         }
 
         const { error: upd } = await supabase
@@ -256,12 +285,10 @@ export default function Profile() {
         return { action: "accepted" as const };
       }
 
-      // Já enviei e está pendente
       if (pending && pending.sender_id === user.id && pending.receiver_id === profileId) {
         return { action: "already-pending" as const };
       }
 
-      // Criar novo pedido
       const { error: reqErr } = await supabase.from("friend_requests").insert({
         sender_id: user.id,
         receiver_id: profileId,
@@ -298,24 +325,17 @@ export default function Profile() {
   const removeFriend = useMutation({
     mutationFn: async () => {
       if (!user?.id || !profileId) throw new Error("Operação inválida.");
-
-      // tenta RPC que remove as duas direções
-      const { error: rpcErr } = await supabase.rpc("remove_friendship_pair", {
-        a: user.id,
-        b: profileId,
-      });
+      const { error: rpcErr } = await supabase.rpc("remove_friendship_pair", { a: user.id, b: profileId });
       if (rpcErr) {
-        // fallback: remove apenas minha direção (RLS-friendly)
         const { error: del1 } = await supabase
           .from("friendships")
           .delete()
           .eq("user_id", user.id)
           .eq("friend_id", profileId);
-        if (del1) throw rpcErr; // reporta o erro original do RPC
+        if (del1) throw rpcErr;
       }
     },
     onSuccess: async () => {
-      // invalida e força rechecagem
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ["isFriend", user?.id, profileId] }),
         queryClient.invalidateQueries({ queryKey: ["pendingFriendRequestBetween", user?.id, profileId] }),
@@ -330,6 +350,53 @@ export default function Profile() {
       });
     },
   });
+
+  // ===== Followers / Following MODALS =====
+  const [openFollowers, setOpenFollowers] = useState(false);
+  const [openFollowing, setOpenFollowing] = useState(false);
+
+  const { data: followersList, isLoading: loadingFollowers } = useQuery({
+    queryKey: ["followersList", profileId, openFollowers],
+    enabled: !!profileId && openFollowers,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("followers")
+        .select(
+          "follower:profiles!followers_follower_id_fkey(id, username, full_name, avatar_url)"
+        )
+        .eq("following_id", profileId);
+      if (error) throw error;
+      const list: MiniProfile[] = (data || [])
+        .map((r: any) => r.follower)
+        .filter(Boolean);
+      return list.sort((a, b) => a.username.localeCompare(b.username));
+    },
+  });
+
+  const { data: followingList, isLoading: loadingFollowing } = useQuery({
+    queryKey: ["followingList", profileId, openFollowing],
+    enabled: !!profileId && openFollowing,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("followers")
+        .select(
+          "following:profiles!followers_following_id_fkey(id, username, full_name, avatar_url)"
+        )
+        .eq("follower_id", profileId);
+      if (error) throw error;
+      const list: MiniProfile[] = (data || [])
+        .map((r: any) => r.following)
+        .filter(Boolean);
+      return list.sort((a, b) => a.username.localeCompare(b.username));
+    },
+  });
+
+  // Navegar para perfil ao clicar num usuário da lista
+  const goToProfile = (id: string) => {
+    setOpenFollowers(false);
+    setOpenFollowing(false);
+    navigate(`/profile/${id}`);
+  };
 
   // ===== Opcional: copiar UDG do próprio perfil =====
   const [copied, setCopied] = useState(false);
@@ -350,7 +417,7 @@ export default function Profile() {
         <div className="absolute left-1/2 -translate-x-1/2 bottom-0 transform">
           <div ref={avatarRef} className="relative">
             <Avatar className="h-32 w-32 md:h-40 md:w-40 border-4 border-background">
-              <AvatarImage src={profile?.avatar_url} />
+              <AvatarImage src={profile?.avatar_url || ""} />
               <AvatarFallback className="bg-primary text-primary-foreground text-4xl">
                 {profile?.username?.[0]?.toUpperCase()}
               </AvatarFallback>
@@ -409,30 +476,56 @@ export default function Profile() {
 
                   {profile?.bio && <p className="text-foreground text-center max-w-xl">{profile.bio}</p>}
 
-                  <div className="flex flex-wrap items-center justify-center gap-4 text-sm text-muted-foreground">
-                    <div className="flex items-center gap-2">
-                      <Calendar className="h-4 w-4" />
-                      Entrou em{" "}
-                      {profile?.created_at ? new Date(profile.created_at).toLocaleDateString("pt-BR") : "--/--/----"}
-                    </div>
-                  </div>
-
+                  {/* Linha: posts / seguidores / seguindo (clickable em seguidores/seguindo) */}
                   <div className="flex gap-6 text-sm justify-center">
                     <div>
                       <span className="font-bold text-foreground">{stats?.posts || 0}</span>
                       <span className="text-muted-foreground ml-1">posts</span>
                     </div>
-                    <div>
-                      <span className="font-bold text-foreground">{stats?.followers || 0}</span>
+
+                    <button
+                      className="group"
+                      onClick={() => setOpenFollowers(true)}
+                      title="Ver seguidores"
+                    >
+                      <span className="font-bold text-foreground group-hover:underline">
+                        {stats?.followers || 0}
+                      </span>
                       <span className="text-muted-foreground ml-1">seguidores</span>
-                    </div>
-                    <div>
-                      <span className="font-bold text-foreground">{stats?.following || 0}</span>
+                    </button>
+
+                    <button
+                      className="group"
+                      onClick={() => setOpenFollowing(true)}
+                      title="Ver seguindo"
+                    >
+                      <span className="font-bold text-foreground group-hover:underline">
+                        {stats?.following || 0}
+                      </span>
                       <span className="text-muted-foreground ml-1">seguindo</span>
+                    </button>
+                  </div>
+
+                  {/* Aprovadas / Removidas */}
+                  <div className="flex gap-6 text-sm justify-center mt-1">
+                    <div className="inline-flex items-center gap-2">
+                      <Heart className="h-4 w-4" />
+                      <span className="font-bold text-foreground">
+                        {moderationStats?.approved ?? 0}
+                      </span>
+                      <span className="text-muted-foreground">aprovadas</span>
+                    </div>
+                    <div className="inline-flex items-center gap-2">
+                      <Bomb className="h-4 w-4" />
+                      <span className="font-bold text-foreground">
+                        {moderationStats?.removed ?? 0}
+                      </span>
+                      <span className="text-muted-foreground">removidas</span>
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row gap-2 justify-center w-full sm:w-auto">
+                  {/* Ações */}
+                  <div className="flex flex-col sm:flex-row gap-2 justify-center w-full sm:w-auto mt-2">
                     {isOwnProfile ? (
                       <Button onClick={() => setIsEditing(true)} variant="outline" className="w-full sm:w-auto">
                         <Settings className="h-4 w-4 mr-2" />
@@ -460,7 +553,7 @@ export default function Profile() {
                           )}
                         </Button>
 
-                        {/* Amizade automática */}
+                        {/* Amizade */}
                         {isFriend ? (
                           <Button
                             variant="outline"
@@ -488,18 +581,6 @@ export default function Profile() {
                       </>
                     )}
                   </div>
-
-                  {!isOwnProfile && (
-                    <div className="mt-1 text-xs text-center text-muted-foreground">
-                      {isFriend
-                        ? "Vocês já são amigos."
-                        : pendingBetween
-                        ? pendingBetween.sender_id === user?.id
-                          ? "Você enviou uma solicitação de amizade."
-                          : "Este usuário enviou uma solicitação para você. Clique em “Adicionar como amigo” para aceitar."
-                        : null}
-                    </div>
-                  )}
                 </>
               )}
             </div>
@@ -553,6 +634,71 @@ export default function Profile() {
           </TabsContent>
         </Tabs>
       </div>
+
+      {/* ===== Modais de Seguidores / Seguindo ===== */}
+      <Dialog open={openFollowers} onOpenChange={setOpenFollowers}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seguidores</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto space-y-3">
+            {loadingFollowers ? (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            ) : (followersList?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">Nenhum seguidor.</p>
+            ) : (
+              followersList!.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => goToProfile(p.id)}
+                  className="flex w-full items-center gap-3 rounded-md p-2 hover:bg-muted text-left"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={p.avatar_url || ""} />
+                    <AvatarFallback>{p.username?.[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{p.full_name || p.username}</div>
+                    <div className="text-xs text-muted-foreground truncate">@{p.username}</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={openFollowing} onOpenChange={setOpenFollowing}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Seguindo</DialogTitle>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-auto space-y-3">
+            {loadingFollowing ? (
+              <p className="text-sm text-muted-foreground">Carregando...</p>
+            ) : (followingList?.length ?? 0) === 0 ? (
+              <p className="text-sm text-muted-foreground">Não está seguindo ninguém.</p>
+            ) : (
+              followingList!.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => goToProfile(p.id)}
+                  className="flex w-full items-center gap-3 rounded-md p-2 hover:bg-muted text-left"
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={p.avatar_url || ""} />
+                    <AvatarFallback>{p.username?.[0]?.toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0">
+                    <div className="text-sm font-medium truncate">{p.full_name || p.username}</div>
+                    <div className="text-xs text-muted-foreground truncate">@{p.username}</div>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
