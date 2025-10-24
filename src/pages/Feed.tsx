@@ -7,7 +7,6 @@ import {
   Send,
   Bookmark,
   MoreVertical,
-  Image as ImageIcon,
   Bomb,
   Upload,
   X,
@@ -17,6 +16,9 @@ import {
   Video,
   Maximize2,
   Minimize2,
+  Images,
+  Wand2,
+  Droplets,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -44,71 +46,49 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
 
 // ==== Helpers de mídia ====
-// Para compatibilidade com o schema atual (ARRAY de strings), vamos prefixar os URLs
-// que subirmos com "image::" ou "video::". Posts antigos (apenas URL) continuarão funcionando
-// via detecção por extensão.
-const MEDIA_PREFIX = {
-  image: "image::",
-  video: "video::",
-};
-
+const MEDIA_PREFIX = { image: "image::", video: "video::" } as const;
 function isVideoUrl(u: string): boolean {
   if (u.startsWith(MEDIA_PREFIX.video)) return true;
   if (u.startsWith(MEDIA_PREFIX.image)) return false;
   const url = u.split("::").pop() || u;
   return /\.(mp4|webm|ogg|mov|m4v)$/i.test(url);
 }
-
-function stripPrefix(u: string): string {
-  return u.replace(/^image::|^video::/, "");
-}
-
-// Formata data e hora (pedido do usuário)
+function stripPrefix(u: string): string { return u.replace(/^image::|^video::/, ""); }
 function fmtDateTime(iso: string) {
   const d = new Date(iso);
-  // DD/MM/AAAA HH:mm
-  return d.toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    year: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-  });
+  return d.toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 }
-
-// Checa duração de vídeo (máx. 15s). Retorna true se OK.
 async function validateVideoDuration(file: File, maxSeconds = 15): Promise<boolean> {
   if (!file.type.startsWith("video/")) return true;
   const url = URL.createObjectURL(file);
   try {
     const duration = await new Promise<number>((resolve, reject) => {
       const v = document.createElement("video");
-      v.preload = "metadata";
-      v.src = url;
-      v.onloadedmetadata = () => {
-        // Safari às vezes não popula duration sem play/pause
-        if (isNaN(v.duration) || !isFinite(v.duration)) {
-          v.currentTime = Number.MAX_SAFE_INTEGER;
-          v.ontimeupdate = () => {
-            v.ontimeupdate = null;
-            resolve(v.duration);
-          };
-        } else {
-          resolve(v.duration);
-        }
-      };
+      v.preload = "metadata"; v.src = url;
+      v.onloadedmetadata = () => resolve(v.duration);
       v.onerror = () => reject(new Error("Não foi possível ler o vídeo."));
     });
-    return duration <= maxSeconds + 0.25; // tolerância pequena
-  } finally {
-    URL.revokeObjectURL(url);
-  }
+    return duration <= maxSeconds + 0.25;
+  } finally { URL.revokeObjectURL(url); }
 }
 
 // Tipos
 type PostRow = any;
+
+// Efeitos
+type ColorEffect = "none" | "grayscale" | "sepia" | "pixelate" | "invert";
+type BgMode = "none" | "blur" | "solid" | "image";
+type Sticker = "none" | "cat_ears" | "helmet" | "sunglasses";
+
+type VisionRefs = {
+  fileset?: any;
+  segmenter?: any; // ImageSegmenter
+  face?: any; // FaceLandmarker
+};
 
 export default function Feed() {
   const { user } = useAuth();
@@ -120,10 +100,9 @@ export default function Feed() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  // Inputs separados para câmera/galeria (melhor UX mobile)
+  // Inputs: galeria e foto nativa; vídeo via gravador interno (para limite de 15s)
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
-  const cameraVideoInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -135,15 +114,245 @@ export default function Feed() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
+  // Gravador de vídeo interno
+  const [recDialogOpen, setRecDialogOpen] = useState(false);
+  const [recStream, setRecStream] = useState<MediaStream | null>(null);
+  const [recRecorder, setRecRecorder] = useState<MediaRecorder | null>(null);
+  const recChunks = useRef<Blob[]>([]);
+  const [recTime, setRecTime] = useState(0);
+  const recTimerRef = useRef<number | null>(null);
+
+  // Canvas onde processamos (e capturamos o stream)
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+
+  // UI de efeitos
+  const [colorEffect, setColorEffect] = useState<ColorEffect>("none");
+  const [brightness, setBrightness] = useState(100); // %
+  const [contrast, setContrast] = useState(100); // %
+  const [saturation, setSaturation] = useState(100); // %
+  const [bgMode, setBgMode] = useState<BgMode>("none");
+  const [bgColor, setBgColor] = useState("#000000");
+  const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
+  const [sticker, setSticker] = useState<Sticker>("none");
+
+  // MediaPipe tasks refs
+  const vision = useRef<VisionRefs>({});
+  const [visionReady, setVisionReady] = useState(false);
+
+  const ensureVision = async () => {
+    if (visionReady) return true;
+    try {
+      const visionMod = await import("@mediapipe/tasks-vision");
+      const fileset = await visionMod.FilesetResolver.forVisionTasks(
+        // Usa CDN oficial (padrão do pacote) – os binários serão baixados em runtime
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+      // Segmentação (Selfie Segmentation)
+      const segmenter = await visionMod.ImageSegmenter.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/1/selfie_segmenter_landscape.tflite` },
+        runningMode: "VIDEO",
+        outputCategoryMask: true,
+      });
+      // Face landmarks (para stickers)
+      const face = await visionMod.FaceLandmarker.createFromOptions(fileset, {
+        baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task` },
+        runningMode: "VIDEO",
+        numFaces: 1,
+      });
+      vision.current = { fileset, segmenter, face };
+      setVisionReady(true);
+      return true;
+    } catch (e) {
+      console.error("Falha ao carregar MediaPipe tasks", e);
+      toast({ title: "Efeitos avançados indisponíveis", description: "Não foi possível carregar os modelos de visão. Sua câmera e filtro básico continuam funcionando.", variant: "destructive" });
+      return false;
+    }
+  };
+
+  // Loop de processamento com efeitos/segmentação/stickers
+  const processingRef = useRef(false);
+  const startProcessingLoop = async (stream: MediaStream) => {
+    const canUseVision = await ensureVision();
+    const videoEl = document.createElement("video");
+    videoEl.srcObject = stream; videoEl.muted = true; videoEl.playsInline = true; await videoEl.play();
+
+    const canvas = canvasRef.current!; const ctx = canvas.getContext("2d")!;
+    const off = document.createElement("canvas"); const offCtx = off.getContext("2d")!;
+
+    const draw = async (t: number) => {
+      if (!processingRef.current) return;
+      const w = videoEl.videoWidth || 720; const h = videoEl.videoHeight || 1280;
+      if (canvas.width !== w) { canvas.width = w; canvas.height = h; off.width = w; off.height = h; }
+
+      // 1) Desenha frame base no offscreen (para aplicar filters via ctx.filter)
+      offCtx.clearRect(0,0,w,h);
+      const filterParts: string[] = [
+        `brightness(${brightness}%)`,
+        `contrast(${contrast}%)`,
+        `saturate(${saturation}%)`,
+      ];
+      if (colorEffect === "grayscale") filterParts.push("grayscale(100%)");
+      if (colorEffect === "sepia") filterParts.push("sepia(100%)");
+      if (colorEffect === "invert") filterParts.push("invert(100%)");
+      offCtx.filter = filterParts.join(" ");
+      offCtx.drawImage(videoEl, 0, 0, w, h);
+
+      // 2) Composição de fundo (segmentação)
+      if (canUseVision && vision.current.segmenter && bgMode !== "none") {
+        const nowMs = performance.now();
+        const result = await vision.current.segmenter.segmentForVideo(off, nowMs);
+        const mask = result.categoryMask?.getAsImageBitmap();
+        if (mask) {
+          // Cria máscara
+          const maskCanvas = document.createElement("canvas");
+          maskCanvas.width = w; maskCanvas.height = h; const mctx = maskCanvas.getContext("2d")!;
+          mctx.drawImage(mask, 0, 0, w, h);
+
+          // Fundo
+          ctx.clearRect(0,0,w,h);
+          if (bgMode === "blur") {
+            ctx.filter = "blur(16px)"; // blur do fundo
+            ctx.drawImage(off, 0, 0, w, h);
+            ctx.filter = "none";
+          } else if (bgMode === "solid") {
+            ctx.fillStyle = bgColor; ctx.fillRect(0, 0, w, h);
+          } else if (bgMode === "image" && bgImage) {
+            // cover-like
+            const ratio = Math.max(w / bgImage.width, h / bgImage.height);
+            const bw = bgImage.width * ratio; const bh = bgImage.height * ratio;
+            ctx.drawImage(bgImage, (w - bw) / 2, (h - bh) / 2, bw, bh);
+          }
+
+          // Usa a máscara para desenhar somente a pessoa por cima do fundo
+          ctx.save();
+          ctx.globalCompositeOperation = "destination-in";
+          ctx.drawImage(maskCanvas, 0, 0);
+          ctx.restore();
+
+          // Agora desenha o vídeo processado dentro da máscara
+          ctx.globalCompositeOperation = "destination-over";
+          ctx.drawImage(off, 0, 0);
+          ctx.globalCompositeOperation = "source-over";
+        } else {
+          ctx.drawImage(off, 0, 0);
+        }
+      } else {
+        // Sem segmentação
+        ctx.clearRect(0,0,w,h);
+        ctx.drawImage(off, 0, 0);
+      }
+
+      // 3) Stickers baseados em landmarks
+      if (canUseVision && vision.current.face && sticker !== "none") {
+        const nowMs = performance.now();
+        const faces = await vision.current.face.detectForVideo(off, nowMs);
+        const kp = faces?.landmarks?.[0];
+        if (kp && kp.length > 0) {
+          // Índices úteis (MediaPipe Face Mesh):
+          // 10 = topo da testa; 33 = canto externo olho esq.; 263 = canto externo olho dir.
+          const p = (i: number) => kp[i] as { x: number; y: number };
+          const forehead = p(10);
+          const leftEye = p(33);
+          const rightEye = p(263);
+          const cx = (leftEye.x + rightEye.x) / 2 * w;
+          const cy = (leftEye.y + rightEye.y) / 2 * h;
+          const eyeDist = Math.hypot((rightEye.x - leftEye.x) * w, (rightEye.y - leftEye.y) * h);
+
+          ctx.save();
+          if (sticker === "sunglasses") {
+            const width = eyeDist * 2.2; const height = eyeDist * 0.7;
+            ctx.fillStyle = "rgba(0,0,0,0.85)";
+            ctx.fillRect(cx - width/2, cy - height/2, width, height);
+            // hastes
+            ctx.fillRect(cx - width/2 - 10, cy - 4, 10, 8);
+            ctx.fillRect(cx + width/2, cy - 4, 10, 8);
+          } else if (sticker === "cat_ears") {
+            const fx = forehead.x * w; const fy = forehead.y * h;
+            const earW = eyeDist * 0.9; const earH = earW * 1.2;
+            // orelha esquerda
+            ctx.beginPath();
+            ctx.moveTo(cx - earW, fy);
+            ctx.lineTo(cx - earW * 0.6, fy - earH);
+            ctx.lineTo(cx - earW * 0.2, fy);
+            ctx.closePath();
+            ctx.fillStyle = "#ff66aa"; ctx.fill();
+            // orelha direita
+            ctx.beginPath();
+            ctx.moveTo(cx + earW, fy);
+            ctx.lineTo(cx + earW * 0.6, fy - earH);
+            ctx.lineTo(cx + earW * 0.2, fy);
+            ctx.closePath();
+            ctx.fillStyle = "#ff66aa"; ctx.fill();
+          } else if (sticker === "helmet") {
+            const fx = forehead.x * w; const fy = forehead.y * h;
+            const r = eyeDist * 1.6;
+            ctx.beginPath();
+            ctx.arc(cx, fy + r * 0.2, r, Math.PI, 0);
+            ctx.closePath();
+            ctx.fillStyle = "#2b6cb0"; ctx.fill();
+            ctx.fillStyle = "#fff"; ctx.fillRect(cx - r * 0.6, fy + r * 0.1, r * 1.2, r * 0.2);
+          }
+          ctx.restore();
+        }
+      }
+
+      requestAnimationFrame(draw);
+    };
+
+    processingRef.current = true;
+    requestAnimationFrame(draw);
+  };
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+      setRecStream(stream);
+      await startProcessingLoop(stream);
+      // gravamos o canvas (com efeitos), não o stream cru
+      const processed = canvasRef.current!.captureStream();
+      const recorder = new MediaRecorder(processed, { mimeType: "video/webm;codecs=vp9,opus" });
+      recChunks.current = [];
+      recorder.ondataavailable = (e) => { if (e.data.size) recChunks.current.push(e.data); };
+      recorder.onstop = () => { /* handled externally */ };
+      recorder.start();
+      setRecRecorder(recorder);
+
+      setRecTime(0);
+      if (recTimerRef.current) window.clearInterval(recTimerRef.current);
+      recTimerRef.current = window.setInterval(() => {
+        setRecTime((t) => {
+          const nt = t + 1; if (nt >= 15) stopRecording(); return nt;
+        });
+      }, 1000) as unknown as number;
+    } catch (e) {
+      console.error(e);
+      toast({ variant: "destructive", title: "Câmera/Microfone bloqueados", description: "Permita o acesso para gravar vídeos." });
+    }
+  };
+
+  const stopRecording = () => {
+    if (recRecorder && recRecorder.state !== "inactive") recRecorder.stop();
+    if (recTimerRef.current) { window.clearInterval(recTimerRef.current); recTimerRef.current = null; }
+    setRecTime(0);
+    processingRef.current = false;
+    if (recStream) recStream.getTracks().forEach((t) => t.stop());
+    const blob = new Blob(recChunks.current, { type: "video/webm" });
+    if (blob.size > 0) {
+      const file = new File([blob], `gravacao-${Date.now()}.webm`, { type: "video/webm" });
+      setMediaFiles((prev) => [...prev, file]);
+      toast({ title: "Vídeo adicionado", description: "Gravação de até 15s salva na postagem." });
+    }
+    setRecRecorder(null); setRecStream(null); setRecDialogOpen(false);
+  };
+
+  // ===== marcação de visto/queries =====
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
-      await supabase
-        .from("last_viewed")
-        .upsert(
-          { user_id: user.id, section: "feed", viewed_at: new Date().toISOString() },
-          { onConflict: "user_id,section" }
-        );
+      await supabase.from("last_viewed").upsert(
+        { user_id: user.id, section: "feed", viewed_at: new Date().toISOString() },
+        { onConflict: "user_id,section" }
+      );
       queryClient.invalidateQueries({ queryKey: ["unread-feed", user.id] });
     };
     markAsViewed();
@@ -153,29 +362,15 @@ export default function Feed() {
     queryKey: ["posts", user?.id],
     queryFn: async () => {
       if (!user) return [];
-      const { data: friendships } = await supabase
-        .from("friendships")
-        .select("friend_id")
-        .eq("user_id", user.id);
+      const { data: friendships } = await supabase.from("friendships").select("friend_id").eq("user_id", user.id);
       const friendIds = friendships?.map((f) => f.friend_id) || [];
       const allowedUserIds = [user.id, ...friendIds];
-
       const { data, error } = await supabase
         .from("posts")
-        .select(`
-          *,
-          profiles:user_id (id, username, avatar_url, full_name),
-          likes (id, user_id),
-          comments (id),
-          post_votes (id, user_id, vote_type)
-        `)
-        .or(
-          `user_id.in.(${allowedUserIds.join(",")}),is_community_approved.eq.true,voting_period_active.eq.true`
-        )
+        .select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type) `)
+        .or(`user_id.in.(${allowedUserIds.join(",")}),is_community_approved.eq.true,voting_period_active.eq.true`)
         .order("created_at", { ascending: false });
-
-      if (error) throw error;
-      return data as PostRow[];
+      if (error) throw error; return data as PostRow[];
     },
     enabled: !!user,
   });
@@ -188,65 +383,37 @@ export default function Feed() {
       .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => refetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "post_votes" }, () => refetch())
       .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [refetch]);
 
   useEffect(() => {
-    const processVotes = async () => {
-      try {
-        await supabase.functions.invoke("process-votes");
-      } catch (error) {
-        console.error("Error processing votes:", error);
-      }
-    };
-    processVotes();
-    const interval = setInterval(processVotes, 60000);
-    return () => clearInterval(interval);
+    const processVotes = async () => { try { await supabase.functions.invoke("process-votes"); } catch (error) { console.error("Error processing votes:", error); } };
+    processVotes(); const interval = setInterval(processVotes, 60000); return () => clearInterval(interval);
   }, []);
 
-  // ===== Seleção de arquivos (com validação de duração de vídeo) =====
+  // ===== Seleção de arquivos =====
   const onFilesPicked = async (files: FileList | File[]) => {
     const arr = Array.from(files || []);
     const validMimes = arr.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
-
     if (validMimes.length !== arr.length) {
-      toast({
-        variant: "destructive",
-        title: "Arquivos inválidos",
-        description: "Apenas imagens e vídeos são permitidos.",
-      });
+      toast({ variant: "destructive", title: "Arquivos inválidos", description: "Apenas imagens e vídeos são permitidos." });
     }
-
     const accepted: File[] = [];
-
     for (const f of validMimes) {
       if (f.type.startsWith("video/")) {
         const ok = await validateVideoDuration(f, 15);
-        if (!ok) {
-          toast({
-            variant: "destructive",
-            title: "Vídeo muito longo",
-            description: "Envie um vídeo de até 15 segundos.",
-          });
-          continue;
-        }
+        if (!ok) { toast({ variant: "destructive", title: "Vídeo muito longo", description: "Envie um vídeo de até 15 segundos." }); continue; }
       }
       accepted.push(f);
     }
-
-    if (accepted.length) {
-      setMediaFiles((prev) => [...prev, ...accepted]);
-    }
+    if (accepted.length) setMediaFiles((prev) => [...prev, ...accepted]);
   };
 
   const removeFile = (index: number) => setMediaFiles((prev) => prev.filter((_, i) => i !== index));
 
   const handleCreatePost = async () => {
     if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
-      toast({ variant: "destructive", title: "Erro", description: "Adicione um título, conteúdo ou mídia para publicar." });
-      return;
+      toast({ variant: "destructive", title: "Erro", description: "Adicione um título, conteúdo ou mídia para publicar." }); return;
     }
     setUploading(true);
     try {
@@ -254,62 +421,38 @@ export default function Feed() {
       for (const file of mediaFiles) {
         const fileExt = (file.name.split(".").pop() || "").toLowerCase();
         const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
-        const filePath = `${user?.id}/${fileName}`; // pasta por usuário ajuda na organização
-        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file, {
-          cacheControl: "3600",
-          upsert: false,
-        });
+        const filePath = `${user?.id}/${fileName}`;
+        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file, { cacheControl: "3600", upsert: false });
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         const prefix = file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image;
         mediaUrls.push(prefix + publicUrl);
       }
-      const votingEndsAt = new Date();
-      votingEndsAt.setHours(votingEndsAt.getHours() + 1);
-      const postContent = postTitle.trim() ? `${postTitle}\n\n${newPost}` : newPost;
+      const votingEndsAt = new Date(); votingEndsAt.setHours(votingEndsAt.getHours() + 1);
+      const postContent = postTitle.trim() ? `${postTitle}
+
+${newPost}` : newPost;
       const { data: postData, error } = await supabase
         .from("posts")
-        .insert({
-          user_id: user?.id,
-          content: postContent,
-          media_urls: mediaUrls.length > 0 ? mediaUrls : null,
-          voting_ends_at: votingEndsAt.toISOString(),
-          voting_period_active: true,
-        })
-        .select()
-        .single();
+        .insert({ user_id: user?.id, content: postContent, media_urls: mediaUrls.length > 0 ? mediaUrls : null, voting_ends_at: votingEndsAt.toISOString(), voting_period_active: true })
+        .select().single();
       if (error) throw error;
-
-      if (postData && user) {
-        const { saveMentions } = await import("@/utils/mentionsHelper");
-        await saveMentions(postData.id, "post", postContent, user.id);
-      }
+      if (postData && user) { const { saveMentions } = await import("@/utils/mentionsHelper"); await saveMentions(postData.id, "post", postContent, user.id); }
       toast({ title: "Post criado!", description: "Sua postagem entrará em votação por 1 hora." });
-      setPostTitle(""); setNewPost(""); setMediaFiles([]);
-      refetch();
+      setPostTitle(""); setNewPost(""); setMediaFiles([]); refetch();
     } catch (error: any) {
       console.error("Error creating post:", error);
       toast({ variant: "destructive", title: "Erro", description: error?.message ?? "Não foi possível criar o post." });
-    } finally {
-      setUploading(false);
-    }
+    } finally { setUploading(false); }
   };
 
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
       const existingVote = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
       if (existingVote) {
-        if (existingVote.vote_type === voteType) {
-          const { error } = await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
-          if (error) throw error;
-        } else {
-          const { error } = await supabase.from("post_votes").update({ vote_type: voteType }).match({ post_id: postId, user_id: user?.id });
-          if (error) throw error;
-        }
-      } else {
-        const { error } = await supabase.from("post_votes").insert({ post_id: postId, user_id: user?.id, vote_type: voteType });
-        if (error) throw error;
-      }
+        if (existingVote.vote_type === voteType) { const { error } = await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id }); if (error) throw error; }
+        else { const { error } = await supabase.from("post_votes").update({ vote_type: voteType }).match({ post_id: postId, user_id: user?.id }); if (error) throw error; }
+      } else { const { error } = await supabase.from("post_votes").insert({ post_id: postId, user_id: user?.id, vote_type: voteType }); if (error) throw error; }
       refetch();
     } catch (error) {
       console.error("Erro ao votar:", error);
@@ -319,13 +462,8 @@ export default function Feed() {
 
   const handleLike = async (postId: string, hasLiked: boolean) => {
     try {
-      if (hasLiked) {
-        const { error } = await supabase.from("likes").delete().match({ post_id: postId, user_id: user?.id });
-        if (error) throw error;
-      } else {
-        const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: user?.id });
-        if (error) throw error;
-      }
+      if (hasLiked) { const { error } = await supabase.from("likes").delete().match({ post_id: postId, user_id: user?.id }); if (error) throw error; }
+      else { const { error } = await supabase.from("likes").insert({ post_id: postId, user_id: user?.id }); if (error) throw error; }
       refetch();
     } catch (error) {
       console.error("Erro ao curtir:", error);
@@ -334,89 +472,47 @@ export default function Feed() {
   };
 
   const getTimeRemaining = (votingEndsAt: string) => {
-    const now = new Date();
-    const end = new Date(votingEndsAt);
-    const diff = end.getTime() - now.getTime();
-    if (diff <= 0) return "Votação encerrada";
-    const minutes = Math.floor(diff / 60000);
-    const hours = Math.floor(minutes / 60);
-    const mins = minutes % 60;
-    return `${hours}h ${mins}m restantes`;
+    const now = new Date(); const end = new Date(votingEndsAt); const diff = end.getTime() - now.getTime();
+    if (diff <= 0) return "Votação encerrada"; const minutes = Math.floor(diff / 60000); const hours = Math.floor(minutes / 60); const mins = minutes % 60; return `${hours}h ${mins}m restantes`;
   };
 
   const openEdit = (post: PostRow) => { setEditingPost(post); setEditContent(post.content || ""); };
   const editMutation = useMutation({
-    mutationFn: async () => {
-      if (!editingPost) return;
-      const { error } = await supabase.from("posts").update({ content: editContent, updated_at: new Date().toISOString() }).eq("id", editingPost.id);
-      if (error) throw error;
-    },
+    mutationFn: async () => { if (!editingPost) return; const { error } = await supabase.from("posts").update({ content: editContent, updated_at: new Date().toISOString() }).eq("id", editingPost.id); if (error) throw error; },
     onSuccess: () => { setEditingPost(null); queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }); toast({ title: "Post atualizado!" }); },
     onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao atualizar", description: e?.message ?? "Tente novamente." }); },
   });
 
   const deleteMutation = useMutation({
     mutationFn: async (postId: string) => {
-      const tasks = [
-        supabase.from("comments").delete().eq("post_id", postId),
-        supabase.from("likes").delete().eq("post_id", postId),
-        supabase.from("post_votes").delete().eq("post_id", postId),
-      ];
+      const tasks = [ supabase.from("comments").delete().eq("post_id", postId), supabase.from("likes").delete().eq("post_id", postId), supabase.from("post_votes").delete().eq("post_id", postId) ];
       for (const t of tasks) { const { error } = await t; if (error) throw error; }
-      const { error: delPostError } = await supabase.from("posts").delete().eq("id", postId);
-      if (delPostError) throw delPostError;
+      const { error: delPostError } = await supabase.from("posts").delete().eq("id", postId); if (delPostError) throw delPostError;
     },
     onSuccess: () => { toast({ title: "Post excluído." }); queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }); },
     onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao excluir", description: e?.message ?? "Tente novamente." }); },
   });
 
-  // ----- COMMENTS (busca lazy) -----
   const { data: openPostComments, refetch: refetchComments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id],
     enabled: !!openingCommentsFor?.id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from("comments")
-        .select(`
-          id,
-          post_id,
-          user_id,
-          content,
-          created_at,
-          author:profiles!comments_user_id_fkey(id, username, full_name, avatar_url)
-        `)
+        .select(` id, post_id, user_id, content, created_at, author:profiles!comments_user_id_fkey(id, username, full_name, avatar_url) `)
         .eq("post_id", openingCommentsFor!.id)
         .order("created_at", { ascending: true });
-      if (error) throw error;
-      return data;
+      if (error) throw error; return data;
     },
   });
 
   const addComment = useMutation({
-    mutationFn: async () => {
-      if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return;
-      const { error } = await supabase.from("comments").insert({
-        post_id: openingCommentsFor.id,
-        content: newCommentText.trim(),
-      });
-      if (error) throw error;
-    },
-    onSuccess: async () => {
-      setNewCommentText("");
-      await Promise.all([
-        refetchComments(),
-        queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }),
-      ]);
-    },
-    onError: (e: any) => {
-      toast({
-        variant: "destructive",
-        title: "Erro ao comentar",
-        description: e?.message ?? "Verifique as políticas RLS de comments.",
-      });
-    },
+    mutationFn: async () => { if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return; const { error } = await supabase.from("comments").insert({ post_id: openingCommentsFor.id, content: newCommentText.trim(), }); if (error) throw error; },
+    onSuccess: async () => { setNewCommentText(""); await Promise.all([ refetchComments(), queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }), ]); },
+    onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao comentar", description: e?.message ?? "Verifique las políticas RLS de comments.", }); },
   });
 
+  // ===== Render =====
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -426,23 +522,11 @@ export default function Feed() {
             <div className="flex gap-3">
               <Avatar className="h-10 w-10">
                 <AvatarImage src={user?.user_metadata?.avatar_url} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user?.email?.[0]?.toUpperCase()}
-                </AvatarFallback>
+                <AvatarFallback className="bg-primary text-primary-foreground">{user?.email?.[0]?.toUpperCase()}</AvatarFallback>
               </Avatar>
               <div className="flex-1 space-y-3">
-                <Input
-                  placeholder="Título da publicação (opcional)"
-                  value={postTitle}
-                  onChange={(e) => setPostTitle(e.target.value)}
-                  className="font-medium"
-                />
-                <MentionTextarea
-                  placeholder="O que você está pensando? Use @ para mencionar alguém"
-                  value={newPost}
-                  onChange={(e) => setNewPost(e.target.value)}
-                  className="min-h-[80px] resize-none"
-                />
+                <Input placeholder="Título da publicação (opcional)" value={postTitle} onChange={(e) => setPostTitle(e.target.value)} className="font-medium" />
+                <MentionTextarea placeholder="O que você está pensando? Use @ para mencionar alguém" value={newPost} onChange={(e) => setNewPost(e.target.value)} className="min-h-[80px] resize-none" />
 
                 {mediaFiles.length > 0 && (
                   <div className="flex gap-2 flex-wrap">
@@ -455,12 +539,7 @@ export default function Feed() {
                             <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" muted playsInline />
                           )}
                         </div>
-                        <Button
-                          variant="destructive"
-                          size="icon"
-                          className="absolute -top-2 -right-2 h-5 w-5 rounded-full"
-                          onClick={() => removeFile(index)}
-                        >
+                        <Button variant="destructive" size="icon" className="absolute -top-2 -right-2 h-5 w-5 rounded-full" onClick={() => removeFile(index)}>
                           <X className="h-3 w-3" />
                         </Button>
                       </div>
@@ -468,56 +547,20 @@ export default function Feed() {
                   </div>
                 )}
 
-                <div className="flex flex-wrap gap-2 justify-between items-center">
-                  <div className="flex flex-wrap gap-2">
-                    {/* Galleria */}
-                    <input
-                      ref={galleryInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="image/*,video/*"
-                      multiple
-                      onChange={(e) => onFilesPicked(e.target.files!)}
-                    />
-                    {/* Câmera foto */}
-                    <input
-                      ref={cameraPhotoInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="image/*"
-                      capture="environment"
-                      onChange={(e) => onFilesPicked(e.target.files!)}
-                    />
-                    {/* Câmera vídeo */}
-                    <input
-                      ref={cameraVideoInputRef}
-                      type="file"
-                      className="hidden"
-                      accept="video/*"
-                      capture
-                      onChange={(e) => onFilesPicked(e.target.files!)}
-                    />
+                <div className="flex items-center justify-between">
+                  <div className="flex gap-2">
+                    {/* Inputs ocultos */}
+                    <input ref={galleryInputRef} type="file" className="hidden" accept="image/*,video/*" multiple onChange={(e) => onFilesPicked(e.target.files!)} />
+                    <input ref={cameraPhotoInputRef} type="file" className="hidden" accept="image/*" capture="environment" onChange={(e) => onFilesPicked(e.target.files!)} />
 
-                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => galleryInputRef.current?.click()}>
-                      <Upload className="h-4 w-4 mr-2" />
-                      Galeria
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => cameraPhotoInputRef.current?.click()}>
-                      <Camera className="h-4 w-4 mr-2" />
-                      Abrir câmera (foto)
-                    </Button>
-                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => cameraVideoInputRef.current?.click()}>
-                      <Video className="h-4 w-4 mr-2" />
-                      Abrir câmera (vídeo)
-                    </Button>
+                    {/* Botões só ícone */}
+                    <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => galleryInputRef.current?.click()} aria-label="Abrir galeria"><Images className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => cameraPhotoInputRef.current?.click()} aria-label="Abrir câmera (foto)"><Camera className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => setRecDialogOpen(true)} aria-label="Abrir câmera (vídeo)"><Video className="h-5 w-5" /></Button>
+                    <Button variant="ghost" size="icon" className="text-muted-foreground" onClick={() => setRecDialogOpen(true)} aria-label="Efeitos"><Wand2 className="h-5 w-5" /></Button>
                   </div>
-                  <Button
-                    onClick={handleCreatePost}
-                    disabled={(!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading}
-                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
-                  >
-                    {uploading ? "Publicando..." : "Publicar"}
-                  </Button>
+
+                  <Button onClick={handleCreatePost} disabled={(!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading} className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white">{uploading ? "Publicando..." : "Publicar"}</Button>
                 </div>
               </div>
             </div>
@@ -534,7 +577,6 @@ export default function Feed() {
           const bombVotes = post.post_votes?.filter((v: any) => v.vote_type === "bomb").length || 0;
           const userVote = post.post_votes?.find((v: any) => v.user_id === user?.id);
           const isVotingActive = post.voting_period_active && post.voting_ends_at;
-
           const mediaList: string[] = post.media_urls || [];
 
           return (
@@ -544,76 +586,41 @@ export default function Feed() {
                   <div className="flex items-center gap-3">
                     <Avatar>
                       <AvatarImage src={post.profiles?.avatar_url} />
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {post.profiles?.username?.[0]?.toUpperCase()}
-                      </AvatarFallback>
+                      <AvatarFallback className="bg-primary text-primary-foreground">{post.profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
                     </Avatar>
                     <div>
-                      <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
-                        {post.profiles?.username}
-                      </UserLink>
-                      {/* Data e hora completas */}
+                      <UserLink userId={post.user_id} username={post.profiles?.username || ""}>{post.profiles?.username}</UserLink>
                       <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
                     </div>
                   </div>
 
                   {isOwnPost && (
                     <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="Opções da postagem">
-                          <MoreVertical className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
+                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon" aria-label="Opções da postagem"><MoreVertical className="h-4 w-4" /></Button></DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => openEdit(post)} className="cursor-pointer">
-                          <Pencil className="h-4 w-4 mr-2" /> Editar postagem
-                        </DropdownMenuItem>
-                        <DropdownMenuItem
-                          onClick={() => deleteMutation.mutate(post.id)}
-                          className="cursor-pointer text-red-600 focus:text-red-600"
-                        >
-                          <Trash2 className="h-4 w-4 mr-2" /> Excluir postagem
-                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => openEdit(post)} className="cursor-pointer"><Pencil className="h-4 w-4 mr-2" /> Editar postagem</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => deleteMutation.mutate(post.id)} className="cursor-pointer text-red-600 focus:text-red-600"><Trash2 className="h-4 w-4 mr-2" /> Excluir postagem</DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
                   )}
                 </div>
 
-                {post.is_community_approved && (
-                  <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary">
-                    ✓ Aprovado pela Comunidade
-                  </Badge>
-                )}
+                {post.is_community_approved && (<Badge className="mb-2 bg-gradient-to-r from-primary to-secondary">✓ Aprovado pela Comunidade</Badge>)}
 
-                <p className="text-foreground leading-relaxed">
-                  <MentionText text={post.content ?? ""} />
-                </p>
+                <p className="text-foreground leading-relaxed"><MentionText text={post.content ?? ""} /></p>
 
                 {mediaList.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
                     {mediaList.map((raw: string, index: number) => {
-                      const url = stripPrefix(raw);
-                      const isVideo = isVideoUrl(raw);
+                      const url = stripPrefix(raw); const isVideo = isVideoUrl(raw);
                       return (
-                        <button
-                          key={index}
-                          className="rounded-lg overflow-hidden group relative"
-                          onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
-                        >
+                        <button key={index} className="rounded-lg overflow-hidden group relative" onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}>
                           {isVideo ? (
-                            <video
-                              src={url}
-                              className="w-full max-h-64 object-cover"
-                              controls
-                              playsInline
-                              preload="metadata"
-                            />
+                            <video src={url} className="w-full max-h-64 object-cover" controls playsInline preload="metadata" />
                           ) : (
                             <img src={url} alt="Post media" className="w-full h-auto" />
                           )}
-                          <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
-                            <Maximize2 className="inline h-3 w-3 mr-1" /> Ver em tela cheia
-                          </span>
+                          <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition"><Maximize2 className="inline h-3 w-3 mr-1" /></span>
                         </button>
                       );
                     })}
@@ -630,59 +637,37 @@ export default function Feed() {
                       </div>
                     </div>
                     <div className="flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn("flex-1", userVote?.vote_type === "heart" && "bg-red-500/10 border-red-500 text-red-500")}
-                        onClick={() => handleVote(post.id, "heart")}
-                      >
-                        <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-current")} />
-                        Aprovar
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className={cn("flex-1", userVote?.vote_type === "bomb" && "bg-orange-500/10 border-orange-500 text-orange-500")}
-                        onClick={() => handleVote(post.id, "bomb")}
-                      >
-                        <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-current")} />
-                        Rejeitar
-                      </Button>
+                      <Button variant="outline" size="sm" className={cn("flex-1", userVote?.vote_type === "heart" && "bg-red-500/10 border-red-500 text-red-500")} onClick={() => handleVote(post.id, "heart")}><Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-current")} /> Aprovar</Button>
+                      <Button variant="outline" size="sm" className={cn("flex-1", userVote?.vote_type === "bomb" && "bg-orange-500/10 border-orange-500 text-orange-500")} onClick={() => handleVote(post.id, "bomb")}><Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-current")} /> Rejeitar</Button>
                     </div>
                   </div>
                 )}
 
                 <div className="flex items-center gap-4 pt-2 border-t">
-                  <Button variant="ghost" size="sm" onClick={() => handleLike(post.id, hasLiked)} className={hasLiked ? "text-red-500 hover:text-red-600" : ""}>
-                    <Heart className={cn("h-5 w-5 mr-2", hasLiked && "fill-current")} />
-                    {likesCount}
-                  </Button>
-
-                  <Button variant="ghost" size="sm" onClick={() => setOpeningCommentsFor(post)}>
-                    <MessageCircle className="h-5 w-5 mr-2" />
-                    {commentsCount}
-                  </Button>
-
-                  <Button variant="ghost" size="sm">
-                    <Send className="h-5 w-5 mr-2" />
-                    Compartilhar
-                  </Button>
-
-                  <Button variant="ghost" size="sm" className="ml-auto">
-                    <Bookmark className="h-5 w-5" />
-                  </Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleLike(post.id, hasLiked)} className={hasLiked ? "text-red-500 hover:text-red-600" : ""}><Heart className={cn("h-5 w-5 mr-2", hasLiked && "fill-current")} />{likesCount}</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setOpeningCommentsFor(post)}><MessageCircle className="h-5 w-5 mr-2" />{commentsCount}</Button>
+                  <Button variant="ghost" size="sm"><Send className="h-5 w-5 mr-2" />Compartilhar</Button>
+                  <Button variant="ghost" size="sm" className="ml-auto"><Bookmark className="h-5 w-5" /></Button>
                 </div>
               </CardContent>
             </Card>
           );
         })}
 
-        {posts?.length === 0 && (
-          <div className="text-center py-12">
-            <p className="text-muted-foreground">Nenhum post ainda. Seja o primeiro a publicar!</p>
-          </div>
-        )}
+        {posts?.length === 0 && (<div className="text-center py-12"><p className="text-muted-foreground">Nenhum post ainda. Seja o primeiro a publicar!</p></div>)}
       </div>
+
+      {/* Viewer full-screen */}
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="max-w-4xl p-2 sm:p-4">
+          <div className="relative">
+            <Button variant="secondary" size="icon" className="absolute right-2 top-2 z-10" onClick={() => setViewerOpen(false)} aria-label="Fechar"><Minimize2 className="h-4 w-4" /></Button>
+            <div className="w-full h-full flex items-center justify-center">
+              {viewerUrl && (viewerIsVideo ? (<video src={viewerUrl} controls playsInline className="max-h-[80vh] max-w-full rounded-lg" preload="metadata" />) : (<img src={viewerUrl} alt="Mídia" className="max-h-[80vh] max-w-full rounded-lg" />))}
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* Dialog Editar */}
       <Dialog open={!!editingPost} onOpenChange={(o) => !o && setEditingPost(null)}>
@@ -713,14 +698,7 @@ export default function Feed() {
                     <AvatarFallback>{c.author?.username?.[0]?.toUpperCase()}</AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-medium">
-                        <UserLink userId={c.author?.id} username={c.author?.username}>
-                          {c.author?.full_name || c.author?.username}
-                        </UserLink>
-                      </span>
-                      <span className="text-xs text-muted-foreground">{fmtDateTime(c.created_at)}</span>
-                    </div>
+                    <div className="flex items-center gap-2"><span className="text-sm font-medium"><UserLink userId={c.author?.id} username={c.author?.username}>{c.author?.full_name || c.author?.username}</UserLink></span><span className="text-xs text-muted-foreground">{fmtDateTime(c.created_at)}</span></div>
                     <p className="text-sm whitespace-pre-wrap">{c.content}</p>
                   </div>
                 </div>
@@ -729,42 +707,92 @@ export default function Feed() {
           </div>
           <div className="mt-2 space-y-2">
             <Textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder="Escreva um comentário…" rows={3} />
-            <div className="flex justify-end">
-              <Button onClick={() => addComment.mutate()} disabled={!newCommentText.trim() || !openingCommentsFor}>
-                Comentar
-              </Button>
-            </div>
+            <div className="flex justify-end"><Button onClick={() => addComment.mutate()} disabled={!newCommentText.trim() || !openingCommentsFor}>Comentar</Button></div>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Viewer full-screen para foto/vídeo */}
-      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-4xl p-2 sm:p-4">
-          <div className="relative">
-            <Button
-              variant="secondary"
-              size="icon"
-              className="absolute right-2 top-2 z-10"
-              onClick={() => setViewerOpen(false)}
-              aria-label="Fechar"
-            >
-              <Minimize2 className="h-4 w-4" />
-            </Button>
-            <div className="w-full h-full flex items-center justify-center">
-              {viewerUrl && (
-                viewerIsVideo ? (
-                  <video
-                    src={viewerUrl}
-                    controls
-                    playsInline
-                    className="max-h-[80vh] max-w-full rounded-lg"
-                    preload="metadata"
-                  />
+      {/* Gravador de vídeo com efeitos completos */}
+      <Dialog open={recDialogOpen} onOpenChange={(o) => { setRecDialogOpen(o); if (!o) stopRecording(); }}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader><DialogTitle>Gravar vídeo (até 15s) + Efeitos</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            {/* Canvas processado que será gravado */}
+            <canvas ref={canvasRef} className="w-full aspect-[9/16] bg-black rounded" />
+
+            {/* Controles de efeitos */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground flex items-center gap-2"><Wand2 className="h-4 w-4" />Filtro</label>
+                <Select value={colorEffect} onValueChange={(v: ColorEffect) => setColorEffect(v)}>
+                  <SelectTrigger><SelectValue placeholder="Filtro" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    <SelectItem value="grayscale">Preto e branco</SelectItem>
+                    <SelectItem value="sepia">Sépia</SelectItem>
+                    <SelectItem value="invert">Inverter</SelectItem>
+                    <SelectItem value="pixelate">Pixelado</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground flex items-center gap-2"><Droplets className="h-4 w-4" />Fundo</label>
+                <Select value={bgMode} onValueChange={(v: BgMode) => setBgMode(v)}>
+                  <SelectTrigger><SelectValue placeholder="Fundo" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Normal</SelectItem>
+                    <SelectItem value="blur">Desfocado</SelectItem>
+                    <SelectItem value="solid">Cor sólida</SelectItem>
+                    <SelectItem value="image">Imagem</SelectItem>
+                  </SelectContent>
+                </Select>
+                {bgMode === "solid" && (
+                  <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-8 w-16 rounded" />
+                )}
+                {bgMode === "image" && (
+                  <input type="file" accept="image/*" onChange={(e) => {
+                    const f = e.target.files?.[0]; if (!f) return; const img = new Image(); img.onload = () => setBgImage(img); img.src = URL.createObjectURL(f);
+                  }} />
+                )}
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Brilho ({brightness}%)</label>
+                <Slider value={[brightness]} min={50} max={150} step={1} onValueChange={(v) => setBrightness(v[0])} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Contraste ({contrast}%)</label>
+                <Slider value={[contrast]} min={50} max={150} step={1} onValueChange={(v) => setContrast(v[0])} />
+              </div>
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Saturação ({saturation}%)</label>
+                <Slider value={[saturation]} min={50} max={180} step={1} onValueChange={(v) => setSaturation(v[0])} />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Sticker</label>
+                <Select value={sticker} onValueChange={(v: Sticker) => setSticker(v)}>
+                  <SelectTrigger><SelectValue placeholder="Sticker" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    <SelectItem value="sunglasses">Óculos</SelectItem>
+                    <SelectItem value="cat_ears">Orelhas</SelectItem>
+                    <SelectItem value="helmet">Capacete</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between text-sm text-muted-foreground">
+              <span>{recRecorder ? `${recTime}s / 15s` : "Pronto para gravar"}</span>
+              <div className="flex gap-2">
+                {!recRecorder ? (
+                  <Button onClick={startRecording}><Video className="h-4 w-4 mr-2" />Iniciar</Button>
                 ) : (
-                  <img src={viewerUrl} alt="Mídia" className="max-h-[80vh] max-w-full rounded-lg" />
-                )
-              )}
+                  <Button variant="destructive" onClick={stopRecording}><Video className="h-4 w-4 mr-2" />Parar</Button>
+                )}
+              </div>
             </div>
           </div>
         </DialogContent>
