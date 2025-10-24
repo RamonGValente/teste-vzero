@@ -13,6 +13,10 @@ import {
   X,
   Pencil,
   Trash2,
+  Camera,
+  Video,
+  Maximize2,
+  Minimize2,
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -41,22 +45,95 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
+// ==== Helpers de mídia ====
+// Para compatibilidade com o schema atual (ARRAY de strings), vamos prefixar os URLs
+// que subirmos com "image::" ou "video::". Posts antigos (apenas URL) continuarão funcionando
+// via detecção por extensão.
+const MEDIA_PREFIX = {
+  image: "image::",
+  video: "video::",
+};
+
+function isVideoUrl(u: string): boolean {
+  if (u.startsWith(MEDIA_PREFIX.video)) return true;
+  if (u.startsWith(MEDIA_PREFIX.image)) return false;
+  const url = u.split("::").pop() || u;
+  return /\.(mp4|webm|ogg|mov|m4v)$/i.test(url);
+}
+
+function stripPrefix(u: string): string {
+  return u.replace(/^image::|^video::/, "");
+}
+
+// Formata data e hora (pedido do usuário)
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  // DD/MM/AAAA HH:mm
+  return d.toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+// Checa duração de vídeo (máx. 15s). Retorna true se OK.
+async function validateVideoDuration(file: File, maxSeconds = 15): Promise<boolean> {
+  if (!file.type.startsWith("video/")) return true;
+  const url = URL.createObjectURL(file);
+  try {
+    const duration = await new Promise<number>((resolve, reject) => {
+      const v = document.createElement("video");
+      v.preload = "metadata";
+      v.src = url;
+      v.onloadedmetadata = () => {
+        // Safari às vezes não popula duration sem play/pause
+        if (isNaN(v.duration) || !isFinite(v.duration)) {
+          v.currentTime = Number.MAX_SAFE_INTEGER;
+          v.ontimeupdate = () => {
+            v.ontimeupdate = null;
+            resolve(v.duration);
+          };
+        } else {
+          resolve(v.duration);
+        }
+      };
+      v.onerror = () => reject(new Error("Não foi possível ler o vídeo."));
+    });
+    return duration <= maxSeconds + 0.25; // tolerância pequena
+  } finally {
+    URL.revokeObjectURL(url);
+  }
+}
+
+// Tipos
 type PostRow = any;
 
 export default function Feed() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+
   const [postTitle, setPostTitle] = useState("");
   const [newPost, setNewPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Inputs separados para câmera/galeria (melhor UX mobile)
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
   const [openingCommentsFor, setOpeningCommentsFor] = useState<PostRow | null>(null);
   const [newCommentText, setNewCommentText] = useState("");
+
+  // Full-screen viewer
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
   useEffect(() => {
     if (!user) return;
@@ -129,38 +206,63 @@ export default function Feed() {
     return () => clearInterval(interval);
   }, []);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []);
-    const validFiles = files.filter(
-      (file) => file.type.startsWith("image/") || file.type.startsWith("video/")
-    );
-    if (validFiles.length !== files.length) {
+  // ===== Seleção de arquivos (com validação de duração de vídeo) =====
+  const onFilesPicked = async (files: FileList | File[]) => {
+    const arr = Array.from(files || []);
+    const validMimes = arr.filter((f) => f.type.startsWith("image/") || f.type.startsWith("video/"));
+
+    if (validMimes.length !== arr.length) {
       toast({
         variant: "destructive",
         title: "Arquivos inválidos",
         description: "Apenas imagens e vídeos são permitidos.",
       });
     }
-    setMediaFiles((prev) => [...prev, ...validFiles]);
+
+    const accepted: File[] = [];
+
+    for (const f of validMimes) {
+      if (f.type.startsWith("video/")) {
+        const ok = await validateVideoDuration(f, 15);
+        if (!ok) {
+          toast({
+            variant: "destructive",
+            title: "Vídeo muito longo",
+            description: "Envie um vídeo de até 15 segundos.",
+          });
+          continue;
+        }
+      }
+      accepted.push(f);
+    }
+
+    if (accepted.length) {
+      setMediaFiles((prev) => [...prev, ...accepted]);
+    }
   };
+
   const removeFile = (index: number) => setMediaFiles((prev) => prev.filter((_, i) => i !== index));
 
   const handleCreatePost = async () => {
     if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
-      toast({ variant: "destructive", title: "Erro", description: "Adicione um título ou conteúdo para publicar." });
+      toast({ variant: "destructive", title: "Erro", description: "Adicione um título, conteúdo ou mídia para publicar." });
       return;
     }
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
       for (const file of mediaFiles) {
-        const fileExt = file.name.split(".").pop();
-        const fileName = `${user?.id}-${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file);
+        const fileExt = (file.name.split(".").pop() || "").toLowerCase();
+        const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
+        const filePath = `${user?.id}/${fileName}`; // pasta por usuário ajuda na organização
+        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file, {
+          cacheControl: "3600",
+          upsert: false,
+        });
         if (uploadError) throw uploadError;
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
-        mediaUrls.push(publicUrl);
+        const prefix = file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image;
+        mediaUrls.push(prefix + publicUrl);
       }
       const votingEndsAt = new Date();
       votingEndsAt.setHours(votingEndsAt.getHours() + 1);
@@ -185,9 +287,9 @@ export default function Feed() {
       toast({ title: "Post criado!", description: "Sua postagem entrará em votação por 1 hora." });
       setPostTitle(""); setNewPost(""); setMediaFiles([]);
       refetch();
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error creating post:", error);
-      toast({ variant: "destructive", title: "Erro", description: "Não foi possível criar o post." });
+      toast({ variant: "destructive", title: "Erro", description: error?.message ?? "Não foi possível criar o post." });
     } finally {
       setUploading(false);
     }
@@ -195,7 +297,7 @@ export default function Feed() {
 
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
-      const existingVote = posts?.find((p) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
+      const existingVote = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
       if (existingVote) {
         if (existingVote.vote_type === voteType) {
           const { error } = await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
@@ -291,7 +393,6 @@ export default function Feed() {
   });
 
   const addComment = useMutation({
-    // ⚠️ NÃO enviamos user_id — o trigger e a política garantem auth.uid()
     mutationFn: async () => {
       if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return;
       const { error } = await supabase.from("comments").insert({
@@ -316,9 +417,6 @@ export default function Feed() {
     },
   });
 
-  const fmtDate = (iso: string) =>
-    new Date(iso).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric" });
-
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -329,7 +427,7 @@ export default function Feed() {
               <Avatar className="h-10 w-10">
                 <AvatarImage src={user?.user_metadata?.avatar_url} />
                 <AvatarFallback className="bg-primary text-primary-foreground">
-                  {user?.email?.[0].toUpperCase()}
+                  {user?.email?.[0]?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
               <div className="flex-1 space-y-3">
@@ -354,7 +452,7 @@ export default function Feed() {
                           {file.type.startsWith("image/") ? (
                             <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
                           ) : (
-                            <ImageIcon className="h-8 w-8 text-muted-foreground" />
+                            <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" muted playsInline />
                           )}
                         </div>
                         <Button
@@ -370,19 +468,47 @@ export default function Feed() {
                   </div>
                 )}
 
-                <div className="flex justify-between items-center">
-                  <div className="flex gap-2">
+                <div className="flex flex-wrap gap-2 justify-between items-center">
+                  <div className="flex flex-wrap gap-2">
+                    {/* Galleria */}
                     <input
+                      ref={galleryInputRef}
                       type="file"
-                      ref={fileInputRef}
                       className="hidden"
                       accept="image/*,video/*"
                       multiple
-                      onChange={handleFileSelect}
+                      onChange={(e) => onFilesPicked(e.target.files!)}
                     />
-                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => fileInputRef.current?.click()}>
+                    {/* Câmera foto */}
+                    <input
+                      ref={cameraPhotoInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="image/*"
+                      capture="environment"
+                      onChange={(e) => onFilesPicked(e.target.files!)}
+                    />
+                    {/* Câmera vídeo */}
+                    <input
+                      ref={cameraVideoInputRef}
+                      type="file"
+                      className="hidden"
+                      accept="video/*"
+                      capture
+                      onChange={(e) => onFilesPicked(e.target.files!)}
+                    />
+
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => galleryInputRef.current?.click()}>
                       <Upload className="h-4 w-4 mr-2" />
-                      Adicionar mídia
+                      Galeria
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => cameraPhotoInputRef.current?.click()}>
+                      <Camera className="h-4 w-4 mr-2" />
+                      Abrir câmera (foto)
+                    </Button>
+                    <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => cameraVideoInputRef.current?.click()}>
+                      <Video className="h-4 w-4 mr-2" />
+                      Abrir câmera (vídeo)
                     </Button>
                   </div>
                   <Button
@@ -399,7 +525,7 @@ export default function Feed() {
         </Card>
 
         {/* Feed */}
-        {posts?.map((post) => {
+        {posts?.map((post: any) => {
           const isOwnPost = post.user_id === user?.id;
           const hasLiked = post.likes?.some((like: any) => like.user_id === user?.id);
           const likesCount = post.likes?.length || 0;
@@ -408,6 +534,8 @@ export default function Feed() {
           const bombVotes = post.post_votes?.filter((v: any) => v.vote_type === "bomb").length || 0;
           const userVote = post.post_votes?.find((v: any) => v.user_id === user?.id);
           const isVotingActive = post.voting_period_active && post.voting_ends_at;
+
+          const mediaList: string[] = post.media_urls || [];
 
           return (
             <Card key={post.id} className={cn("border shadow-sm bg-card hover:shadow-md transition-shadow", post.is_community_approved && "border-primary/50")}>
@@ -424,7 +552,8 @@ export default function Feed() {
                       <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
                         {post.profiles?.username}
                       </UserLink>
-                      <p className="text-xs text-muted-foreground">{new Date(post.created_at).toLocaleDateString("pt-BR")}</p>
+                      {/* Data e hora completas */}
+                      <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
                     </div>
                   </div>
 
@@ -460,17 +589,34 @@ export default function Feed() {
                   <MentionText text={post.content ?? ""} />
                 </p>
 
-                {post.media_urls && post.media_urls.length > 0 && (
+                {mediaList.length > 0 && (
                   <div className="grid grid-cols-2 gap-2 mt-3">
-                    {post.media_urls.map((url: string, index: number) => (
-                      <div key={index} className="rounded-lg overflow-hidden">
-                        {url.includes("video") ? (
-                          <video src={url} controls className="w-full" />
-                        ) : (
-                          <img src={url} alt="Post media" className="w-full h-auto" />
-                        )}
-                      </div>
-                    ))}
+                    {mediaList.map((raw: string, index: number) => {
+                      const url = stripPrefix(raw);
+                      const isVideo = isVideoUrl(raw);
+                      return (
+                        <button
+                          key={index}
+                          className="rounded-lg overflow-hidden group relative"
+                          onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
+                        >
+                          {isVideo ? (
+                            <video
+                              src={url}
+                              className="w-full max-h-64 object-cover"
+                              controls
+                              playsInline
+                              preload="metadata"
+                            />
+                          ) : (
+                            <img src={url} alt="Post media" className="w-full h-auto" />
+                          )}
+                          <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
+                            <Maximize2 className="inline h-3 w-3 mr-1" /> Ver em tela cheia
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
                 )}
 
@@ -573,7 +719,7 @@ export default function Feed() {
                           {c.author?.full_name || c.author?.username}
                         </UserLink>
                       </span>
-                      <span className="text-xs text-muted-foreground">{fmtDate(c.created_at)}</span>
+                      <span className="text-xs text-muted-foreground">{fmtDateTime(c.created_at)}</span>
                     </div>
                     <p className="text-sm whitespace-pre-wrap">{c.content}</p>
                   </div>
@@ -587,6 +733,38 @@ export default function Feed() {
               <Button onClick={() => addComment.mutate()} disabled={!newCommentText.trim() || !openingCommentsFor}>
                 Comentar
               </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Viewer full-screen para foto/vídeo */}
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="max-w-4xl p-2 sm:p-4">
+          <div className="relative">
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute right-2 top-2 z-10"
+              onClick={() => setViewerOpen(false)}
+              aria-label="Fechar"
+            >
+              <Minimize2 className="h-4 w-4" />
+            </Button>
+            <div className="w-full h-full flex items-center justify-center">
+              {viewerUrl && (
+                viewerIsVideo ? (
+                  <video
+                    src={viewerUrl}
+                    controls
+                    playsInline
+                    className="max-h-[80vh] max-w-full rounded-lg"
+                    preload="metadata"
+                  />
+                ) : (
+                  <img src={viewerUrl} alt="Mídia" className="max-h-[80vh] max-w-full rounded-lg" />
+                )
+              )}
             </div>
           </div>
         </DialogContent>
