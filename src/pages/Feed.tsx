@@ -73,6 +73,24 @@ async function validateVideoDuration(file: File, maxSeconds = 15): Promise<boole
   } finally { URL.revokeObjectURL(url); }
 }
 
+function isSecureOk() {
+  return window.isSecureContext || location.hostname === "localhost" || location.hostname === "127.0.0.1";
+}
+
+function pickBestMimeType(): string | undefined {
+  const candidates = [
+    "video/webm;codecs=vp9,opus",
+    "video/webm;codecs=vp8,opus",
+    "video/webm",
+    "video/mp4;codecs=h264,aac",
+    "video/mp4",
+  ];
+  for (const t of candidates) {
+    try { if ((window as any).MediaRecorder && MediaRecorder.isTypeSupported && MediaRecorder.isTypeSupported(t)) return t; } catch {}
+  }
+  return undefined;
+}
+
 // Tipos
 type PostRow = any;
 
@@ -91,6 +109,7 @@ export default function Feed() {
   const [newPost, setNewPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [uiError, setUiError] = useState<string | null>(null);
 
   // Inputs: galeria e foto nativa; vídeo via gravador interno (para limite de 15s)
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -231,20 +250,33 @@ export default function Feed() {
 
   const startPreview = async () => {
     try {
-      const devices = await navigator.mediaDevices.enumerateDevices();
+      setUiError(null);
+      if (!navigator.mediaDevices?.getUserMedia) {
+        setUiError("Seu navegador não suporta câmera (getUserMedia). Tente atualizar ou usar Chrome/Firefox/Safari modernos.");
+        return;
+      }
+      if (!isSecureOk()) {
+        setUiError("Para usar a câmera, acesse via HTTPS (ou localhost).");
+        toast({ variant: "destructive", title: "Conexão não segura", description: "A câmera só funciona em HTTPS ou localhost." });
+        return;
+      }
+      const devices = await navigator.mediaDevices.enumerateDevices().catch(() => [] as MediaDeviceInfo[]);
       const vids = devices.filter((d) => d.kind === "videoinput");
       setVideoInputs(vids);
+
       const constraints: MediaStreamConstraints = {
-        video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : { facingMode: cameraFacing },
+        video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId }, width: { ideal: 720 }, height: { ideal: 1280 } } : { facingMode: cameraFacing, width: { ideal: 720 }, height: { ideal: 1280 } },
         audio: true,
       };
       const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setRecStream(stream);
       await startProcessingLoop(stream);
       setIsPreviewing(true);
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
-      toast({ variant: "destructive", title: "Câmera/Microfone bloqueados", description: "Permita o acesso e tente novamente." });
+      const msg = e?.name === 'NotAllowedError' ? 'Permita acesso à câmera e microfone' : e?.message || 'Falha ao iniciar a câmera';
+      setUiError(msg);
+      toast({ variant: "destructive", title: "Não foi possível abrir a câmera", description: msg });
     }
   };
 
@@ -260,7 +292,14 @@ export default function Feed() {
   const startRecording = async () => {
     if (!isPreviewing || !canvasRef.current) await startPreview();
     const processed = canvasRef.current!.captureStream();
-    const recorder = new MediaRecorder(processed, { mimeType: "video/webm;codecs=vp9,opus" });
+    const mime = pickBestMimeType();
+    let recorder: MediaRecorder;
+    try {
+      recorder = new MediaRecorder(processed, mime ? { mimeType: mime } as any : undefined);
+    } catch (err) {
+      try { recorder = new MediaRecorder(processed); }
+      catch (e) { setUiError("Seu navegador não suporta gravação nesta combinação de codecs."); toast({ variant: 'destructive', title: 'Gravação indisponível', description: 'Teste outro navegador/dispositivo.' }); return; }
+    }
     recChunks.current = [];
     recorder.ondataavailable = (e) => { if (e.data.size) recChunks.current.push(e.data); };
     recorder.start();
@@ -276,9 +315,9 @@ export default function Feed() {
     if (recRecorder && recRecorder.state !== "inactive") recRecorder.stop();
     if (recTimerRef.current) { window.clearInterval(recTimerRef.current); recTimerRef.current = null; }
     setRecTime(0);
-    const blob = new Blob(recChunks.current, { type: "video/webm" });
+    const blob = new Blob(recChunks.current, { type: pickBestMimeType() || "video/webm" });
     if (blob.size > 0) {
-      const file = new File([blob], `gravacao-${Date.now()}.webm`, { type: "video/webm" });
+      const file = new File([blob], `gravacao-${Date.now()}.webm`, { type: pickBestMimeType() || "video/webm" });
       setMediaFiles((prev) => [...prev, file]);
       toast({ title: "Vídeo adicionado", description: "Gravação de até 15s salva na postagem." });
     }
@@ -376,9 +415,7 @@ export default function Feed() {
         mediaUrls.push(prefix + publicUrl);
       }
       const votingEndsAt = new Date(); votingEndsAt.setHours(votingEndsAt.getHours() + 1);
-      const postContent = postTitle.trim() ? `${postTitle}
-
-${newPost}` : newPost;
+      const postContent = postTitle.trim() ? `${postTitle}\n\n${newPost}` : newPost;
       const { data: postData, error } = await supabase
         .from("posts")
         .insert({ user_id: user?.id, content: postContent, media_urls: mediaUrls.length > 0 ? mediaUrls : null, voting_ends_at: votingEndsAt.toISOString(), voting_period_active: true })
@@ -663,6 +700,9 @@ ${newPost}` : newPost;
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>Gravar vídeo (até 15s) + Efeitos</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {uiError && (
+              <div className="text-sm text-red-600 bg-red-50 border border-red-200 rounded p-2">{uiError}</div>
+            )}
             {/* Canvas processado/preview */}
             <canvas ref={canvasRef} className="w-full aspect-[9/16] bg-black rounded" />
 
