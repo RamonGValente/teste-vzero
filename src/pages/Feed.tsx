@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
-  Camera, Video, Maximize2, Minimize2, Images, RotateCcw
+  Camera, Video, Maximize2, Minimize2, Images, CameraOff
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -20,7 +20,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-/** helpers */
+/* helpers */
 const MEDIA_PREFIX = { image: "image::", video: "video::" } as const;
 const isVideoUrl = (u: string) =>
   u.startsWith(MEDIA_PREFIX.video) ||
@@ -28,11 +28,9 @@ const isVideoUrl = (u: string) =>
 const stripPrefix = (u: string) => u.replace(/^image::|^video::/, "");
 const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric",
-    hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 
-/** valida duração do vídeo lendo metadata localmente */
 async function validateVideoDuration(file: File, maxSeconds = 15) {
   if (!file.type.startsWith("video/")) return true;
   const url = URL.createObjectURL(file);
@@ -57,35 +55,29 @@ export default function Feed() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  /** composer */
   const [postTitle, setPostTitle] = useState("");
   const [newPost, setNewPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
 
-  /** inputs nativos */
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
 
-  /** escolha da câmera para vídeo nativo */
+  // alternância só por ícones
   const [videoFacing, setVideoFacing] = useState<"environment" | "user">("environment");
 
-  /** edição/comentários */
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
   const [openingCommentsFor, setOpeningCommentsFor] = useState<PostRow | null>(null);
   const [newCommentText, setNewCommentText] = useState("");
 
-  /** viewer full-screen */
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
-  /** estado auxiliar de leitura de metadata */
   const [readingMeta, setReadingMeta] = useState(false);
 
-  /** marcar feed como visualizado */
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -100,7 +92,6 @@ export default function Feed() {
     markAsViewed();
   }, [user, queryClient]);
 
-  /** carregar posts */
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
@@ -130,7 +121,6 @@ export default function Feed() {
     enabled: !!user,
   });
 
-  /** realtime */
   useEffect(() => {
     const ch = supabase
       .channel("feed-realtime")
@@ -142,7 +132,6 @@ export default function Feed() {
     return () => { supabase.removeChannel(ch); };
   }, [refetch]);
 
-  /** cron de votos */
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
     f();
@@ -150,7 +139,6 @@ export default function Feed() {
     return () => clearInterval(i);
   }, []);
 
-  /** seleção de arquivos (galeria/foto/vídeo) */
   const onFilesPicked = async (files?: FileList | null) => {
     const list = Array.from(files || []);
     if (list.length === 0) return;
@@ -184,7 +172,6 @@ export default function Feed() {
   const removeFile = (idx: number) =>
     setMediaFiles(prev => prev.filter((_, i) => i !== idx));
 
-  /** criar post */
   const handleCreatePost = async () => {
     if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
       toast({ variant: "destructive", title: "Erro", description: "Adicione título, conteúdo ou mídia." });
@@ -197,9 +184,7 @@ export default function Feed() {
         const fileExt = (file.name.split(".").pop() || "").toLowerCase();
         const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const filePath = `${user?.id}/${fileName}`;
-        const { error: upErr } = await supabase.storage.from("media").upload(filePath, file, {
-          cacheControl: "3600", upsert: false
-        });
+        const { error: upErr } = await supabase.storage.from("media").upload(filePath, file, { cacheControl: "3600", upsert: false });
         if (upErr) throw upErr;
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + publicUrl);
@@ -235,7 +220,6 @@ export default function Feed() {
     }
   };
 
-  /** votar/curtir */
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
       const existing = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
@@ -272,7 +256,6 @@ export default function Feed() {
     }
   };
 
-  /** comentários (lazy) */
   const {
     data: openPostComments, refetch: refetchComments, isLoading: loadingComments
   } = useQuery({
@@ -316,7 +299,6 @@ export default function Feed() {
       }),
   });
 
-  /** editar/excluir */
   const openEdit = (post: PostRow) => { setEditingPost(post); setEditContent(post.content || ""); };
   const editMutation = useMutation({
     mutationFn: async () => {
@@ -366,7 +348,6 @@ export default function Feed() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Criador */}
         <Card className="border shadow-sm bg-card">
           <CardContent className="pt-6">
             <div className="flex gap-3">
@@ -398,17 +379,9 @@ export default function Feed() {
                       <div key={index} className="relative">
                         <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
                           {file.type.startsWith("image/") ? (
-                            <img
-                              src={URL.createObjectURL(file)}
-                              alt="Preview"
-                              className="w-full h-full object-cover"
-                            />
+                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
                           ) : (
-                            <video
-                              src={URL.createObjectURL(file)}
-                              className="w-full h-full object-cover"
-                              muted playsInline
-                            />
+                            <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" muted playsInline />
                           )}
                         </div>
                         <Button
@@ -437,7 +410,6 @@ export default function Feed() {
                   type="file"
                   className="hidden"
                   accept="image/*"
-                  // abre câmera nativa para foto (traseira por padrão)
                   capture="environment"
                   multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
@@ -447,7 +419,6 @@ export default function Feed() {
                   type="file"
                   className="hidden"
                   accept="video/*"
-                  // o capture é configurado dinamicamente abaixo antes do click
                   multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
                 />
@@ -472,23 +443,31 @@ export default function Feed() {
                       <Camera className="h-5 w-5" />
                     </Button>
 
-                    {/* Vídeo (câmera nativa) + escolha frontal/traseira */}
-                    <div className="flex items-center gap-2">
-                      <select
-                        value={videoFacing}
-                        onChange={(e) => setVideoFacing(e.target.value as "user" | "environment")}
-                        className="h-9 rounded border bg-background px-2 text-sm"
-                        aria-label="Escolher câmera para vídeo"
+                    {/* Alternância da câmera do VÍDEO por ÍCONES (sem texto) */}
+                    <div className="flex items-center gap-1">
+                      <Button
+                        variant={videoFacing === "environment" ? "default" : "ghost"}
+                        size="icon"
+                        aria-label="Câmera traseira para vídeo"
+                        onClick={() => setVideoFacing("environment")}
                       >
-                        <option value="environment">Traseira</option>
-                        <option value="user">Frontal</option>
-                      </select>
+                        <Camera className="h-5 w-5" />
+                      </Button>
+                      <Button
+                        variant={videoFacing === "user" ? "default" : "ghost"}
+                        size="icon"
+                        aria-label="Câmera frontal para vídeo"
+                        onClick={() => setVideoFacing("user")}
+                      >
+                        <CameraOff className="h-5 w-5 rotate-180" />
+                      </Button>
 
+                      {/* Abrir câmera nativa de VÍDEO usando o facing selecionado */}
                       <Button
                         variant="ghost" size="icon" className="text-muted-foreground"
                         onClick={() => {
-                          // seta o capture dinamicamente (alguns navegadores obedecem)
                           if (cameraVideoInputRef.current) {
+                            // sugere ao SO qual câmera abrir
                             (cameraVideoInputRef.current as any).capture = videoFacing;
                           }
                           cameraVideoInputRef.current?.click();
@@ -499,11 +478,8 @@ export default function Feed() {
                       </Button>
                     </div>
 
-                    {/* Status leitura metadata */}
                     {readingMeta && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
-                        <RotateCcw className="h-3 w-3 animate-spin" /> validando vídeo…
-                      </span>
+                      <span className="text-xs text-muted-foreground">validando vídeo…</span>
                     )}
                   </div>
 
@@ -520,7 +496,7 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Lista de posts */}
+        {/* Feed */}
         {posts?.map((post) => {
           const isOwnPost = post.user_id === user?.id;
           const hasLiked = post.likes?.some((l: any) => l.user_id === user?.id);
@@ -533,10 +509,8 @@ export default function Feed() {
           const mediaList: string[] = post.media_urls || [];
 
           return (
-            <Card
-              key={post.id}
-              className={cn("border shadow-sm bg-card hover:shadow-md transition-shadow",
-                post.is_community_approved && "border-primary/50")}
+            <Card key={post.id} className={cn("border shadow-sm bg-card hover:shadow-md transition-shadow",
+              post.is_community_approved && "border-primary/50")}
             >
               <CardContent className="pt-6 space-y-4">
                 <div className="flex items-center justify-between">
@@ -551,9 +525,7 @@ export default function Feed() {
                       <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
                         {post.profiles?.username}
                       </UserLink>
-                      <p className="text-xs text-muted-foreground">
-                        {fmtDateTime(post.created_at)}
-                      </p>
+                      <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
                     </div>
                   </div>
 
@@ -565,12 +537,12 @@ export default function Feed() {
                         </Button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => openEdit(post)} className="cursor-pointer">
+                        <DropdownMenuItem onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}>
                           <Pencil className="h-4 w-4 mr-2" /> Editar postagem
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => deleteMutation.mutate(post.id)}
-                          className="cursor-pointer text-red-600 focus:text-red-600"
+                          className="text-red-600 focus:text-red-600"
                         >
                           <Trash2 className="h-4 w-4 mr-2" /> Excluir postagem
                         </DropdownMenuItem>
