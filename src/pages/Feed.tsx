@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
-  Camera, Video, Maximize2, Minimize2, Images, CameraOff
+  Camera, Video, Maximize2, Minimize2, Images
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -63,9 +63,6 @@ export default function Feed() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
-
-  // alternância só por ícones
-  const [videoFacing, setVideoFacing] = useState<"environment" | "user">("environment");
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -419,6 +416,7 @@ export default function Feed() {
                   type="file"
                   className="hidden"
                   accept="video/*"
+                  capture="environment"  // abre a câmera traseira por padrão
                   multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
                 />
@@ -443,40 +441,14 @@ export default function Feed() {
                       <Camera className="h-5 w-5" />
                     </Button>
 
-                    {/* Alternância da câmera do VÍDEO por ÍCONES (sem texto) */}
-                    <div className="flex items-center gap-1">
-                      <Button
-                        variant={videoFacing === "environment" ? "default" : "ghost"}
-                        size="icon"
-                        aria-label="Câmera traseira para vídeo"
-                        onClick={() => setVideoFacing("environment")}
-                      >
-                        <Camera className="h-5 w-5" />
-                      </Button>
-                      <Button
-                        variant={videoFacing === "user" ? "default" : "ghost"}
-                        size="icon"
-                        aria-label="Câmera frontal para vídeo"
-                        onClick={() => setVideoFacing("user")}
-                      >
-                        <CameraOff className="h-5 w-5 rotate-180" />
-                      </Button>
-
-                      {/* Abrir câmera nativa de VÍDEO usando o facing selecionado */}
-                      <Button
-                        variant="ghost" size="icon" className="text-muted-foreground"
-                        onClick={() => {
-                          if (cameraVideoInputRef.current) {
-                            // sugere ao SO qual câmera abrir
-                            (cameraVideoInputRef.current as any).capture = videoFacing;
-                          }
-                          cameraVideoInputRef.current?.click();
-                        }}
-                        aria-label="Abrir câmera (vídeo)"
-                      >
-                        <Video className="h-5 w-5" />
-                      </Button>
-                    </div>
+                    {/* Vídeo (apenas 1 ícone abre a câmera nativa) */}
+                    <Button
+                      variant="ghost" size="icon" className="text-muted-foreground"
+                      onClick={() => cameraVideoInputRef.current?.click()}
+                      aria-label="Abrir câmera (vídeo)"
+                    >
+                      <Video className="h-5 w-5" />
+                    </Button>
 
                     {readingMeta && (
                       <span className="text-xs text-muted-foreground">validando vídeo…</span>
