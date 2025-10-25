@@ -8,7 +8,6 @@ import {
   Bookmark,
   MoreVertical,
   Bomb,
-  Upload,
   X,
   Pencil,
   Trash2,
@@ -31,7 +30,6 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { MentionText } from "@/components/MentionText";
-
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -68,8 +66,7 @@ async function validateVideoDuration(file: File, maxSeconds = 15): Promise<boole
   try {
     const duration = await new Promise<number>((resolve, reject) => {
       const v = document.createElement("video");
-      v.preload = "metadata"; v.src = url;
-      v.onloadedmetadata = () => resolve(v.duration);
+      v.preload = "metadata"; v.src = url; v.onloadedmetadata = () => resolve(v.duration);
       v.onerror = () => reject(new Error("Não foi possível ler o vídeo."));
     });
     return duration <= maxSeconds + 0.25;
@@ -79,16 +76,11 @@ async function validateVideoDuration(file: File, maxSeconds = 15): Promise<boole
 // Tipos
 type PostRow = any;
 
-// Efeitos
 type ColorEffect = "none" | "grayscale" | "sepia" | "pixelate" | "invert";
 type BgMode = "none" | "blur" | "solid" | "image";
 type Sticker = "none" | "cat_ears" | "helmet" | "sunglasses";
 
-type VisionRefs = {
-  fileset?: any;
-  segmenter?: any; // ImageSegmenter
-  face?: any; // FaceLandmarker
-};
+type VisionRefs = { fileset?: any; segmenter?: any; face?: any };
 
 export default function Feed() {
   const { user } = useAuth();
@@ -114,7 +106,7 @@ export default function Feed() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
-  // Gravador de vídeo interno
+  // Gravador + PREVIEW com escolha de câmera
   const [recDialogOpen, setRecDialogOpen] = useState(false);
   const [recStream, setRecStream] = useState<MediaStream | null>(null);
   const [recRecorder, setRecRecorder] = useState<MediaRecorder | null>(null);
@@ -122,38 +114,39 @@ export default function Feed() {
   const [recTime, setRecTime] = useState(0);
   const recTimerRef = useRef<number | null>(null);
 
-  // Canvas onde processamos (e capturamos o stream)
+  const [cameraFacing, setCameraFacing] = useState<"user" | "environment">("user");
+  const [cameraDeviceId, setCameraDeviceId] = useState<string | null>(null);
+  const [videoInputs, setVideoInputs] = useState<MediaDeviceInfo[]>([]);
+  const [isPreviewing, setIsPreviewing] = useState(false);
+
+  // Canvas processado
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   // UI de efeitos
   const [colorEffect, setColorEffect] = useState<ColorEffect>("none");
-  const [brightness, setBrightness] = useState(100); // %
-  const [contrast, setContrast] = useState(100); // %
-  const [saturation, setSaturation] = useState(100); // %
+  const [brightness, setBrightness] = useState(100);
+  const [contrast, setContrast] = useState(100);
+  const [saturation, setSaturation] = useState(100);
   const [bgMode, setBgMode] = useState<BgMode>("none");
   const [bgColor, setBgColor] = useState("#000000");
   const [bgImage, setBgImage] = useState<HTMLImageElement | null>(null);
   const [sticker, setSticker] = useState<Sticker>("none");
 
-  // MediaPipe tasks refs
+  // MediaPipe
   const vision = useRef<VisionRefs>({});
   const [visionReady, setVisionReady] = useState(false);
-
   const ensureVision = async () => {
     if (visionReady) return true;
     try {
       const visionMod = await import("@mediapipe/tasks-vision");
       const fileset = await visionMod.FilesetResolver.forVisionTasks(
-        // Usa CDN oficial (padrão do pacote) – os binários serão baixados em runtime
         "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
       );
-      // Segmentação (Selfie Segmentation)
       const segmenter = await visionMod.ImageSegmenter.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/image_segmenter/selfie_segmenter_landscape/float16/1/selfie_segmenter_landscape.tflite` },
         runningMode: "VIDEO",
         outputCategoryMask: true,
       });
-      // Face landmarks (para stickers)
       const face = await visionMod.FaceLandmarker.createFromOptions(fileset, {
         baseOptions: { modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task` },
         runningMode: "VIDEO",
@@ -163,135 +156,68 @@ export default function Feed() {
       setVisionReady(true);
       return true;
     } catch (e) {
-      console.error("Falha ao carregar MediaPipe tasks", e);
-      toast({ title: "Efeitos avançados indisponíveis", description: "Não foi possível carregar os modelos de visão. Sua câmera e filtro básico continuam funcionando.", variant: "destructive" });
+      console.error("Falha ao carregar MediaPipe", e);
+      toast({ title: "Efeitos avançados indisponíveis", description: "Não foi possível carregar os modelos de visão.", variant: "destructive" });
       return false;
     }
   };
 
-  // Loop de processamento com efeitos/segmentação/stickers
+  // Loop de processamento
   const processingRef = useRef(false);
   const startProcessingLoop = async (stream: MediaStream) => {
     const canUseVision = await ensureVision();
     const videoEl = document.createElement("video");
-    videoEl.srcObject = stream; videoEl.muted = true; videoEl.playsInline = true; await videoEl.play();
+    videoEl.setAttribute("playsinline", "true");
+    videoEl.muted = true;
+    videoEl.srcObject = stream;
+    await videoEl.play().catch(() => {});
 
     const canvas = canvasRef.current!; const ctx = canvas.getContext("2d")!;
     const off = document.createElement("canvas"); const offCtx = off.getContext("2d")!;
 
-    const draw = async (t: number) => {
+    const draw = async () => {
       if (!processingRef.current) return;
       const w = videoEl.videoWidth || 720; const h = videoEl.videoHeight || 1280;
+      if (w === 0 || h === 0) { requestAnimationFrame(draw); return; }
       if (canvas.width !== w) { canvas.width = w; canvas.height = h; off.width = w; off.height = h; }
 
-      // 1) Desenha frame base no offscreen (para aplicar filters via ctx.filter)
       offCtx.clearRect(0,0,w,h);
-      const filterParts: string[] = [
-        `brightness(${brightness}%)`,
-        `contrast(${contrast}%)`,
-        `saturate(${saturation}%)`,
-      ];
+      const filterParts: string[] = [ `brightness(${brightness}%)`, `contrast(${contrast}%)`, `saturate(${saturation}%)` ];
       if (colorEffect === "grayscale") filterParts.push("grayscale(100%)");
       if (colorEffect === "sepia") filterParts.push("sepia(100%)");
       if (colorEffect === "invert") filterParts.push("invert(100%)");
       offCtx.filter = filterParts.join(" ");
       offCtx.drawImage(videoEl, 0, 0, w, h);
 
-      // 2) Composição de fundo (segmentação)
       if (canUseVision && vision.current.segmenter && bgMode !== "none") {
         const nowMs = performance.now();
         const result = await vision.current.segmenter.segmentForVideo(off, nowMs);
         const mask = result.categoryMask?.getAsImageBitmap();
         if (mask) {
-          // Cria máscara
           const maskCanvas = document.createElement("canvas");
           maskCanvas.width = w; maskCanvas.height = h; const mctx = maskCanvas.getContext("2d")!;
           mctx.drawImage(mask, 0, 0, w, h);
-
-          // Fundo
           ctx.clearRect(0,0,w,h);
-          if (bgMode === "blur") {
-            ctx.filter = "blur(16px)"; // blur do fundo
-            ctx.drawImage(off, 0, 0, w, h);
-            ctx.filter = "none";
-          } else if (bgMode === "solid") {
-            ctx.fillStyle = bgColor; ctx.fillRect(0, 0, w, h);
-          } else if (bgMode === "image" && bgImage) {
-            // cover-like
-            const ratio = Math.max(w / bgImage.width, h / bgImage.height);
-            const bw = bgImage.width * ratio; const bh = bgImage.height * ratio;
-            ctx.drawImage(bgImage, (w - bw) / 2, (h - bh) / 2, bw, bh);
-          }
+          if (bgMode === "blur") { ctx.filter = "blur(16px)"; ctx.drawImage(off,0,0,w,h); ctx.filter = "none"; }
+          else if (bgMode === "solid") { ctx.fillStyle = bgColor; ctx.fillRect(0,0,w,h); }
+          else if (bgMode === "image" && bgImage) { const ratio = Math.max(w/bgImage.width, h/bgImage.height); const bw = bgImage.width*ratio; const bh = bgImage.height*ratio; ctx.drawImage(bgImage,(w-bw)/2,(h-bh)/2,bw,bh); }
+          ctx.save(); ctx.globalCompositeOperation = "destination-in"; ctx.drawImage(maskCanvas, 0, 0); ctx.restore();
+          ctx.globalCompositeOperation = "destination-over"; ctx.drawImage(off,0,0); ctx.globalCompositeOperation = "source-over";
+        } else { ctx.drawImage(off,0,0); }
+      } else { ctx.clearRect(0,0,w,h); ctx.drawImage(off,0,0); }
 
-          // Usa a máscara para desenhar somente a pessoa por cima do fundo
-          ctx.save();
-          ctx.globalCompositeOperation = "destination-in";
-          ctx.drawImage(maskCanvas, 0, 0);
-          ctx.restore();
-
-          // Agora desenha o vídeo processado dentro da máscara
-          ctx.globalCompositeOperation = "destination-over";
-          ctx.drawImage(off, 0, 0);
-          ctx.globalCompositeOperation = "source-over";
-        } else {
-          ctx.drawImage(off, 0, 0);
-        }
-      } else {
-        // Sem segmentação
-        ctx.clearRect(0,0,w,h);
-        ctx.drawImage(off, 0, 0);
-      }
-
-      // 3) Stickers baseados em landmarks
       if (canUseVision && vision.current.face && sticker !== "none") {
         const nowMs = performance.now();
         const faces = await vision.current.face.detectForVideo(off, nowMs);
         const kp = faces?.landmarks?.[0];
         if (kp && kp.length > 0) {
-          // Índices úteis (MediaPipe Face Mesh):
-          // 10 = topo da testa; 33 = canto externo olho esq.; 263 = canto externo olho dir.
-          const p = (i: number) => kp[i] as { x: number; y: number };
-          const forehead = p(10);
-          const leftEye = p(33);
-          const rightEye = p(263);
-          const cx = (leftEye.x + rightEye.x) / 2 * w;
-          const cy = (leftEye.y + rightEye.y) / 2 * h;
-          const eyeDist = Math.hypot((rightEye.x - leftEye.x) * w, (rightEye.y - leftEye.y) * h);
-
+          const p = (i:number)=> kp[i] as {x:number;y:number};
+          const forehead = p(10); const leftEye = p(33); const rightEye = p(263);
+          const wpx=w, hpx=h; const cx = (leftEye.x + rightEye.x)/2 * wpx; const cy = (leftEye.y + rightEye.y)/2 * hpx; const eyeDist = Math.hypot((rightEye.x-leftEye.x)*wpx,(rightEye.y-leftEye.y)*hpx);
           ctx.save();
-          if (sticker === "sunglasses") {
-            const width = eyeDist * 2.2; const height = eyeDist * 0.7;
-            ctx.fillStyle = "rgba(0,0,0,0.85)";
-            ctx.fillRect(cx - width/2, cy - height/2, width, height);
-            // hastes
-            ctx.fillRect(cx - width/2 - 10, cy - 4, 10, 8);
-            ctx.fillRect(cx + width/2, cy - 4, 10, 8);
-          } else if (sticker === "cat_ears") {
-            const fx = forehead.x * w; const fy = forehead.y * h;
-            const earW = eyeDist * 0.9; const earH = earW * 1.2;
-            // orelha esquerda
-            ctx.beginPath();
-            ctx.moveTo(cx - earW, fy);
-            ctx.lineTo(cx - earW * 0.6, fy - earH);
-            ctx.lineTo(cx - earW * 0.2, fy);
-            ctx.closePath();
-            ctx.fillStyle = "#ff66aa"; ctx.fill();
-            // orelha direita
-            ctx.beginPath();
-            ctx.moveTo(cx + earW, fy);
-            ctx.lineTo(cx + earW * 0.6, fy - earH);
-            ctx.lineTo(cx + earW * 0.2, fy);
-            ctx.closePath();
-            ctx.fillStyle = "#ff66aa"; ctx.fill();
-          } else if (sticker === "helmet") {
-            const fx = forehead.x * w; const fy = forehead.y * h;
-            const r = eyeDist * 1.6;
-            ctx.beginPath();
-            ctx.arc(cx, fy + r * 0.2, r, Math.PI, 0);
-            ctx.closePath();
-            ctx.fillStyle = "#2b6cb0"; ctx.fill();
-            ctx.fillStyle = "#fff"; ctx.fillRect(cx - r * 0.6, fy + r * 0.1, r * 1.2, r * 0.2);
-          }
+          if (sticker === "sunglasses") { const width = eyeDist*2.2, height = eyeDist*0.7; ctx.fillStyle = "rgba(0,0,0,0.85)"; ctx.fillRect(cx-width/2, cy-height/2, width, height); ctx.fillRect(cx-width/2-10, cy-4, 10, 8); ctx.fillRect(cx+width/2, cy-4, 10, 8); }
+          if (sticker === "cat_ears") { const fx=forehead.x*wpx, fy=forehead.y*hpx; const earW=eyeDist*0.9, earH=earW*1.2; ctx.beginPath(); ctx.moveTo(cx-earW, fy); ctx.lineTo(cx-earW*0.6, fy-earH); ctx.lineTo(cx-earW*0.2, fy); ctx.closePath(); ctx.fillStyle="#ff66aa"; ctx.fill(); ctx.beginPath(); ctx.moveTo(cx+earW, fy); ctx.lineTo(cx+earW*0.6, fy-earH); ctx.lineTo(cx+earW*0.2, fy); ctx.closePath(); ctx.fill(); }
+          if (sticker === "helmet") { const fx=forehead.x*wpx, fy=forehead.y*hpx; const r=eyeDist*1.6; ctx.beginPath(); ctx.arc(cx, fy + r*0.2, r, Math.PI, 0); ctx.closePath(); ctx.fillStyle="#2b6cb0"; ctx.fill(); ctx.fillStyle="#fff"; ctx.fillRect(cx - r*0.6, fy + r*0.1, r*1.2, r*0.2); }
           ctx.restore();
         }
       }
@@ -303,46 +229,67 @@ export default function Feed() {
     requestAnimationFrame(draw);
   };
 
-  const startRecording = async () => {
+  const startPreview = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user" }, audio: true });
+      const devices = await navigator.mediaDevices.enumerateDevices();
+      const vids = devices.filter((d) => d.kind === "videoinput");
+      setVideoInputs(vids);
+      const constraints: MediaStreamConstraints = {
+        video: cameraDeviceId ? { deviceId: { exact: cameraDeviceId } } : { facingMode: cameraFacing },
+        audio: true,
+      };
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
       setRecStream(stream);
       await startProcessingLoop(stream);
-      // gravamos o canvas (com efeitos), não o stream cru
-      const processed = canvasRef.current!.captureStream();
-      const recorder = new MediaRecorder(processed, { mimeType: "video/webm;codecs=vp9,opus" });
-      recChunks.current = [];
-      recorder.ondataavailable = (e) => { if (e.data.size) recChunks.current.push(e.data); };
-      recorder.onstop = () => { /* handled externally */ };
-      recorder.start();
-      setRecRecorder(recorder);
-
-      setRecTime(0);
-      if (recTimerRef.current) window.clearInterval(recTimerRef.current);
-      recTimerRef.current = window.setInterval(() => {
-        setRecTime((t) => {
-          const nt = t + 1; if (nt >= 15) stopRecording(); return nt;
-        });
-      }, 1000) as unknown as number;
+      setIsPreviewing(true);
     } catch (e) {
       console.error(e);
-      toast({ variant: "destructive", title: "Câmera/Microfone bloqueados", description: "Permita o acesso para gravar vídeos." });
+      toast({ variant: "destructive", title: "Câmera/Microfone bloqueados", description: "Permita o acesso e tente novamente." });
     }
+  };
+
+  const restartPreviewWith = async (nextFacing: "user" | "environment", deviceId?: string | null) => {
+    if (recStream) recStream.getTracks().forEach((t) => t.stop());
+    processingRef.current = false;
+    setCameraFacing(nextFacing);
+    setCameraDeviceId(deviceId ?? null);
+    setIsPreviewing(false);
+    await startPreview();
+  };
+
+  const startRecording = async () => {
+    if (!isPreviewing || !canvasRef.current) await startPreview();
+    const processed = canvasRef.current!.captureStream();
+    const recorder = new MediaRecorder(processed, { mimeType: "video/webm;codecs=vp9,opus" });
+    recChunks.current = [];
+    recorder.ondataavailable = (e) => { if (e.data.size) recChunks.current.push(e.data); };
+    recorder.start();
+    setRecRecorder(recorder);
+    setRecTime(0);
+    if (recTimerRef.current) window.clearInterval(recTimerRef.current);
+    recTimerRef.current = window.setInterval(() => {
+      setRecTime((t) => { const nt = t + 1; if (nt >= 15) stopRecording(); return nt; });
+    }, 1000) as unknown as number;
   };
 
   const stopRecording = () => {
     if (recRecorder && recRecorder.state !== "inactive") recRecorder.stop();
     if (recTimerRef.current) { window.clearInterval(recTimerRef.current); recTimerRef.current = null; }
     setRecTime(0);
-    processingRef.current = false;
-    if (recStream) recStream.getTracks().forEach((t) => t.stop());
     const blob = new Blob(recChunks.current, { type: "video/webm" });
     if (blob.size > 0) {
       const file = new File([blob], `gravacao-${Date.now()}.webm`, { type: "video/webm" });
       setMediaFiles((prev) => [...prev, file]);
       toast({ title: "Vídeo adicionado", description: "Gravação de até 15s salva na postagem." });
     }
-    setRecRecorder(null); setRecStream(null); setRecDialogOpen(false);
+    setRecRecorder(null);
+  };
+
+  const stopPreview = () => {
+    processingRef.current = false;
+    if (recStream) recStream.getTracks().forEach((t) => t.stop());
+    setRecStream(null);
+    setIsPreviewing(false);
   };
 
   // ===== marcação de visto/queries =====
@@ -509,10 +456,9 @@ ${newPost}` : newPost;
   const addComment = useMutation({
     mutationFn: async () => { if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return; const { error } = await supabase.from("comments").insert({ post_id: openingCommentsFor.id, content: newCommentText.trim(), }); if (error) throw error; },
     onSuccess: async () => { setNewCommentText(""); await Promise.all([ refetchComments(), queryClient.invalidateQueries({ queryKey: ["posts", user?.id] }), ]); },
-    onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao comentar", description: e?.message ?? "Verifique las políticas RLS de comments.", }); },
+    onError: (e: any) => { toast({ variant: "destructive", title: "Erro ao comentar", description: e?.message ?? "Verifique as políticas RLS de comments.", }); },
   });
 
-  // ===== Render =====
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -712,12 +658,12 @@ ${newPost}` : newPost;
         </DialogContent>
       </Dialog>
 
-      {/* Gravador de vídeo com efeitos completos */}
-      <Dialog open={recDialogOpen} onOpenChange={(o) => { setRecDialogOpen(o); if (!o) stopRecording(); }}>
+      {/* Gravador com preview, efeitos e limite 15s */}
+      <Dialog open={recDialogOpen} onOpenChange={(o) => { setRecDialogOpen(o); if (o) { startPreview(); } else { stopRecording(); stopPreview(); } }}>
         <DialogContent className="max-w-xl">
           <DialogHeader><DialogTitle>Gravar vídeo (até 15s) + Efeitos</DialogTitle></DialogHeader>
           <div className="space-y-4">
-            {/* Canvas processado que será gravado */}
+            {/* Canvas processado/preview */}
             <canvas ref={canvasRef} className="w-full aspect-[9/16] bg-black rounded" />
 
             {/* Controles de efeitos */}
@@ -747,28 +693,15 @@ ${newPost}` : newPost;
                     <SelectItem value="image">Imagem</SelectItem>
                   </SelectContent>
                 </Select>
-                {bgMode === "solid" && (
-                  <input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-8 w-16 rounded" />
-                )}
+                {bgMode === "solid" && (<input type="color" value={bgColor} onChange={(e) => setBgColor(e.target.value)} className="h-8 w-16 rounded" />)}
                 {bgMode === "image" && (
-                  <input type="file" accept="image/*" onChange={(e) => {
-                    const f = e.target.files?.[0]; if (!f) return; const img = new Image(); img.onload = () => setBgImage(img); img.src = URL.createObjectURL(f);
-                  }} />
+                  <input type="file" accept="image/*" onChange={(e) => { const f = e.target.files?.[0]; if (!f) return; const img = new Image(); img.onload = () => setBgImage(img); img.src = URL.createObjectURL(f); }} />
                 )}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Brilho ({brightness}%)</label>
-                <Slider value={[brightness]} min={50} max={150} step={1} onValueChange={(v) => setBrightness(v[0])} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Contraste ({contrast}%)</label>
-                <Slider value={[contrast]} min={50} max={150} step={1} onValueChange={(v) => setContrast(v[0])} />
-              </div>
-              <div className="space-y-2">
-                <label className="text-xs text-muted-foreground">Saturação ({saturation}%)</label>
-                <Slider value={[saturation]} min={50} max={180} step={1} onValueChange={(v) => setSaturation(v[0])} />
-              </div>
+              <div className="space-y-2"><label className="text-xs text-muted-foreground">Brilho ({brightness}%)</label><Slider value={[brightness]} min={50} max={150} step={1} onValueChange={(v) => setBrightness(v[0])} /></div>
+              <div className="space-y-2"><label className="text-xs text-muted-foreground">Contraste ({contrast}%)</label><Slider value={[contrast]} min={50} max={150} step={1} onValueChange={(v) => setContrast(v[0])} /></div>
+              <div className="space-y-2"><label className="text-xs text-muted-foreground">Saturação ({saturation}%)</label><Slider value={[saturation]} min={50} max={180} step={1} onValueChange={(v) => setSaturation(v[0])} /></div>
 
               <div className="space-y-2">
                 <label className="text-xs text-muted-foreground">Sticker</label>
@@ -784,8 +717,26 @@ ${newPost}` : newPost;
               </div>
             </div>
 
+            {/* Câmera: frontal/traseira e lista de dispositivos */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 items-end">
+              <div className="space-y-2">
+                <label className="text-xs text-muted-foreground">Câmera</label>
+                <div className="flex gap-2">
+                  <Button variant={cameraFacing === 'user' ? 'default' : 'outline'} size="sm" onClick={() => restartPreviewWith('user')}>Frontal</Button>
+                  <Button variant={cameraFacing === 'environment' ? 'default' : 'outline'} size="sm" onClick={() => restartPreviewWith('environment')}>Traseira</Button>
+                </div>
+              </div>
+              <div className="space-y-2 sm:col-span-2">
+                <label className="text-xs text-muted-foreground">Dispositivo</label>
+                <select className="w-full border rounded px-2 py-1 h-9 bg-background" value={cameraDeviceId ?? ''} onChange={(e) => restartPreviewWith(cameraFacing, e.target.value || null)}>
+                  <option value="">Padrão ({cameraFacing})</option>
+                  {videoInputs.map((d) => (<option key={d.deviceId} value={d.deviceId}>{d.label || `Camera ${d.deviceId.slice(0,6)}`}</option>))}
+                </select>
+              </div>
+            </div>
+
             <div className="flex items-center justify-between text-sm text-muted-foreground">
-              <span>{recRecorder ? `${recTime}s / 15s` : "Pronto para gravar"}</span>
+              <span>{recRecorder ? `${recTime}s / 15s` : (isPreviewing ? 'Pré-visualização ativa' : 'Carregando câmera...')}</span>
               <div className="flex gap-2">
                 {!recRecorder ? (
                   <Button onClick={startRecording}><Video className="h-4 w-4 mr-2" />Iniciar</Button>
