@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
-  Camera, Video, Maximize2, Minimize2, Images, RotateCcw
+  Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -461,15 +461,15 @@ export default function Feed() {
 
   /* ---------- UI ---------- */
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         {/* Composer */}
-        <Card className="border shadow-sm bg-card">
+        <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
             <div className="flex gap-3">
-              <Avatar className="h-10 w-10">
+              <Avatar className="h-10 w-10 ring-2 ring-primary/20 shadow-sm">
                 <AvatarImage src={user?.user_metadata?.avatar_url} />
-                <AvatarFallback className="bg-primary text-primary-foreground">
+                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-inner">
                   {user?.email?.[0]?.toUpperCase()}
                 </AvatarFallback>
               </Avatar>
@@ -479,30 +479,47 @@ export default function Feed() {
                   placeholder="Título da publicação (opcional)"
                   value={postTitle}
                   onChange={(e) => setPostTitle(e.target.value)}
-                  className="font-medium"
+                  className="font-medium border-0 bg-muted/50 shadow-inner focus:bg-background/50 transition-all duration-300 rounded-xl"
                 />
 
                 <MentionTextarea
                   placeholder="O que você está pensando? Use @ para mencionar alguém"
                   value={newPost}
                   onChange={(e) => setNewPost(e.target.value)}
-                  className="min-h-[80px] resize-none"
+                  className="min-h-[80px] resize-none border-0 bg-muted/50 shadow-inner focus:bg-background/50 transition-all duration-300 rounded-xl"
                 />
 
                 {mediaFiles.length > 0 && (
-                  <div className="flex flex-wrap gap-2">
+                  <div className="flex flex-wrap gap-3">
                     {mediaFiles.map((file, index) => (
-                      <div key={index} className="relative">
-                        <div className="w-20 h-20 rounded-lg overflow-hidden bg-muted flex items-center justify-center">
+                      <div key={index} className="relative group">
+                        <div className="w-20 h-20 rounded-xl overflow-hidden bg-gradient-to-br from-muted to-muted/50 shadow-lg group-hover:shadow-xl transition-all duration-300 flex items-center justify-center border border-border/50">
                           {file.type.startsWith("image/") ? (
-                            <img src={URL.createObjectURL(file)} alt="Preview" className="w-full h-full object-cover" />
+                            <img 
+                              src={URL.createObjectURL(file)} 
+                              alt="Preview" 
+                              className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
+                            />
                           ) : (
-                            <video src={URL.createObjectURL(file)} className="w-full h-full object-cover" muted playsInline />
+                            <div className="relative w-full h-full">
+                              <video 
+                                src={URL.createObjectURL(file)} 
+                                className="w-full h-full object-cover"
+                                muted 
+                                playsInline 
+                              />
+                              <div className="absolute inset-0 bg-black/20 flex items-center justify-center">
+                                <div className="bg-black/50 rounded-full p-1.5 shadow-lg">
+                                  <Play className="h-4 w-4 text-white fill-white" />
+                                </div>
+                              </div>
+                            </div>
                           )}
                         </div>
                         <Button
-                          variant="destructive" size="icon"
-                          className="absolute -top-2 -right-2 h-5 w-5 rounded-full"
+                          variant="destructive" 
+                          size="icon"
+                          className="absolute -top-2 -right-2 h-6 w-6 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:scale-110"
                           onClick={() => removeFile(index)}
                         >
                           <X className="h-3 w-3" />
@@ -539,9 +556,11 @@ export default function Feed() {
                 />
 
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1">
                     <Button
-                      variant="ghost" size="icon" className="text-muted-foreground"
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-muted-foreground hover:text-foreground hover:bg-primary/10 rounded-xl transition-all duration-300 shadow-sm"
                       onClick={() => galleryInputRef.current?.click()}
                       aria-label="Abrir galeria"
                     >
@@ -549,7 +568,9 @@ export default function Feed() {
                     </Button>
 
                     <Button
-                      variant="ghost" size="icon" className="text-muted-foreground"
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-muted-foreground hover:text-foreground hover:bg-primary/10 rounded-xl transition-all duration-300 shadow-sm"
                       onClick={() => cameraPhotoInputRef.current?.click()}
                       aria-label="Abrir câmera (foto)"
                     >
@@ -557,7 +578,9 @@ export default function Feed() {
                     </Button>
 
                     <Button
-                      variant="ghost" size="icon" className="text-muted-foreground"
+                      variant="ghost" 
+                      size="icon" 
+                      className="text-muted-foreground hover:text-foreground hover:bg-primary/10 rounded-xl transition-all duration-300 shadow-sm"
                       onClick={() => cameraVideoInputRef.current?.click()}
                       aria-label="Abrir câmera (vídeo)"
                     >
@@ -565,7 +588,7 @@ export default function Feed() {
                     </Button>
 
                     {(processing) && (
-                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                      <span className="text-xs text-muted-foreground flex items-center gap-1 ml-2">
                         <RotateCcw className="h-3 w-3 animate-spin" /> processando mídia…
                       </span>
                     )}
@@ -574,7 +597,7 @@ export default function Feed() {
                   <Button
                     onClick={handleCreatePost}
                     disabled={(!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading}
-                    className="bg-gradient-to-r from-primary to-secondary hover:opacity-90 text-white"
+                    className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 rounded-xl font-semibold"
                   >
                     {uploading ? "Publicando..." : "Publicar"}
                   </Button>
@@ -597,15 +620,16 @@ export default function Feed() {
           const mediaList: string[] = post.media_urls || [];
 
           return (
-            <Card key={post.id} className={cn("border shadow-sm bg-card hover:shadow-md transition-shadow",
-              post.is_community_approved && "border-primary/50")}
-            >
+            <Card key={post.id} className={cn(
+              "border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-500",
+              post.is_community_approved && "ring-1 ring-primary/30 shadow-primary/10"
+            )}>
               <CardContent className="pt-6 space-y-4">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-3">
-                    <Avatar>
+                    <Avatar className="ring-2 ring-primary/20 shadow-sm">
                       <AvatarImage src={post.profiles?.avatar_url} />
-                      <AvatarFallback className="bg-primary text-primary-foreground">
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-inner">
                         {post.profiles?.username?.[0]?.toUpperCase()}
                       </AvatarFallback>
                     </Avatar>
@@ -620,17 +644,20 @@ export default function Feed() {
                   {isOwnPost && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" aria-label="Opções da postagem">
+                        <Button variant="ghost" size="icon" className="rounded-xl hover:bg-primary/10 transition-colors">
                           <MoreVertical className="h-4 w-4" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-44">
-                        <DropdownMenuItem onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}>
+                      <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl">
+                        <DropdownMenuItem 
+                          onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}
+                          className="rounded-lg cursor-pointer"
+                        >
                           <Pencil className="h-4 w-4 mr-2" /> Editar postagem
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={() => deleteMutation.mutate(post.id)}
-                          className="text-red-600 focus:text-red-600"
+                          className="text-red-600 focus:text-red-600 rounded-lg cursor-pointer"
                         >
                           <Trash2 className="h-4 w-4 mr-2" /> Excluir postagem
                         </DropdownMenuItem>
@@ -640,7 +667,7 @@ export default function Feed() {
                 </div>
 
                 {post.is_community_approved && (
-                  <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary">
+                  <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary shadow-sm border-0">
                     ✓ Aprovado pela Comunidade
                   </Badge>
                 )}
@@ -650,23 +677,45 @@ export default function Feed() {
                 </p>
 
                 {mediaList.length > 0 && (
-                  <div className="grid grid-cols-2 gap-2 mt-3">
+                  <div className={cn(
+                    "grid gap-3 mt-3",
+                    mediaList.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                  )}>
                     {mediaList.map((raw: string, index: number) => {
                       const url = stripPrefix(raw);
-                      const v = isVideoUrl(raw);
+                      const isVideo = isVideoUrl(raw);
                       return (
                         <button
                           key={index}
-                          className="rounded-lg overflow-hidden group relative"
-                          onClick={() => { setViewerUrl(url); setViewerIsVideo(v); setViewerOpen(true); }}
+                          className="rounded-xl overflow-hidden group relative bg-gradient-to-br from-muted to-muted/50 shadow-lg hover:shadow-xl transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
                         >
-                          {v ? (
-                            <video src={url} className="w-full max-h-64 object-cover" controls playsInline preload="metadata" />
+                          {isVideo ? (
+                            <div className="relative w-full aspect-square">
+                              <video 
+                                src={url} 
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                playsInline 
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
+                                <div className="bg-black/60 rounded-full p-3 shadow-2xl transform group-hover:scale-110 transition-transform duration-300">
+                                  <Play className="h-6 w-6 text-white fill-white" />
+                                </div>
+                              </div>
+                            </div>
                           ) : (
-                            <img src={url} alt="Post media" className="w-full h-auto" />
+                            <div className="w-full aspect-square">
+                              <img 
+                                src={url} 
+                                alt="Post media" 
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                              />
+                            </div>
                           )}
-                          <span className="absolute bottom-2 right-2 bg-black/50 text-white text-[10px] px-1.5 py-0.5 rounded opacity-0 group-hover:opacity-100 transition">
-                            <Maximize2 className="inline h-3 w-3 mr-1" />
+                          <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 shadow-lg flex items-center gap-1">
+                            <Maximize2 className="h-3 w-3" />
+                            Expandir
                           </span>
                         </button>
                       );
@@ -675,7 +724,7 @@ export default function Feed() {
                 )}
 
                 {isVotingActive && (
-                  <div className="bg-muted/50 rounded-lg p-3 space-y-2">
+                  <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-4 space-y-3 shadow-inner border border-border/20">
                     <div className="flex items-center justify-between text-sm">
                       <span className="text-muted-foreground">
                         {(() => {
@@ -690,49 +739,84 @@ export default function Feed() {
                         })()}
                       </span>
                       <div className="flex gap-3 text-xs">
-                        <span className="flex items-center gap-1"><Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}</span>
-                        <span className="flex items-center gap-1"><Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}</span>
+                        <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm">
+                          <Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}
+                        </span>
+                        <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full shadow-sm">
+                          <Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}
+                        </span>
                       </div>
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        variant="outline" size="sm"
-                        className={cn("flex-1", userVote?.vote_type === "heart" && "bg-red-500/10 border-red-500 text-red-500")}
+                        variant="outline" 
+                        size="sm"
+                        className={cn(
+                          "flex-1 rounded-xl transition-all duration-300 shadow-sm",
+                          userVote?.vote_type === "heart" 
+                            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100 shadow-green-200" 
+                            : "hover:bg-green-50 hover:border-green-200"
+                        )}
                         onClick={() => handleVote(post.id, "heart")}
                       >
-                        <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-current")} />
+                        <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-green-600 text-green-600")} />
                         Aprovar
                       </Button>
                       <Button
-                        variant="outline" size="sm"
-                        className={cn("flex-1", userVote?.vote_type === "bomb" && "bg-orange-500/10 border-orange-500 text-orange-500")}
+                        variant="outline" 
+                        size="sm"
+                        className={cn(
+                          "flex-1 rounded-xl transition-all duration-300 shadow-sm",
+                          userVote?.vote_type === "bomb" 
+                            ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 shadow-red-200" 
+                            : "hover:bg-red-50 hover:border-red-200"
+                        )}
                         onClick={() => handleVote(post.id, "bomb")}
                       >
-                        <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-current")} />
+                        <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-red-600 text-red-600")} />
                         Rejeitar
                       </Button>
                     </div>
                   </div>
                 )}
 
-                <div className="flex items-center gap-4 pt-2 border-t">
+                <div className="flex items-center gap-4 pt-3 border-t border-border/20">
                   <Button
-                    variant="ghost" size="sm"
+                    variant="ghost" 
+                    size="sm"
                     onClick={() => handleLike(post.id, hasLiked)}
-                    className={hasLiked ? "text-red-500 hover:text-red-600" : ""}
+                    className={cn(
+                      "rounded-xl transition-all duration-300",
+                      hasLiked 
+                        ? "text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 shadow-sm" 
+                        : "hover:bg-muted"
+                    )}
                   >
-                    <Heart className={cn("h-5 w-5 mr-2", hasLiked && "fill-current")} />
+                    <Heart className={cn("h-5 w-5 mr-2 transition-all", hasLiked && "fill-current scale-110")} />
                     {likesCount}
                   </Button>
-                  <Button variant="ghost" size="sm" onClick={() => setOpeningCommentsFor(post)}>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setOpeningCommentsFor(post)}
+                    className="rounded-xl hover:bg-muted transition-all duration-300"
+                  >
                     <MessageCircle className="h-5 w-5 mr-2" />
                     {commentsCount}
                   </Button>
-                  <Button variant="ghost" size="sm">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="rounded-xl hover:bg-muted transition-all duration-300"
+                  >
                     <Send className="h-5 w-5 mr-2" />
                     Compartilhar
                   </Button>
-                  <Button variant="ghost" size="sm" className="ml-auto">
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="ml-auto rounded-xl hover:bg-muted transition-all duration-300"
+                  >
                     <Bookmark className="h-5 w-5" />
                   </Button>
                 </div>
@@ -750,21 +834,34 @@ export default function Feed() {
 
       {/* Viewer full-screen */}
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-4xl p-2 sm:p-4">
+        <DialogContent className="max-w-4xl p-0 bg-black border-0 shadow-2xl">
           <div className="relative">
             <Button
-              variant="secondary" size="icon"
-              className="absolute right-2 top-2 z-10"
-              onClick={() => setViewerOpen(false)} aria-label="Fechar"
+              variant="secondary" 
+              size="icon"
+              className="absolute right-4 top-4 z-50 bg-black/50 hover:bg-black/70 text-white border-0 rounded-xl shadow-lg hover:scale-110 transition-all duration-300"
+              onClick={() => setViewerOpen(false)} 
+              aria-label="Fechar"
             >
               <Minimize2 className="h-4 w-4" />
             </Button>
-            <div className="w-full h-full flex items-center justify-center">
+            <div className="w-full h-[80vh] flex items-center justify-center">
               {viewerUrl &&
                 (viewerIsVideo ? (
-                  <video src={viewerUrl} controls playsInline className="max-h-[80vh] max-w-full rounded-lg" preload="metadata" />
+                  <video 
+                    src={viewerUrl} 
+                    controls 
+                    playsInline 
+                    className="max-h-full max-w-full rounded-lg shadow-2xl" 
+                    preload="metadata"
+                    autoPlay
+                  />
                 ) : (
-                  <img src={viewerUrl} alt="Mídia" className="max-h-[80vh] max-w-full rounded-lg" />
+                  <img 
+                    src={viewerUrl} 
+                    alt="Mídia" 
+                    className="max-h-[80vh] max-w-full rounded-lg object-contain shadow-2xl" 
+                  />
                 ))}
             </div>
           </div>
@@ -773,19 +870,36 @@ export default function Feed() {
 
       {/* Editar */}
       <Dialog open={!!editingPost} onOpenChange={(o) => !o && setEditingPost(null)}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-lg rounded-2xl shadow-2xl">
           <DialogHeader><DialogTitle>Editar postagem</DialogTitle></DialogHeader>
-          <Textarea value={editContent} onChange={(e) => setEditContent(e.target.value)} rows={8} placeholder="Edite o conteúdo da postagem" />
+          <Textarea 
+            value={editContent} 
+            onChange={(e) => setEditContent(e.target.value)} 
+            rows={8} 
+            placeholder="Edite o conteúdo da postagem" 
+            className="rounded-xl border-border/50 focus:border-primary/50 transition-colors"
+          />
           <DialogFooter>
-            <Button variant="outline" onClick={() => setEditingPost(null)}>Cancelar</Button>
-            <Button onClick={() => editMutation.mutate()}>Salvar alterações</Button>
+            <Button 
+              variant="outline" 
+              onClick={() => setEditingPost(null)}
+              className="rounded-xl border-border/50 hover:border-primary/50 transition-colors"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => editMutation.mutate()}
+              className="rounded-xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg transition-all duration-300"
+            >
+              Salvar alterações
+            </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       {/* Comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => { if (!o) setOpeningCommentsFor(null); }}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="max-w-xl rounded-2xl shadow-2xl">
           <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
           <div className="max-h-[50vh] overflow-auto space-y-4 pr-1">
             {loadingComments ? (
@@ -794,10 +908,12 @@ export default function Feed() {
               <p className="text-sm text-muted-foreground">Seja o primeiro a comentar!</p>
             ) : (
               openPostComments!.map((c: any) => (
-                <div key={c.id} className="flex items-start gap-3">
-                  <Avatar className="h-8 w-8">
+                <div key={c.id} className="flex items-start gap-3 group">
+                  <Avatar className="h-8 w-8 ring-1 ring-primary/20 shadow-sm">
                     <AvatarImage src={c.author?.avatar_url || ""} />
-                    <AvatarFallback>{c.author?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground text-xs">
+                      {c.author?.username?.[0]?.toUpperCase()}
+                    </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2">
@@ -815,9 +931,19 @@ export default function Feed() {
             )}
           </div>
           <div className="mt-2 space-y-2">
-            <Textarea value={newCommentText} onChange={(e) => setNewCommentText(e.target.value)} placeholder="Escreva um comentário…" rows={3} />
+            <Textarea 
+              value={newCommentText} 
+              onChange={(e) => setNewCommentText(e.target.value)} 
+              placeholder="Escreva um comentário…" 
+              rows={3} 
+              className="rounded-xl border-border/50 focus:border-primary/50 transition-colors"
+            />
             <div className="flex justify-end">
-              <Button onClick={() => addComment.mutate()} disabled={!newCommentText.trim() || !openingCommentsFor}>
+              <Button 
+                onClick={() => addComment.mutate()} 
+                disabled={!newCommentText.trim() || !openingCommentsFor}
+                className="rounded-xl bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg transition-all duration-300"
+              >
                 Comentar
               </Button>
             </div>
