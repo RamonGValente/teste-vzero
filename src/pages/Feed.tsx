@@ -16,9 +16,17 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { MentionText } from "@/components/MentionText";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import {
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
+} from "@/components/ui/dropdown-menu";
+import {
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
+} from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+
+/* ffmpeg.wasm */
+import { FFmpeg } from "@ffmpeg/ffmpeg";
+import { toBlobURL, fetchFile } from "@ffmpeg/util";
 
 /* helpers */
 const MEDIA_PREFIX = { image: "image::", video: "video::" } as const;
@@ -31,21 +39,78 @@ const fmtDateTime = (iso: string) =>
     day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
   });
 
-async function validateVideoDuration(file: File, maxSeconds = 15) {
-  if (!file.type.startsWith("video/")) return true;
+async function getDuration(file: File): Promise<number> {
   const url = URL.createObjectURL(file);
   try {
-    const duration = await new Promise<number>((resolve, reject) => {
+    return await new Promise<number>((resolve, reject) => {
       const v = document.createElement("video");
       v.preload = "metadata";
       v.src = url;
       v.onloadedmetadata = () => resolve(v.duration || 0);
       v.onerror = () => reject(new Error("Falha ao ler vídeo"));
     });
-    return duration <= maxSeconds + 0.2;
   } finally {
     URL.revokeObjectURL(url);
   }
+}
+async function validateVideoDuration(file: File, maxSeconds = 15) {
+  if (!file.type.startsWith("video/")) return true;
+  const dur = await getDuration(file).catch(() => 0);
+  return dur > 0 && dur <= maxSeconds + 0.3;
+}
+
+/** compressão e corte para 15s com ffmpeg.wasm */
+function useFFmpeg() {
+  const ffmpegRef = useRef<FFmpeg | null>(null);
+  const [ready, setReady] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const ensure = async () => {
+    if (ready) return;
+    setLoading(true);
+    const ff = new FFmpeg();
+    const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist";
+    await ff.load({
+      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
+      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
+    });
+    ffmpegRef.current = ff;
+    setReady(true);
+    setLoading(false);
+  };
+
+  const compress = async (file: File): Promise<File> => {
+    await ensure();
+    const ff = ffmpegRef.current!;
+    // nomes fixos
+    const inName = "input";
+    const outName = "output.webm";
+
+    // escreve arquivo virtual
+    await ff.writeFile(inName, await fetchFile(file));
+
+    // -t 15 -> corta em 15s
+    // -vf scale=720:-2 -> altura proporcional (até 720p)
+    // libvpx-vp9 + libopus (formato webm) para melhor compatibilidade no navegador
+    await ff.exec([
+      "-i", inName,
+      "-t", "15",
+      "-vf", "scale='min(720,iw)':'-2':force_original_aspect_ratio=decrease",
+      "-c:v", "libvpx-vp9",
+      "-b:v", "1200k",
+      "-c:a", "libopus",
+      "-b:a", "96k",
+      "-pix_fmt", "yuv420p",
+      outName,
+    ]);
+
+    const data = await ff.readFile(outName);
+    const blob = new Blob([data as Uint8Array], { type: "video/webm" });
+    const nameBase = (file.name?.split(".")[0] || "video") + "-compressed.webm";
+    return new File([blob], nameBase, { type: "video/webm" });
+  };
+
+  return { ready, loading, ensure, compress };
 }
 
 type PostRow = any;
@@ -74,6 +139,7 @@ export default function Feed() {
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
   const [readingMeta, setReadingMeta] = useState(false);
+  const { loading: ffLoading, compress } = useFFmpeg();
 
   useEffect(() => {
     if (!user) return;
@@ -136,33 +202,49 @@ export default function Feed() {
     return () => clearInterval(i);
   }, []);
 
+  /** Seleção de arquivos: aplica compressão para vídeos */
   const onFilesPicked = async (files?: FileList | null) => {
     const list = Array.from(files || []);
     if (list.length === 0) return;
 
-    const valid = list.filter(f => f.type.startsWith("image/") || f.type.startsWith("video/"));
-    if (valid.length !== list.length) {
-      toast({ variant: "destructive", title: "Arquivos inválidos", description: "Apenas imagens e vídeos são permitidos." });
-    }
-
     setReadingMeta(true);
     const accepted: File[] = [];
-    for (const f of valid) {
+
+    for (const f of list) {
       if (f.type.startsWith("video/")) {
+        // valida duração e corta/comprime
         const ok = await validateVideoDuration(f, 15).catch(() => false);
         if (!ok) {
-          toast({
-            variant: "destructive",
-            title: "Vídeo acima de 15s",
-            description: "Grave novamente com até 15 segundos.",
-          });
-          continue;
+          // se vier >15s, tentamos cortar com ffmpeg; se ainda falhar, rejeita
+          try {
+            const trimmed = await compress(f);
+            accepted.push(trimmed);
+          } catch {
+            // última checagem: calcular duração do recorte falhou => rejeita
+            toast({
+              variant: "destructive",
+              title: "Vídeo muito longo",
+              description: "Grave até 15s e tente novamente.",
+            });
+          }
+        } else {
+          // mesmo com <=15s, comprimimos para reduzir tamanho
+          try {
+            const small = await compress(f);
+            accepted.push(small);
+          } catch {
+            // fallback: anexar original
+            accepted.push(f);
+          }
         }
+      } else if (f.type.startsWith("image/")) {
+        accepted.push(f);
+      } else {
+        toast({ variant: "destructive", title: "Arquivo inválido", description: "Apenas imagem ou vídeo." });
       }
-      accepted.push(f);
     }
-    setReadingMeta(false);
 
+    setReadingMeta(false);
     if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
   };
 
@@ -178,11 +260,22 @@ export default function Feed() {
     try {
       const mediaUrls: string[] = [];
       for (const file of mediaFiles) {
-        const fileExt = (file.name.split(".").pop() || "").toLowerCase();
+        // garante extensão
+        const extFromType = file.type.startsWith("video/") ? "webm" :
+                            (file.type.split("/")[1] || "png");
+        const fileExt = (file.name.split(".").pop() || extFromType).toLowerCase();
         const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const filePath = `${user?.id}/${fileName}`;
-        const { error: upErr } = await supabase.storage.from("media").upload(filePath, file, { cacheControl: "3600", upsert: false });
+
+        const { error: upErr } = await supabase.storage
+          .from("media")
+          .upload(filePath, file, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: file.type || (fileExt === "webm" ? "video/webm" : undefined),
+          });
         if (upErr) throw upErr;
+
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + publicUrl);
       }
@@ -207,11 +300,12 @@ export default function Feed() {
         await saveMentions(postData.id, "post", content, user.id);
       }
 
-      toast({ title: "Post criado!", description: "Sua postagem entrará em votação por 1 hora." });
+      toast({ title: "Post criado!", description: "Sua postagem entrou no feed." });
       setPostTitle(""); setNewPost(""); setMediaFiles([]);
       refetch();
     } catch (e: any) {
-      toast({ variant: "destructive", title: "Erro", description: e?.message || "Falha ao criar post." });
+      console.error(e);
+      toast({ variant: "destructive", title: "Erro ao publicar", description: e?.message || "Falha ao criar post." });
     } finally {
       setUploading(false);
     }
@@ -345,6 +439,7 @@ export default function Feed() {
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Criador */}
         <Card className="border shadow-sm bg-card">
           <CardContent className="pt-6">
             <div className="flex gap-3">
@@ -416,14 +511,13 @@ export default function Feed() {
                   type="file"
                   className="hidden"
                   accept="video/*"
-                  capture="environment"  // abre a câmera traseira por padrão
+                  capture="environment"
                   multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
                 />
 
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
-                    {/* Galeria */}
                     <Button
                       variant="ghost" size="icon" className="text-muted-foreground"
                       onClick={() => galleryInputRef.current?.click()}
@@ -432,7 +526,6 @@ export default function Feed() {
                       <Images className="h-5 w-5" />
                     </Button>
 
-                    {/* Foto (câmera nativa) */}
                     <Button
                       variant="ghost" size="icon" className="text-muted-foreground"
                       onClick={() => cameraPhotoInputRef.current?.click()}
@@ -441,7 +534,6 @@ export default function Feed() {
                       <Camera className="h-5 w-5" />
                     </Button>
 
-                    {/* Vídeo (apenas 1 ícone abre a câmera nativa) */}
                     <Button
                       variant="ghost" size="icon" className="text-muted-foreground"
                       onClick={() => cameraVideoInputRef.current?.click()}
@@ -450,8 +542,8 @@ export default function Feed() {
                       <Video className="h-5 w-5" />
                     </Button>
 
-                    {readingMeta && (
-                      <span className="text-xs text-muted-foreground">validando vídeo…</span>
+                    {(readingMeta || ffLoading) && (
+                      <span className="text-xs text-muted-foreground">processando vídeo…</span>
                     )}
                   </div>
 
