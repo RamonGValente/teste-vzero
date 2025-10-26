@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
-  Camera, Video, Maximize2, Minimize2, Images
+  Camera, Video, Maximize2, Minimize2, Images, RotateCcw
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -16,19 +16,11 @@ import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { MentionText } from "@/components/MentionText";
-import {
-  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger
-} from "@/components/ui/dropdown-menu";
-import {
-  Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
-} from "@/components/ui/dialog";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
-/* ffmpeg.wasm */
-import { FFmpeg } from "@ffmpeg/ffmpeg";
-import { toBlobURL, fetchFile } from "@ffmpeg/util";
-
-/* helpers */
+/* ---------- Helpers ---------- */
 const MEDIA_PREFIX = { image: "image::", video: "video::" } as const;
 const isVideoUrl = (u: string) =>
   u.startsWith(MEDIA_PREFIX.video) ||
@@ -36,111 +28,111 @@ const isVideoUrl = (u: string) =>
 const stripPrefix = (u: string) => u.replace(/^image::|^video::/, "");
 const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
+    day: "2-digit", month: "2-digit", year: "numeric",
+    hour: "2-digit", minute: "2-digit",
   });
 
-async function getDuration(file: File): Promise<number> {
-  const url = URL.createObjectURL(file);
-  try {
-    return await new Promise<number>((resolve, reject) => {
-      const v = document.createElement("video");
-      v.preload = "metadata";
-      v.src = url;
-      v.onloadedmetadata = () => resolve(v.duration || 0);
-      v.onerror = () => reject(new Error("Falha ao ler vídeo"));
-    });
-  } finally {
-    URL.revokeObjectURL(url);
+/** Lê duração com fallback e timeout (Safari/Android às vezes não carrega metadata) */
+async function getVideoDurationSafe(file: File, timeoutMs = 4000): Promise<number> {
+  return new Promise<number>((resolve) => {
+    let settled = false;
+    const url = URL.createObjectURL(file);
+    const v = document.createElement("video");
+    v.preload = "metadata";
+    const done = (sec: number) => {
+      if (settled) return;
+      settled = true;
+      URL.revokeObjectURL(url);
+      resolve(sec);
+    };
+    const timer = setTimeout(() => done(0), timeoutMs);
+    v.onloadedmetadata = () => {
+      clearTimeout(timer);
+      done(isFinite(v.duration) ? v.duration : 0);
+    };
+    v.onerror = () => {
+      clearTimeout(timer);
+      done(0);
+    };
+    v.src = url;
+  });
+}
+
+/** Comprime imagem: redimensiona máx. 1440px (lado maior) e salva JPEG q=0.8 */
+async function compressImage(file: File, maxSize = 1440, quality = 0.8): Promise<File> {
+  if (!file.type.startsWith("image/")) return file;
+  const dataUrl = await readFileAsDataURL(file);
+  const img = await loadImage(dataUrl);
+  const { canvas, ctx, w, h } = createCanvasToFit(img, maxSize);
+  ctx.drawImage(img, 0, 0, w, h);
+  const blob = await canvasToBlob(canvas, "image/jpeg", quality);
+  const name = (file.name.split(".")[0] || "image") + "-compressed.jpg";
+  return new File([blob], name, { type: "image/jpeg" });
+}
+function readFileAsDataURL(file: File): Promise<string> {
+  return new Promise((res, rej) => {
+    const fr = new FileReader();
+    fr.onload = () => res(String(fr.result));
+    fr.onerror = rej;
+    fr.readAsDataURL(file);
+  });
+}
+function loadImage(src: string): Promise<HTMLImageElement> {
+  return new Promise((res, rej) => {
+    const img = new Image();
+    img.onload = () => res(img);
+    img.onerror = rej;
+    img.src = src;
+  });
+}
+function createCanvasToFit(img: HTMLImageElement, maxSide: number) {
+  let w = img.width;
+  let h = img.height;
+  if (Math.max(w, h) > maxSide) {
+    const scale = maxSide / Math.max(w, h);
+    w = Math.round(w * scale);
+    h = Math.round(h * scale);
   }
+  const canvas = document.createElement("canvas");
+  canvas.width = w; canvas.height = h;
+  const ctx = canvas.getContext("2d")!;
+  return { canvas, ctx, w, h };
 }
-async function validateVideoDuration(file: File, maxSeconds = 15) {
-  if (!file.type.startsWith("video/")) return true;
-  const dur = await getDuration(file).catch(() => 0);
-  return dur > 0 && dur <= maxSeconds + 0.3;
-}
-
-/** compressão e corte para 15s com ffmpeg.wasm */
-function useFFmpeg() {
-  const ffmpegRef = useRef<FFmpeg | null>(null);
-  const [ready, setReady] = useState(false);
-  const [loading, setLoading] = useState(false);
-
-  const ensure = async () => {
-    if (ready) return;
-    setLoading(true);
-    const ff = new FFmpeg();
-    const base = "https://unpkg.com/@ffmpeg/core@0.12.6/dist";
-    await ff.load({
-      coreURL: await toBlobURL(`${base}/ffmpeg-core.js`, "text/javascript"),
-      wasmURL: await toBlobURL(`${base}/ffmpeg-core.wasm`, "application/wasm"),
-    });
-    ffmpegRef.current = ff;
-    setReady(true);
-    setLoading(false);
-  };
-
-  const compress = async (file: File): Promise<File> => {
-    await ensure();
-    const ff = ffmpegRef.current!;
-    // nomes fixos
-    const inName = "input";
-    const outName = "output.webm";
-
-    // escreve arquivo virtual
-    await ff.writeFile(inName, await fetchFile(file));
-
-    // -t 15 -> corta em 15s
-    // -vf scale=720:-2 -> altura proporcional (até 720p)
-    // libvpx-vp9 + libopus (formato webm) para melhor compatibilidade no navegador
-    await ff.exec([
-      "-i", inName,
-      "-t", "15",
-      "-vf", "scale='min(720,iw)':'-2':force_original_aspect_ratio=decrease",
-      "-c:v", "libvpx-vp9",
-      "-b:v", "1200k",
-      "-c:a", "libopus",
-      "-b:a", "96k",
-      "-pix_fmt", "yuv420p",
-      outName,
-    ]);
-
-    const data = await ff.readFile(outName);
-    const blob = new Blob([data as Uint8Array], { type: "video/webm" });
-    const nameBase = (file.name?.split(".")[0] || "video") + "-compressed.webm";
-    return new File([blob], nameBase, { type: "video/webm" });
-  };
-
-  return { ready, loading, ensure, compress };
+function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
+  return new Promise((res) => canvas.toBlob(b => res(b!), type, quality));
 }
 
+/* ---------- Types ---------- */
 type PostRow = any;
 
+/* ---------- Component ---------- */
 export default function Feed() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  /* Compose */
   const [postTitle, setPostTitle] = useState("");
   const [newPost, setNewPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
+  const [processing, setProcessing] = useState(false);
 
+  /* Native Inputs */
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
 
+  /* Edit/Comments/Viewer */
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
   const [openingCommentsFor, setOpeningCommentsFor] = useState<PostRow | null>(null);
   const [newCommentText, setNewCommentText] = useState("");
-
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
-  const [readingMeta, setReadingMeta] = useState(false);
-  const { loading: ffLoading, compress } = useFFmpeg();
-
+  /* Mark as viewed */
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -155,6 +147,7 @@ export default function Feed() {
     markAsViewed();
   }, [user, queryClient]);
 
+  /* Load posts */
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
@@ -184,6 +177,7 @@ export default function Feed() {
     enabled: !!user,
   });
 
+  /* Realtime */
   useEffect(() => {
     const ch = supabase
       .channel("feed-realtime")
@@ -195,6 +189,7 @@ export default function Feed() {
     return () => { supabase.removeChannel(ch); };
   }, [refetch]);
 
+  /* Vote cron */
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
     f();
@@ -202,55 +197,52 @@ export default function Feed() {
     return () => clearInterval(i);
   }, []);
 
-  /** Seleção de arquivos: aplica compressão para vídeos */
+  /* --------- Media picking (Galeria/Foto/Video) ---------- */
   const onFilesPicked = async (files?: FileList | null) => {
     const list = Array.from(files || []);
     if (list.length === 0) return;
 
-    setReadingMeta(true);
+    setProcessing(true);
     const accepted: File[] = [];
 
     for (const f of list) {
-      if (f.type.startsWith("video/")) {
-        // valida duração e corta/comprime
-        const ok = await validateVideoDuration(f, 15).catch(() => false);
-        if (!ok) {
-          // se vier >15s, tentamos cortar com ffmpeg; se ainda falhar, rejeita
-          try {
-            const trimmed = await compress(f);
-            accepted.push(trimmed);
-          } catch {
-            // última checagem: calcular duração do recorte falhou => rejeita
+      try {
+        if (f.type.startsWith("image/")) {
+          // compressão de imagem
+          const small = await compressImage(f, 1440, 0.8);
+          accepted.push(small);
+        } else if (f.type.startsWith("video/")) {
+          // validação de duração (≤15s). Safari pode retornar 0 => se 0, aceitamos e validamos depois do upload.
+          const dur = await getVideoDurationSafe(f).catch(() => 0);
+          if (dur === 0) {
+            console.warn("[video] duração não lida; aceitando mesmo assim para não travar UX.");
+            accepted.push(f);
+          } else if (dur <= 15.3) {
+            accepted.push(f);
+          } else {
             toast({
               variant: "destructive",
-              title: "Vídeo muito longo",
-              description: "Grave até 15s e tente novamente.",
+              title: "Vídeo acima de 15s",
+              description: "Grave novamente com até 15 segundos.",
             });
           }
         } else {
-          // mesmo com <=15s, comprimimos para reduzir tamanho
-          try {
-            const small = await compress(f);
-            accepted.push(small);
-          } catch {
-            // fallback: anexar original
-            accepted.push(f);
-          }
+          toast({ variant: "destructive", title: "Arquivo inválido", description: "Apenas imagem ou vídeo." });
         }
-      } else if (f.type.startsWith("image/")) {
-        accepted.push(f);
-      } else {
-        toast({ variant: "destructive", title: "Arquivo inválido", description: "Apenas imagem ou vídeo." });
+      } catch (err) {
+        console.error("Erro ao processar arquivo:", err);
+        toast({ variant: "destructive", title: "Erro ao processar mídia", description: "Tente novamente." });
       }
     }
 
-    setReadingMeta(false);
+    setProcessing(false);
     if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
   };
 
   const removeFile = (idx: number) =>
     setMediaFiles(prev => prev.filter((_, i) => i !== idx));
 
+  /* --------- Create Post (upload + insert) ---------- */
   const handleCreatePost = async () => {
     if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
       toast({ variant: "destructive", title: "Erro", description: "Adicione título, conteúdo ou mídia." });
@@ -259,26 +251,48 @@ export default function Feed() {
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
+
       for (const file of mediaFiles) {
-        // garante extensão
-        const extFromType = file.type.startsWith("video/") ? "webm" :
-                            (file.type.split("/")[1] || "png");
-        const fileExt = (file.name.split(".").pop() || extFromType).toLowerCase();
+        // valida de novo duração se possível (para vídeos que retornaram 0 antes)
+        if (file.type.startsWith("video/")) {
+          const dur = await getVideoDurationSafe(file).catch(() => 0);
+          if (dur > 15.3) {
+            toast({
+              variant: "destructive",
+              title: "Vídeo acima de 15s",
+              description: "Grave novamente com até 15 segundos.",
+            });
+            setUploading(false);
+            return;
+          }
+        }
+
+        // nome seguro
+        const extGuess = file.type.startsWith("video/")
+          ? (file.name.split(".").pop()?.toLowerCase() || "mp4")
+          : "jpg";
+        const fileExt = (file.name.split(".").pop() || extGuess).toLowerCase();
         const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const filePath = `${user?.id}/${fileName}`;
 
+        // upload
         const { error: upErr } = await supabase.storage
           .from("media")
           .upload(filePath, file, {
             cacheControl: "3600",
             upsert: false,
-            contentType: file.type || (fileExt === "webm" ? "video/webm" : undefined),
+            contentType: file.type || (fileExt === "jpg" ? "image/jpeg" : undefined),
           });
-        if (upErr) throw upErr;
+
+        if (upErr) {
+          console.error("Upload error:", upErr);
+          throw upErr;
+        }
 
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + publicUrl);
       }
+
       const votingEndsAt = new Date(); votingEndsAt.setHours(votingEndsAt.getHours() + 1);
       const content = postTitle.trim() ? `${postTitle}\n\n${newPost}` : newPost;
 
@@ -293,7 +307,11 @@ export default function Feed() {
         })
         .select()
         .single();
-      if (error) throw error;
+
+      if (error) {
+        console.error("Insert post error:", error);
+        throw error;
+      }
 
       if (postData && user) {
         const { saveMentions } = await import("@/utils/mentionsHelper");
@@ -304,13 +322,18 @@ export default function Feed() {
       setPostTitle(""); setNewPost(""); setMediaFiles([]);
       refetch();
     } catch (e: any) {
-      console.error(e);
-      toast({ variant: "destructive", title: "Erro ao publicar", description: e?.message || "Falha ao criar post." });
+      console.error("Falha ao publicar:", e);
+      toast({
+        variant: "destructive",
+        title: "Erro ao publicar",
+        description: e?.message || "Não foi possível criar o post. Veja o console para detalhes.",
+      });
     } finally {
       setUploading(false);
     }
   };
 
+  /* --------- Vote/Like/Comments/Edit/Delete (inalterado) ---------- */
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
       const existing = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
@@ -436,10 +459,11 @@ export default function Feed() {
       }),
   });
 
+  /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-background">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Criador */}
+        {/* Composer */}
         <Card className="border shadow-sm bg-card">
           <CardContent className="pt-6">
             <div className="flex gap-3">
@@ -488,7 +512,7 @@ export default function Feed() {
                   </div>
                 )}
 
-                {/* Inputs nativos */}
+                {/* Inputs nativos escondidos */}
                 <input
                   ref={galleryInputRef}
                   type="file"
@@ -503,7 +527,6 @@ export default function Feed() {
                   className="hidden"
                   accept="image/*"
                   capture="environment"
-                  multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
                 />
                 <input
@@ -512,7 +535,6 @@ export default function Feed() {
                   className="hidden"
                   accept="video/*"
                   capture="environment"
-                  multiple={false}
                   onChange={(e) => onFilesPicked(e.target.files)}
                 />
 
@@ -542,8 +564,10 @@ export default function Feed() {
                       <Video className="h-5 w-5" />
                     </Button>
 
-                    {(readingMeta || ffLoading) && (
-                      <span className="text-xs text-muted-foreground">processando vídeo…</span>
+                    {(processing) && (
+                      <span className="text-xs text-muted-foreground flex items-center gap-1">
+                        <RotateCcw className="h-3 w-3 animate-spin" /> processando mídia…
+                      </span>
                     )}
                   </div>
 
