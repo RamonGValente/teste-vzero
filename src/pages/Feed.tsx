@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
-  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause
+  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -114,6 +114,12 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 
 /* ---------- Types ---------- */
 type PostRow = any;
+type VoteUser = {
+  id: string;
+  username: string;
+  avatar_url: string;
+  vote_type: "heart" | "bomb";
+};
 
 /* ---------- Video Auto Player Hook ---------- */
 const useVideoAutoPlayer = () => {
@@ -345,6 +351,13 @@ export default function Feed() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
+  /* Vote Users Dialog */
+  const [voteUsersDialog, setVoteUsersDialog] = useState<{open: boolean; postId: string | null; voteType: "heart" | "bomb" | null}>({
+    open: false,
+    postId: null,
+    voteType: null
+  });
+
   /* Photo Audio Carousel */
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
@@ -369,16 +382,10 @@ export default function Feed() {
     markAsViewed();
   }, [user, queryClient]);
 
-  /* Load posts */
+  /* Load posts - MODIFICADO: Todos os usuários podem ver todas as postagens */
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
-      if (!user) return [];
-      const { data: friendships } = await supabase
-        .from("friendships").select("friend_id").eq("user_id", user.id);
-      const friendIds = friendships?.map((f) => f.friend_id) || [];
-      const allowedUserIds = [user.id, ...friendIds];
-
       const { data, error } = await supabase
         .from("posts")
         .select(`
@@ -388,15 +395,39 @@ export default function Feed() {
           comments (id),
           post_votes (id, user_id, vote_type)
         `)
-        .or(
-          `user_id.in.(${allowedUserIds.join(",")}),is_community_approved.eq.true,voting_period_active.eq.true`
-        )
         .order("created_at", { ascending: false });
 
       if (error) throw error;
       return data as PostRow[];
     },
     enabled: !!user,
+  });
+
+  /* Load vote users */
+  const { data: voteUsers } = useQuery({
+    queryKey: ["vote-users", voteUsersDialog.postId, voteUsersDialog.voteType],
+    queryFn: async () => {
+      if (!voteUsersDialog.postId || !voteUsersDialog.voteType) return [];
+
+      const { data, error } = await supabase
+        .from("post_votes")
+        .select(`
+          vote_type,
+          profiles:user_id (id, username, avatar_url)
+        `)
+        .eq("post_id", voteUsersDialog.postId)
+        .eq("vote_type", voteUsersDialog.voteType);
+
+      if (error) throw error;
+      
+      return data.map(vote => ({
+        id: vote.profiles.id,
+        username: vote.profiles.username,
+        avatar_url: vote.profiles.avatar_url,
+        vote_type: vote.vote_type
+      })) as VoteUser[];
+    },
+    enabled: !!voteUsersDialog.postId && !!voteUsersDialog.voteType,
   });
 
   /* Realtime */
@@ -893,7 +924,8 @@ export default function Feed() {
       </Card>
     );
   };
-    /* --------- Vote/Like/Comments/Edit/Delete ---------- */
+
+  /* --------- Vote/Like/Comments/Edit/Delete ---------- */
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
       const existing = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
@@ -911,8 +943,16 @@ export default function Feed() {
       }
       refetch();
     } catch {
-      toast({ variant: "destructive", title: "Erro ao votar", description: "Você precisa ser amigo do autor para votar." });
+      toast({ variant: "destructive", title: "Erro ao votar", description: "Tente novamente." });
     }
+  };
+
+  const handleShowVoteUsers = (postId: string, voteType: "heart" | "bomb") => {
+    setVoteUsersDialog({
+      open: true,
+      postId,
+      voteType
+    });
   };
 
   const handleLike = async (postId: string, hasLiked: boolean) => {
@@ -926,7 +966,7 @@ export default function Feed() {
       }
       refetch();
     } catch {
-      toast({ variant: "destructive", title: "Erro ao curtir", description: "Você precisa ser amigo do autor para curtir." });
+      toast({ variant: "destructive", title: "Erro ao curtir", description: "Tente novamente." });
     }
   };
 
@@ -1030,18 +1070,15 @@ export default function Feed() {
   /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        {/* Logo Centralizada */}
+      <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
+        {/* Logo Centralizada - ESPAÇO REDUZIDO */}
         <div className="flex justify-center">
           <img 
             src="https://sistemaapp.netlify.app/assets/logo-wTbWaudN.png" 
             alt="Logo" 
-            className="w-48 h-48 md:w-56 md:h-56 object-contain"
+            className="w-40 h-40 md:w-48 md:h-48 object-contain"
           />
         </div>
-
-        {/* Espaço de 1 linha */}
-        <div className="h-4"></div>
 
         {/* Composer */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
@@ -1269,7 +1306,7 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Photo Audio Carousel - NOVO DESIGN ELEGANTE COM GESTOS */}
+        {/* Photo Audio Carousel */}
         {renderPhotoAudioCarousel()}
 
         {/* Feed - Todas as postagens */}
@@ -1473,12 +1510,18 @@ export default function Feed() {
                         })()}
                       </span>
                       <div className="flex gap-3 text-xs">
-                        <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm">
+                        <button 
+                          onClick={() => handleShowVoteUsers(post.id, "heart")}
+                          className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm hover:bg-red-100 transition-colors"
+                        >
                           <Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}
-                        </span>
-                        <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full shadow-sm">
+                        </button>
+                        <button 
+                          onClick={() => handleShowVoteUsers(post.id, "bomb")}
+                          className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full shadow-sm hover:bg-orange-100 transition-colors"
+                        >
                           <Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}
-                        </span>
+                        </button>
                       </div>
                     </div>
                     <div className="flex gap-2">
@@ -1565,6 +1608,46 @@ export default function Feed() {
           </div>
         )}
       </div>
+
+      {/* Diálogo de Usuários que Votaram */}
+      <Dialog open={voteUsersDialog.open} onOpenChange={(open) => setVoteUsersDialog(prev => ({...prev, open}))}>
+        <DialogContent className="max-w-md rounded-2xl shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Users className="h-5 w-5" />
+              {voteUsersDialog.voteType === "heart" ? "Quem aprovou" : "Quem rejeitou"}
+            </DialogTitle>
+          </DialogHeader>
+          <div className="max-h-60 overflow-y-auto space-y-3">
+            {voteUsers && voteUsers.length > 0 ? (
+              voteUsers.map((user) => (
+                <div key={user.id} className="flex items-center gap-3 p-2 rounded-lg hover:bg-muted/50 transition-colors">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={user.avatar_url} />
+                    <AvatarFallback>{user.username[0].toUpperCase()}</AvatarFallback>
+                  </Avatar>
+                  <span className="font-medium">{user.username}</span>
+                  <Badge variant={voteUsersDialog.voteType === "heart" ? "default" : "destructive"} className="ml-auto">
+                    {voteUsersDialog.voteType === "heart" ? "👍" : "💣"}
+                  </Badge>
+                </div>
+              ))
+            ) : (
+              <p className="text-center text-muted-foreground py-4">
+                Nenhum usuário votou ainda
+              </p>
+            )}
+          </div>
+          <DialogFooter>
+            <Button 
+              onClick={() => setVoteUsersDialog({open: false, postId: null, voteType: null})}
+              className="rounded-xl"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Viewer full-screen */}
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
