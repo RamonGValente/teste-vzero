@@ -3,7 +3,8 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
-  Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play
+  Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
+  ChevronLeft, ChevronRight, Volume2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -21,44 +22,49 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Textarea } from "@/components/ui/textarea";
 
 /* ---------- Helpers ---------- */
-const MEDIA_PREFIX = { image: "image::", video: "video::" } as const;
+const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
 const isVideoUrl = (u: string) =>
   u.startsWith(MEDIA_PREFIX.video) ||
   /\.(mp4|webm|ogg|mov|m4v)$/i.test(u.split("::").pop() || u);
-const stripPrefix = (u: string) => u.replace(/^image::|^video::/, "");
+const isAudioUrl = (u: string) =>
+  u.startsWith(MEDIA_PREFIX.audio) ||
+  /\.(mp3|wav|ogg|m4a)$/i.test(u.split("::").pop() || u);
+const stripPrefix = (u: string) => u.replace(/^image::|^video::|^audio::/, "");
 const fmtDateTime = (iso: string) =>
   new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit", month: "2-digit", year: "numeric",
     hour: "2-digit", minute: "2-digit",
   });
 
-/** Lê duração com fallback e timeout (Safari/Android às vezes não carrega metadata) */
-async function getVideoDurationSafe(file: File, timeoutMs = 4000): Promise<number> {
+/** Lê duração com fallback e timeout */
+async function getMediaDurationSafe(file: File, timeoutMs = 4000): Promise<number> {
   return new Promise<number>((resolve) => {
     let settled = false;
     const url = URL.createObjectURL(file);
-    const v = document.createElement("video");
-    v.preload = "metadata";
+    const media = file.type.startsWith("video/") ? document.createElement("video") : document.createElement("audio");
+    media.preload = "metadata";
+    
     const done = (sec: number) => {
       if (settled) return;
       settled = true;
       URL.revokeObjectURL(url);
       resolve(sec);
     };
+    
     const timer = setTimeout(() => done(0), timeoutMs);
-    v.onloadedmetadata = () => {
+    media.onloadedmetadata = () => {
       clearTimeout(timer);
-      done(isFinite(v.duration) ? v.duration : 0);
+      done(isFinite(media.duration) ? media.duration : 0);
     };
-    v.onerror = () => {
+    media.onerror = () => {
       clearTimeout(timer);
       done(0);
     };
-    v.src = url;
+    media.src = url;
   });
 }
 
-/** Comprime imagem: redimensiona máx. 1440px (lado maior) e salva JPEG q=0.8 */
+/** Comprime imagem */
 async function compressImage(file: File, maxSize = 1440, quality = 0.8): Promise<File> {
   if (!file.type.startsWith("image/")) return file;
   const dataUrl = await readFileAsDataURL(file);
@@ -69,6 +75,7 @@ async function compressImage(file: File, maxSize = 1440, quality = 0.8): Promise
   const name = (file.name.split(".")[0] || "image") + "-compressed.jpg";
   return new File([blob], name, { type: "image/jpeg" });
 }
+
 function readFileAsDataURL(file: File): Promise<string> {
   return new Promise((res, rej) => {
     const fr = new FileReader();
@@ -77,6 +84,7 @@ function readFileAsDataURL(file: File): Promise<string> {
     fr.readAsDataURL(file);
   });
 }
+
 function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((res, rej) => {
     const img = new Image();
@@ -85,6 +93,7 @@ function loadImage(src: string): Promise<HTMLImageElement> {
     img.src = src;
   });
 }
+
 function createCanvasToFit(img: HTMLImageElement, maxSide: number) {
   let w = img.width;
   let h = img.height;
@@ -98,12 +107,90 @@ function createCanvasToFit(img: HTMLImageElement, maxSide: number) {
   const ctx = canvas.getContext("2d")!;
   return { canvas, ctx, w, h };
 }
+
 function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number): Promise<Blob> {
   return new Promise((res) => canvas.toBlob(b => res(b!), type, quality));
 }
 
 /* ---------- Types ---------- */
 type PostRow = any;
+
+/* ---------- Audio Recording Hook ---------- */
+const useAudioRecorder = () => {
+  const [isRecording, setIsRecording] = useState(false);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [recordingTime, setRecordingTime] = useState(0);
+  const mediaRecorder = useRef<MediaRecorder | null>(null);
+  const audioChunks = useRef<Blob[]>([]);
+  const timerRef = useRef<NodeJS.Timeout>();
+
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      mediaRecorder.current = new MediaRecorder(stream);
+      audioChunks.current = [];
+
+      mediaRecorder.current.ondataavailable = (event) => {
+        audioChunks.current.push(event.data);
+      };
+
+      mediaRecorder.current.onstop = () => {
+        const blob = new Blob(audioChunks.current, { type: 'audio/wav' });
+        setAudioBlob(blob);
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorder.current.start();
+      setIsRecording(true);
+      setRecordingTime(0);
+      
+      timerRef.current = setInterval(() => {
+        setRecordingTime(prev => {
+          if (prev >= 10) {
+            stopRecording();
+            return 10;
+          }
+          return prev + 1;
+        });
+      }, 1000);
+    } catch (error) {
+      console.error('Error starting recording:', error);
+      throw new Error('Não foi possível acessar o microfone');
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder.current && isRecording) {
+      mediaRecorder.current.stop();
+      setIsRecording(false);
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    }
+  };
+
+  const resetRecording = () => {
+    setAudioBlob(null);
+    setRecordingTime(0);
+  };
+
+  useEffect(() => {
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+      }
+    };
+  }, []);
+
+  return {
+    isRecording,
+    audioBlob,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    resetRecording
+  };
+};
 
 /* ---------- Component ---------- */
 export default function Feed() {
@@ -116,6 +203,17 @@ export default function Feed() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
+  const [postType, setPostType] = useState<'standard' | 'photo_audio'>('standard');
+
+  /* Audio Recording */
+  const {
+    isRecording,
+    audioBlob,
+    recordingTime,
+    startRecording,
+    stopRecording,
+    resetRecording
+  } = useAudioRecorder();
 
   /* Native Inputs */
   const galleryInputRef = useRef<HTMLInputElement>(null);
@@ -131,7 +229,10 @@ export default function Feed() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
 
-  /* Mark as viewed */
+  /* Photo Audio Carousel */
+  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
+  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+    /* Mark as viewed */
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -196,7 +297,7 @@ export default function Feed() {
     return () => clearInterval(i);
   }, []);
 
-  /* --------- Media picking (Galeria/Foto/Video) ---------- */
+  /* --------- Media picking ---------- */
   const onFilesPicked = async (files?: FileList | null) => {
     const list = Array.from(files || []);
     if (list.length === 0) return;
@@ -207,14 +308,12 @@ export default function Feed() {
     for (const f of list) {
       try {
         if (f.type.startsWith("image/")) {
-          // compressão de imagem
           const small = await compressImage(f, 1440, 0.8);
           accepted.push(small);
         } else if (f.type.startsWith("video/")) {
-          // validação de duração (≤15s). Safari pode retornar 0 => se 0, aceitamos e validamos depois do upload.
-          const dur = await getVideoDurationSafe(f).catch(() => 0);
+          const dur = await getMediaDurationSafe(f).catch(() => 0);
           if (dur === 0) {
-            console.warn("[video] duração não lida; aceitando mesmo assim para não travar UX.");
+            console.warn("[video] duração não lida; aceitando mesmo assim.");
             accepted.push(f);
           } else if (dur <= 15.3) {
             accepted.push(f);
@@ -225,8 +324,21 @@ export default function Feed() {
               description: "Grave novamente com até 15 segundos.",
             });
           }
+        } else if (f.type.startsWith("audio/")) {
+          const dur = await getMediaDurationSafe(f).catch(() => 0);
+          if (dur === 0) {
+            accepted.push(f);
+          } else if (dur <= 10) {
+            accepted.push(f);
+          } else {
+            toast({
+              variant: "destructive",
+              title: "Áudio acima de 10s",
+              description: "O áudio deve ter no máximo 10 segundos.",
+            });
+          }
         } else {
-          toast({ variant: "destructive", title: "Arquivo inválido", description: "Apenas imagem ou vídeo." });
+          toast({ variant: "destructive", title: "Arquivo inválido", description: "Apenas imagem, vídeo ou áudio." });
         }
       } catch (err) {
         console.error("Erro ao processar arquivo:", err);
@@ -241,59 +353,101 @@ export default function Feed() {
   const removeFile = (idx: number) =>
     setMediaFiles(prev => prev.filter((_, i) => i !== idx));
 
-  /* --------- Create Post (upload + insert) ---------- */
+  /* --------- Audio Recording ---------- */
+  const handleStartRecording = async () => {
+    try {
+      await startRecording();
+      toast({
+        title: "Gravando áudio...",
+        description: "Clique em parar ou aguarde 10 segundos.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao gravar áudio",
+        description: error.message,
+      });
+    }
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+    toast({
+      title: "Áudio gravado!",
+      description: "Áudio pronto para ser enviado.",
+    });
+  };
+
+  /* --------- Create Post ---------- */
   const handleCreatePost = async () => {
-    if (!newPost.trim() && mediaFiles.length === 0) {
+    if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) {
+      toast({ variant: "destructive", title: "Erro", description: "Para postagem com áudio, é necessário uma foto e um áudio." });
+      return;
+    }
+    
+    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) {
       toast({ variant: "destructive", title: "Erro", description: "Adicione conteúdo ou mídia." });
       return;
     }
+    
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
+      let audioUrl: string | null = null;
 
+      // Upload de mídias (imagens/vídeos)
       for (const file of mediaFiles) {
-        // valida de novo duração se possível (para vídeos que retornaram 0 antes)
-        if (file.type.startsWith("video/")) {
-          const dur = await getVideoDurationSafe(file).catch(() => 0);
-          if (dur > 15.3) {
-            toast({
-              variant: "destructive",
-              title: "Vídeo acima de 15s",
-              description: "Grave novamente com até 15 segundos.",
-            });
-            setUploading(false);
-            return;
-          }
-        }
-
-        // nome seguro
-        const extGuess = file.type.startsWith("video/")
-          ? (file.name.split(".").pop()?.toLowerCase() || "mp4")
-          : "jpg";
-        const fileExt = (file.name.split(".").pop() || extGuess).toLowerCase();
+        const fileExt = file.name.split(".").pop()?.toLowerCase() || 
+          (file.type.startsWith("video/") ? "mp4" : "jpg");
         const fileName = `${user?.id}-${Date.now()}-${Math.random().toString(36).slice(2)}.${fileExt}`;
         const filePath = `${user?.id}/${fileName}`;
 
-        // upload
-        const { error: upErr } = await supabase.storage
+        const { error: uploadError } = await supabase.storage
           .from("media")
           .upload(filePath, file, {
             cacheControl: "3600",
             upsert: false,
-            contentType: file.type || (fileExt === "jpg" ? "image/jpeg" : undefined),
+            contentType: file.type,
           });
 
-        if (upErr) {
-          console.error("Upload error:", upErr);
-          throw upErr;
-        }
+        if (uploadError) throw uploadError;
 
-        const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
-        mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + publicUrl);
+        const { data: { publicUrl } } = supabase.storage
+          .from("media")
+          .getPublicUrl(filePath);
+        
+        const prefix = file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image;
+        mediaUrls.push(prefix + publicUrl);
       }
 
-      const votingEndsAt = new Date(); votingEndsAt.setHours(votingEndsAt.getHours() + 1);
-      const content = newPost;
+      // Upload de áudio se existir
+      if (audioBlob) {
+        const audioFileName = `${user?.id}-${Date.now()}-audio.wav`;
+        const audioFilePath = `${user?.id}/${audioFileName}`;
+
+        const audioFile = new File([audioBlob], audioFileName, { type: 'audio/wav' });
+        
+        const { error: audioUploadError } = await supabase.storage
+          .from("media")
+          .upload(audioFilePath, audioFile, {
+            cacheControl: "3600",
+            upsert: false,
+            contentType: 'audio/wav',
+          });
+
+        if (audioUploadError) throw audioUploadError;
+
+        const { data: { publicUrl } } = supabase.storage
+          .from("media")
+          .getPublicUrl(audioFilePath);
+        
+        audioUrl = MEDIA_PREFIX.audio + publicUrl;
+      }
+
+      const votingEndsAt = new Date(); 
+      votingEndsAt.setHours(votingEndsAt.getHours() + 1);
+      
+      const content = postType === 'photo_audio' ? '' : newPost;
 
       const { data: postData, error } = await supabase
         .from("posts")
@@ -301,6 +455,8 @@ export default function Feed() {
           user_id: user?.id,
           content,
           media_urls: mediaUrls.length ? mediaUrls : null,
+          audio_url: audioUrl,
+          post_type: postType,
           voting_ends_at: votingEndsAt.toISOString(),
           voting_period_active: true,
         })
@@ -312,27 +468,62 @@ export default function Feed() {
         throw error;
       }
 
-      if (postData && user) {
+      if (postData && user && content) {
         const { saveMentions } = await import("@/utils/mentionsHelper");
         await saveMentions(postData.id, "post", content, user.id);
       }
 
       toast({ title: "Post criado!", description: "Sua postagem entrou no feed." });
-      setNewPost(""); setMediaFiles([]);
+      setNewPost(""); 
+      setMediaFiles([]);
+      resetRecording();
+      setPostType('standard');
       refetch();
     } catch (e: any) {
       console.error("Falha ao publicar:", e);
       toast({
         variant: "destructive",
         title: "Erro ao publicar",
-        description: e?.message || "Não foi possível criar o post. Veja o console para detalhes.",
+        description: e?.message || "Não foi possível criar o post.",
       });
     } finally {
       setUploading(false);
     }
   };
 
-  /* --------- Vote/Like/Comments/Edit/Delete (inalterado) ---------- */
+  /* --------- Photo Audio Carousel ---------- */
+  const handlePhotoAudioPlay = (audioUrl: string, postId: string) => {
+    setPlayingAudio(audioUrl);
+    
+    // Encontrar o post atual e avançar para o próximo após o áudio terminar
+    const audio = new Audio(stripPrefix(audioUrl));
+    audio.onended = () => {
+      setPlayingAudio(null);
+      // Avançar para o próximo post automaticamente
+      const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+      const currentIndex = photoAudioPosts.findIndex(p => p.id === postId);
+      if (currentIndex !== -1) {
+        const nextIndex = (currentIndex + 1) % photoAudioPosts.length;
+        setCurrentCarouselIndex(nextIndex);
+      }
+    };
+    audio.play();
+  };
+
+  const nextCarouselItem = () => {
+    const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+    if (photoAudioPosts.length === 0) return;
+    const nextIndex = (currentCarouselIndex + 1) % photoAudioPosts.length;
+    setCurrentCarouselIndex(nextIndex);
+  };
+
+  const prevCarouselItem = () => {
+    const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+    if (photoAudioPosts.length === 0) return;
+    const prevIndex = (currentCarouselIndex - 1 + photoAudioPosts.length) % photoAudioPosts.length;
+    setCurrentCarouselIndex(prevIndex);
+  };
+    /* --------- Vote/Like/Comments/Edit/Delete ---------- */
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
     try {
       const existing = posts?.find((p: any) => p.id === postId)?.post_votes?.find((v: any) => v.user_id === user?.id);
@@ -458,7 +649,109 @@ export default function Feed() {
       }),
   });
 
-  /* ---------- UI ---------- */
+  /* --------- Render Photo Audio Carousel ---------- */
+  const renderPhotoAudioCarousel = () => {
+    const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+    
+    if (photoAudioPosts.length === 0) return null;
+
+    const currentPost = photoAudioPosts[currentCarouselIndex];
+    const imageUrl = currentPost?.media_urls?.[0] ? stripPrefix(currentPost.media_urls[0]) : null;
+    const audioUrl = currentPost?.audio_url ? stripPrefix(currentPost.audio_url) : null;
+
+    return (
+      <Card className="mb-6 border-0 shadow-lg bg-gradient-to-br from-card to-card/80">
+        <CardContent className="p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-semibold">Fotos com Áudio</h3>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={prevCarouselItem}
+                className="rounded-full"
+              >
+                <ChevronLeft className="h-4 w-4" />
+              </Button>
+              <span className="text-sm text-muted-foreground">
+                {currentCarouselIndex + 1} / {photoAudioPosts.length}
+              </span>
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={nextCarouselItem}
+                className="rounded-full"
+              >
+                <ChevronRight className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-4">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8">
+                <AvatarImage src={currentPost.profiles?.avatar_url} />
+                <AvatarFallback>{currentPost.profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
+              </Avatar>
+              <div>
+                <UserLink userId={currentPost.user_id} username={currentPost.profiles?.username || ""}>
+                  {currentPost.profiles?.username}
+                </UserLink>
+                <p className="text-xs text-muted-foreground">
+                  {fmtDateTime(currentPost.created_at)}
+                </p>
+              </div>
+            </div>
+
+            {imageUrl && (
+              <div className="relative aspect-square max-w-md mx-auto">
+                <img
+                  src={imageUrl}
+                  alt="Post com áudio"
+                  className="w-full h-full object-cover rounded-xl shadow-lg"
+                />
+                {audioUrl && (
+                  <Button
+                    onClick={() => handlePhotoAudioPlay(currentPost.audio_url, currentPost.id)}
+                    className={cn(
+                      "absolute bottom-4 right-4 rounded-full shadow-lg transition-all duration-300",
+                      playingAudio === currentPost.audio_url 
+                        ? "bg-primary text-primary-foreground scale-110" 
+                        : "bg-white/90 text-foreground hover:bg-white"
+                    )}
+                    size="icon"
+                  >
+                    <Volume2 className="h-5 w-5" />
+                  </Button>
+                )}
+              </div>
+            )}
+
+            {playingAudio === currentPost.audio_url && (
+              <div className="text-center">
+                <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full">
+                  <div className="flex gap-1">
+                    {[1, 2, 3].map(i => (
+                      <div
+                        key={i}
+                        className="w-1 h-4 bg-primary rounded-full animate-pulse"
+                        style={{
+                          animationDelay: `${i * 0.2}s`,
+                          animationDuration: '0.6s'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm text-primary">Reproduzindo áudio...</span>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  };
+    /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -470,12 +763,36 @@ export default function Feed() {
             className="w-48 h-48 md:w-56 md:h-56 object-contain"
           />
         </div>
-    
-        
+
+        {/* Espaço de 1 linha */}
+        <div className="h-4"></div>
+
+        {/* Photo Audio Carousel */}
+        {renderPhotoAudioCarousel()}
 
         {/* Composer */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
+            {/* Post Type Selector */}
+            <div className="flex gap-2 mb-4">
+              <Button
+                variant={postType === 'standard' ? "default" : "outline"}
+                onClick={() => setPostType('standard')}
+                className="rounded-xl"
+                size="sm"
+              >
+                Postagem Normal
+              </Button>
+              <Button
+                variant={postType === 'photo_audio' ? "default" : "outline"}
+                onClick={() => setPostType('photo_audio')}
+                className="rounded-xl"
+                size="sm"
+              >
+                Foto + Áudio
+              </Button>
+            </div>
+
             <div className="flex gap-3">
               <Avatar className="h-10 w-10 ring-2 ring-primary/20 shadow-sm">
                 <AvatarImage src={user?.user_metadata?.avatar_url} />
@@ -485,12 +802,71 @@ export default function Feed() {
               </Avatar>
 
               <div className="flex-1 space-y-3">
-                <MentionTextarea
-                  placeholder="O que você está pensando? Use @ para mencionar alguém"
-                  value={newPost}
-                  onChange={(e) => setNewPost(e.target.value)}
-                  className="min-h-[80px] resize-none border-0 bg-muted/50 shadow-inner focus:bg-background/50 transition-all duration-300 rounded-xl"
-                />
+                {postType === 'standard' && (
+                  <MentionTextarea
+                    placeholder="O que você está pensando? Use @ para mencionar alguém"
+                    value={newPost}
+                    onChange={(e) => setNewPost(e.target.value)}
+                    className="min-h-[80px] resize-none border-0 bg-muted/50 shadow-inner focus:bg-background/50 transition-all duration-300 rounded-xl"
+                  />
+                )}
+
+                {postType === 'photo_audio' && (
+                  <div className="text-center py-4 space-y-4">
+                    <div className="text-sm text-muted-foreground">
+                      Adicione uma foto e grave um áudio de até 10 segundos
+                    </div>
+                    
+                    {/* Audio Recording */}
+                    <div className="space-y-3">
+                      {!audioBlob ? (
+                        <div className="space-y-2">
+                          <Button
+                            onClick={isRecording ? handleStopRecording : handleStartRecording}
+                            variant={isRecording ? "destructive" : "outline"}
+                            className={cn(
+                              "rounded-xl transition-all duration-300",
+                              isRecording && "animate-pulse"
+                            )}
+                            size="lg"
+                          >
+                            {isRecording ? (
+                              <>
+                                <Square className="h-4 w-4 mr-2" />
+                                Parar Gravação ({10 - recordingTime}s)
+                              </>
+                            ) : (
+                              <>
+                                <Mic className="h-4 w-4 mr-2" />
+                                Gravar Áudio
+                              </>
+                            )}
+                          </Button>
+                          {isRecording && (
+                            <div className="text-xs text-muted-foreground">
+                              Gravando... {recordingTime}s / 10s máximo
+                            </div>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 justify-center">
+                            <Volume2 className="h-4 w-4 text-green-500" />
+                            <span className="text-sm text-green-600">Áudio gravado!</span>
+                          </div>
+                          <Button
+                            onClick={resetRecording}
+                            variant="outline"
+                            size="sm"
+                            className="rounded-xl"
+                          >
+                            Regravar Áudio
+                          </Button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
 
                 {mediaFiles.length > 0 && (
                   <div className="flex flex-wrap gap-3">
@@ -503,7 +879,7 @@ export default function Feed() {
                               alt="Preview" 
                               className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" 
                             />
-                          ) : (
+                          ) : file.type.startsWith("video/") ? (
                             <div className="relative w-full h-full">
                               <video 
                                 src={URL.createObjectURL(file)} 
@@ -516,6 +892,10 @@ export default function Feed() {
                                   <Play className="h-4 w-4 text-white fill-white" />
                                 </div>
                               </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-center justify-center">
+                              <Volume2 className="h-6 w-6 text-muted-foreground" />
                             </div>
                           )}
                         </div>
@@ -580,15 +960,17 @@ export default function Feed() {
                       <Camera className="h-5 w-5" />
                     </Button>
 
-                    <Button
-                      variant="ghost" 
-                      size="icon" 
-                      className="text-muted-foreground hover:text-foreground hover:bg-primary/10 rounded-xl transition-all duration-300 shadow-sm"
-                      onClick={() => cameraVideoInputRef.current?.click()}
-                      aria-label="Abrir câmera (vídeo)"
-                    >
-                      <Video className="h-5 w-5" />
-                    </Button>
+                    {postType === 'standard' && (
+                      <Button
+                        variant="ghost" 
+                        size="icon" 
+                        className="text-muted-foreground hover:text-foreground hover:bg-primary/10 rounded-xl transition-all duration-300 shadow-sm"
+                        onClick={() => cameraVideoInputRef.current?.click()}
+                        aria-label="Abrir câmera (vídeo)"
+                      >
+                        <Video className="h-5 w-5" />
+                      </Button>
+                    )}
 
                     {(processing) && (
                       <span className="text-xs text-muted-foreground flex items-center gap-1 ml-2">
@@ -599,7 +981,11 @@ export default function Feed() {
 
                   <Button
                     onClick={handleCreatePost}
-                    disabled={(!newPost.trim() && mediaFiles.length === 0) || uploading}
+                    disabled={
+                      uploading || 
+                      (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) ||
+                      (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0)
+                    }
                     className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 rounded-xl font-semibold"
                   >
                     {uploading ? "Publicando..." : "Publicar"}
@@ -610,7 +996,7 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Feed */}
+        {/* Feed - Todas as postagens */}
         {posts?.map((post) => {
           const isOwnPost = post.user_id === user?.id;
           const hasLiked = post.likes?.some((l: any) => l.user_id === user?.id);
@@ -621,6 +1007,10 @@ export default function Feed() {
           const userVote = post.post_votes?.find((v: any) => v.user_id === user?.id);
           const isVotingActive = post.voting_period_active && post.voting_ends_at;
           const mediaList: string[] = post.media_urls || [];
+          const isPhotoAudio = post.post_type === 'photo_audio';
+
+          // Pular postagens photo_audio no feed normal (já estão no carrossel)
+          if (isPhotoAudio) return null;
 
           return (
             <Card key={post.id} className={cn(
@@ -675,9 +1065,11 @@ export default function Feed() {
                   </Badge>
                 )}
 
-                <p className="text-foreground leading-relaxed">
-                  <MentionText text={post.content ?? ""} />
-                </p>
+                {post.content && (
+                  <p className="text-foreground leading-relaxed">
+                    <MentionText text={post.content ?? ""} />
+                  </p>
+                )}
 
                 {mediaList.length > 0 && (
                   <div className={cn(
