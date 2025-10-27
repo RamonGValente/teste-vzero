@@ -232,8 +232,7 @@ export default function Feed() {
   /* Photo Audio Carousel */
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-
-  /* Mark as viewed */
+    /* Mark as viewed */
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -661,7 +660,7 @@ export default function Feed() {
     const audioUrl = currentPost?.audio_url ? stripPrefix(currentPost.audio_url) : null;
 
     return (
-      <Card className="my-6 border-0 shadow-lg bg-gradient-to-br from-card to-card/80">
+      <Card className="mb-6 border-0 shadow-lg bg-gradient-to-br from-card to-card/80">
         <CardContent className="p-6">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold">Fotos com Áudio</h3>
@@ -752,8 +751,7 @@ export default function Feed() {
       </Card>
     );
   };
-
-  /* ---------- UI ---------- */
+    /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -768,6 +766,9 @@ export default function Feed() {
 
         {/* Espaço de 1 linha */}
         <div className="h-4"></div>
+
+        {/* Photo Audio Carousel */}
+        {renderPhotoAudioCarousel()}
 
         {/* Composer */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
@@ -995,8 +996,8 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Feed - Todas as postagens com carrossel após o 3º post */}
-        {posts?.map((post, index) => {
+        {/* Feed - Todas as postagens */}
+        {posts?.map((post) => {
           const isOwnPost = post.user_id === user?.id;
           const hasLiked = post.likes?.some((l: any) => l.user_id === user?.id);
           const likesCount = post.likes?.length || 0;
@@ -1012,216 +1013,210 @@ export default function Feed() {
           if (isPhotoAudio) return null;
 
           return (
-            <div key={post.id}>
-              {/* Post normal */}
-              <Card className={cn(
-                "border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-500",
-                post.is_community_approved && "ring-1 ring-primary/30 shadow-primary/10"
-              )}>
-                <CardContent className="pt-6 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                      <Avatar className="ring-2 ring-primary/20 shadow-sm">
-                        <AvatarImage src={post.profiles?.avatar_url} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-inner">
-                          {post.profiles?.username?.[0]?.toUpperCase()}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div>
-                        <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
-                          {post.profiles?.username}
-                        </UserLink>
-                        <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
-                      </div>
+            <Card key={post.id} className={cn(
+              "border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm hover:shadow-xl transition-all duration-500",
+              post.is_community_approved && "ring-1 ring-primary/30 shadow-primary/10"
+            )}>
+              <CardContent className="pt-6 space-y-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <Avatar className="ring-2 ring-primary/20 shadow-sm">
+                      <AvatarImage src={post.profiles?.avatar_url} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-primary-foreground shadow-inner">
+                        {post.profiles?.username?.[0]?.toUpperCase()}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <UserLink userId={post.user_id} username={post.profiles?.username || ""}>
+                        {post.profiles?.username}
+                      </UserLink>
+                      <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
                     </div>
-
-                    {isOwnPost && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button variant="ghost" size="icon" className="rounded-xl hover:bg-primary/10 transition-colors">
-                            <MoreVertical className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl">
-                          <DropdownMenuItem 
-                            onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}
-                            className="rounded-lg cursor-pointer"
-                          >
-                            <Pencil className="h-4 w-4 mr-2" /> Editar postagem
-                          </DropdownMenuItem>
-                          <DropdownMenuItem
-                            onClick={() => deleteMutation.mutate(post.id)}
-                            className="text-red-600 focus:text-red-600 rounded-lg cursor-pointer"
-                          >
-                            <Trash2 className="h-4 w-4 mr-2" /> Excluir postagem
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
                   </div>
 
-                  {post.is_community_approved && (
-                    <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary shadow-sm border-0">
-                      ✓ Aprovado pela Comunidade
-                    </Badge>
+                  {isOwnPost && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="rounded-xl hover:bg-primary/10 transition-colors">
+                          <MoreVertical className="h-4 w-4" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl">
+                        <DropdownMenuItem 
+                          onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}
+                          className="rounded-lg cursor-pointer"
+                        >
+                          <Pencil className="h-4 w-4 mr-2" /> Editar postagem
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={() => deleteMutation.mutate(post.id)}
+                          className="text-red-600 focus:text-red-600 rounded-lg cursor-pointer"
+                        >
+                          <Trash2 className="h-4 w-4 mr-2" /> Excluir postagem
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   )}
+                </div>
 
-                  {post.content && (
-                    <p className="text-foreground leading-relaxed">
-                      <MentionText text={post.content ?? ""} />
-                    </p>
-                  )}
+                {post.is_community_approved && (
+                  <Badge className="mb-2 bg-gradient-to-r from-primary to-secondary shadow-sm border-0">
+                    ✓ Aprovado pela Comunidade
+                  </Badge>
+                )}
 
-                  {mediaList.length > 0 && (
-                    <div className={cn(
-                      "grid gap-3 mt-3",
-                      mediaList.length === 1 ? "grid-cols-1" : "grid-cols-2"
-                    )}>
-                      {mediaList.map((raw: string, index: number) => {
-                        const url = stripPrefix(raw);
-                        const isVideo = isVideoUrl(raw);
-                        return (
-                          <button
-                            key={index}
-                            className="rounded-xl overflow-hidden group relative bg-gradient-to-br from-muted to-muted/50 shadow-lg hover:shadow-xl transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                            onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
-                          >
-                            {isVideo ? (
-                              <div className="relative w-full aspect-square">
-                                <video 
-                                  src={url} 
-                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                  playsInline 
-                                  preload="metadata"
-                                />
-                                <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
-                                  <div className="bg-black/60 rounded-full p-3 shadow-2xl transform group-hover:scale-110 transition-transform duration-300">
-                                    <Play className="h-6 w-6 text-white fill-white" />
-                                  </div>
+                {post.content && (
+                  <p className="text-foreground leading-relaxed">
+                    <MentionText text={post.content ?? ""} />
+                  </p>
+                )}
+
+                {mediaList.length > 0 && (
+                  <div className={cn(
+                    "grid gap-3 mt-3",
+                    mediaList.length === 1 ? "grid-cols-1" : "grid-cols-2"
+                  )}>
+                    {mediaList.map((raw: string, index: number) => {
+                      const url = stripPrefix(raw);
+                      const isVideo = isVideoUrl(raw);
+                      return (
+                        <button
+                          key={index}
+                          className="rounded-xl overflow-hidden group relative bg-gradient-to-br from-muted to-muted/50 shadow-lg hover:shadow-xl transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
+                          onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
+                        >
+                          {isVideo ? (
+                            <div className="relative w-full aspect-square">
+                              <video 
+                                src={url} 
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                                playsInline 
+                                preload="metadata"
+                              />
+                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
+                                <div className="bg-black/60 rounded-full p-3 shadow-2xl transform group-hover:scale-110 transition-transform duration-300">
+                                  <Play className="h-6 w-6 text-white fill-white" />
                                 </div>
                               </div>
-                            ) : (
-                              <div className="w-full aspect-square">
-                                <img 
-                                  src={url} 
-                                  alt="Post media" 
-                                  className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
-                                />
-                              </div>
-                            )}
-                            <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 shadow-lg flex items-center gap-1">
-                              <Maximize2 className="h-3 w-3" />
-                              Expandir
-                            </span>
-                          </button>
-                        );
-                      })}
-                    </div>
-                  )}
-
-                  {isVotingActive && (
-                    <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-4 space-y-3 shadow-inner border border-border/20">
-                      <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">
-                          {(() => {
-                            const now = new Date().getTime();
-                            const end = new Date(post.voting_ends_at).getTime();
-                            const diff = end - now;
-                            if (diff <= 0) return "Votação encerrada";
-                            const m = Math.floor(diff / 60000);
-                            const h = Math.floor(m / 60);
-                            const mm = m % 60;
-                            return `${h}h ${mm}m restantes`;
-                          })()}
-                        </span>
-                        <div className="flex gap-3 text-xs">
-                          <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm">
-                            <Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}
-                          </span>
-                          <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full shadow-sm">
-                            <Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Button
-                          variant="outline" 
-                          size="sm"
-                          className={cn(
-                            "flex-1 rounded-xl transition-all duration-300 shadow-sm",
-                            userVote?.vote_type === "heart" 
-                              ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100 shadow-green-200" 
-                              : "hover:bg-green-50 hover:border-green-200"
+                            </div>
+                          ) : (
+                            <div className="w-full aspect-square">
+                              <img 
+                                src={url} 
+                                alt="Post media" 
+                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
+                              />
+                            </div>
                           )}
-                          onClick={() => handleVote(post.id, "heart")}
-                        >
-                          <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-green-600 text-green-600")} />
-                          Aprovar
-                        </Button>
-                        <Button
-                          variant="outline" 
-                          size="sm"
-                          className={cn(
-                            "flex-1 rounded-xl transition-all duration-300 shadow-sm",
-                            userVote?.vote_type === "bomb" 
-                              ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 shadow-red-200" 
-                              : "hover:bg-red-50 hover:border-red-200"
-                          )}
-                          onClick={() => handleVote(post.id, "bomb")}
-                        >
-                          <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-red-600 text-red-600")} />
-                          Rejeitar
-                        </Button>
-                      </div>
-                    </div>
-                  )}
-
-                  <div className="flex items-center gap-4 pt-3 border-t border-border/20">
-                    <Button
-                      variant="ghost" 
-                      size="sm"
-                      onClick={() => handleLike(post.id, hasLiked)}
-                      className={cn(
-                        "rounded-xl transition-all duration-300",
-                        hasLiked 
-                          ? "text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 shadow-sm" 
-                          : "hover:bg-muted"
-                      )}
-                    >
-                      <Heart className={cn("h-5 w-5 mr-2 transition-all", hasLiked && "fill-current scale-110")} />
-                      {likesCount}
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      onClick={() => setOpeningCommentsFor(post)}
-                      className="rounded-xl hover:bg-muted transition-all duration-300"
-                    >
-                      <MessageCircle className="h-5 w-5 mr-2" />
-                      {commentsCount}
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm"
-                      className="rounded-xl hover:bg-muted transition-all duration-300"
-                    >
-                      <Send className="h-5 w-5 mr-2" />
-                      Compartilhar
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      size="sm" 
-                      className="ml-auto rounded-xl hover:bg-muted transition-all duration-300"
-                    >
-                      <Bookmark className="h-5 w-5" />
-                    </Button>
+                          <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 shadow-lg flex items-center gap-1">
+                            <Maximize2 className="h-3 w-3" />
+                            Expandir
+                          </span>
+                        </button>
+                      );
+                    })}
                   </div>
-                </CardContent>
-              </Card>
+                )}
 
-              {/* Inserir carrossel após o 3º post */}
-              {index === 2 && renderPhotoAudioCarousel()}
-            </div>
+                {isVotingActive && (
+                  <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-4 space-y-3 shadow-inner border border-border/20">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-muted-foreground">
+                        {(() => {
+                          const now = new Date().getTime();
+                          const end = new Date(post.voting_ends_at).getTime();
+                          const diff = end - now;
+                          if (diff <= 0) return "Votação encerrada";
+                          const m = Math.floor(diff / 60000);
+                          const h = Math.floor(m / 60);
+                          const mm = m % 60;
+                          return `${h}h ${mm}m restantes`;
+                        })()}
+                      </span>
+                      <div className="flex gap-3 text-xs">
+                        <span className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm">
+                          <Heart className="h-3 w-3 fill-red-500 text-red-500" /> {heartVotes}
+                        </span>
+                        <span className="flex items-center gap-1 bg-orange-50 text-orange-700 px-2 py-1 rounded-full shadow-sm">
+                          <Bomb className="h-3 w-3 fill-orange-500 text-orange-500" /> {bombVotes}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline" 
+                        size="sm"
+                        className={cn(
+                          "flex-1 rounded-xl transition-all duration-300 shadow-sm",
+                          userVote?.vote_type === "heart" 
+                            ? "bg-green-50 border-green-200 text-green-700 hover:bg-green-100 shadow-green-200" 
+                            : "hover:bg-green-50 hover:border-green-200"
+                        )}
+                        onClick={() => handleVote(post.id, "heart")}
+                      >
+                        <Heart className={cn("h-4 w-4 mr-2", userVote?.vote_type === "heart" && "fill-green-600 text-green-600")} />
+                        Aprovar
+                      </Button>
+                      <Button
+                        variant="outline" 
+                        size="sm"
+                        className={cn(
+                          "flex-1 rounded-xl transition-all duration-300 shadow-sm",
+                          userVote?.vote_type === "bomb" 
+                            ? "bg-red-50 border-red-200 text-red-700 hover:bg-red-100 shadow-red-200" 
+                            : "hover:bg-red-50 hover:border-red-200"
+                        )}
+                        onClick={() => handleVote(post.id, "bomb")}
+                      >
+                        <Bomb className={cn("h-4 w-4 mr-2", userVote?.vote_type === "bomb" && "fill-red-600 text-red-600")} />
+                        Rejeitar
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 pt-3 border-t border-border/20">
+                  <Button
+                    variant="ghost" 
+                    size="sm"
+                    onClick={() => handleLike(post.id, hasLiked)}
+                    className={cn(
+                      "rounded-xl transition-all duration-300",
+                      hasLiked 
+                        ? "text-red-500 hover:text-red-600 bg-red-50 hover:bg-red-100 shadow-sm" 
+                        : "hover:bg-muted"
+                    )}
+                  >
+                    <Heart className={cn("h-5 w-5 mr-2 transition-all", hasLiked && "fill-current scale-110")} />
+                    {likesCount}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    onClick={() => setOpeningCommentsFor(post)}
+                    className="rounded-xl hover:bg-muted transition-all duration-300"
+                  >
+                    <MessageCircle className="h-5 w-5 mr-2" />
+                    {commentsCount}
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="rounded-xl hover:bg-muted transition-all duration-300"
+                  >
+                    <Send className="h-5 w-5 mr-2" />
+                    Compartilhar
+                  </Button>
+                  <Button 
+                    variant="ghost" 
+                    size="sm" 
+                    className="ml-auto rounded-xl hover:bg-muted transition-all duration-300"
+                  >
+                    <Bookmark className="h-5 w-5" />
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
           );
         })}
 
