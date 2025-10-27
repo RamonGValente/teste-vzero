@@ -112,7 +112,6 @@ export default function Feed() {
   const queryClient = useQueryClient();
 
   /* Compose */
-  const [postTitle, setPostTitle] = useState("");
   const [newPost, setNewPost] = useState("");
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
@@ -244,8 +243,8 @@ export default function Feed() {
 
   /* --------- Create Post (upload + insert) ---------- */
   const handleCreatePost = async () => {
-    if (!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) {
-      toast({ variant: "destructive", title: "Erro", description: "Adicione título, conteúdo ou mídia." });
+    if (!newPost.trim() && mediaFiles.length === 0) {
+      toast({ variant: "destructive", title: "Erro", description: "Adicione conteúdo ou mídia." });
       return;
     }
     setUploading(true);
@@ -294,7 +293,7 @@ export default function Feed() {
       }
 
       const votingEndsAt = new Date(); votingEndsAt.setHours(votingEndsAt.getHours() + 1);
-      const content = postTitle.trim() ? `${postTitle}\n\n${newPost}` : newPost;
+      const content = newPost;
 
       const { data: postData, error } = await supabase
         .from("posts")
@@ -319,7 +318,7 @@ export default function Feed() {
       }
 
       toast({ title: "Post criado!", description: "Sua postagem entrou no feed." });
-      setPostTitle(""); setNewPost(""); setMediaFiles([]);
+      setNewPost(""); setMediaFiles([]);
       refetch();
     } catch (e: any) {
       console.error("Falha ao publicar:", e);
@@ -461,8 +460,19 @@ export default function Feed() {
 
   /* ---------- UI ---------- */
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10">
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+        {/* Logo Centralizada */}
+        <div className="flex justify-center">
+          <img 
+            src="https://sistemaapp.netlify.app/assets/logo-wTbWaudN.png" 
+            alt="Logo" 
+            className="w-48 h-48 md:w-56 md:h-56 object-contain"
+          />
+        </div>
+    
+        
+
         {/* Composer */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
@@ -475,13 +485,6 @@ export default function Feed() {
               </Avatar>
 
               <div className="flex-1 space-y-3">
-                <Input
-                  placeholder="Título da publicação (opcional)"
-                  value={postTitle}
-                  onChange={(e) => setPostTitle(e.target.value)}
-                  className="font-medium border-0 bg-muted/50 shadow-inner focus:bg-background/50 transition-all duration-300 rounded-xl"
-                />
-
                 <MentionTextarea
                   placeholder="O que você está pensando? Use @ para mencionar alguém"
                   value={newPost}
@@ -596,7 +599,7 @@ export default function Feed() {
 
                   <Button
                     onClick={handleCreatePost}
-                    disabled={(!postTitle.trim() && !newPost.trim() && mediaFiles.length === 0) || uploading}
+                    disabled={(!newPost.trim() && mediaFiles.length === 0) || uploading}
                     className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 text-white shadow-lg shadow-primary/25 hover:shadow-xl hover:scale-105 active:scale-95 transition-all duration-300 rounded-xl font-semibold"
                   >
                     {uploading ? "Publicando..." : "Publicar"}
