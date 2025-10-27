@@ -711,7 +711,7 @@ export default function Feed() {
               </div>
               <div>
                 <h3 className="text-sm font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Fotos com Áudio
+                  Flash
                 </h3>
                 <p className="text-xs text-muted-foreground">
                   Deslize para navegar • Toque no áudio
