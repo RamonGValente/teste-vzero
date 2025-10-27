@@ -232,7 +232,9 @@ export default function Feed() {
   /* Photo Audio Carousel */
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-    /* Mark as viewed */
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  /* Mark as viewed */
   useEffect(() => {
     if (!user) return;
     const markAsViewed = async () => {
@@ -492,25 +494,56 @@ export default function Feed() {
   };
 
   /* --------- Photo Audio Carousel ---------- */
+  const stopCurrentAudio = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+      currentAudioRef.current = null;
+    }
+    setPlayingAudio(null);
+  };
+
   const handlePhotoAudioPlay = (audioUrl: string, postId: string) => {
+    // Parar áudio atual se estiver tocando
+    stopCurrentAudio();
+    
     setPlayingAudio(audioUrl);
     
-    // Encontrar o post atual e avançar para o próximo após o áudio terminar
     const audio = new Audio(stripPrefix(audioUrl));
+    currentAudioRef.current = audio;
+    
     audio.onended = () => {
       setPlayingAudio(null);
-      // Avançar para o próximo post automaticamente
-      const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
-      const currentIndex = photoAudioPosts.findIndex(p => p.id === postId);
-      if (currentIndex !== -1) {
-        const nextIndex = (currentIndex + 1) % photoAudioPosts.length;
-        setCurrentCarouselIndex(nextIndex);
-      }
+      currentAudioRef.current = null;
+      
+      // Aguardar um pouco antes de avançar para próxima
+      setTimeout(() => {
+        const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+        const currentIndex = photoAudioPosts.findIndex(p => p.id === postId);
+        
+        if (currentIndex !== -1 && photoAudioPosts.length > 1) {
+          const nextIndex = (currentIndex + 1) % photoAudioPosts.length;
+          setCurrentCarouselIndex(nextIndex);
+          
+          // Reproduzir automaticamente o próximo áudio
+          const nextPost = photoAudioPosts[nextIndex];
+          if (nextPost?.audio_url) {
+            // Pequeno delay antes de reproduzir o próximo
+            setTimeout(() => {
+              handlePhotoAudioPlay(nextPost.audio_url, nextPost.id);
+            }, 1000);
+          }
+        }
+      }, 500);
     };
-    audio.play();
+    
+    audio.play().catch(console.error);
   };
 
   const nextCarouselItem = () => {
+    // Parar áudio atual ao trocar manualmente
+    stopCurrentAudio();
+    
     const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
     if (photoAudioPosts.length === 0) return;
     const nextIndex = (currentCarouselIndex + 1) % photoAudioPosts.length;
@@ -518,6 +551,9 @@ export default function Feed() {
   };
 
   const prevCarouselItem = () => {
+    // Parar áudio atual ao trocar manualmente
+    stopCurrentAudio();
+    
     const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
     if (photoAudioPosts.length === 0) return;
     const prevIndex = (currentCarouselIndex - 1 + photoAudioPosts.length) % photoAudioPosts.length;
@@ -584,6 +620,7 @@ export default function Feed() {
       if (!openingCommentsFor?.id || !user || !newCommentText.trim()) return;
       const { error } = await supabase.from("comments").insert({
         post_id: openingCommentsFor.id,
+        user_id: user.id,
         content: newCommentText.trim(),
       });
       if (error) throw error;
@@ -659,90 +696,175 @@ export default function Feed() {
     const imageUrl = currentPost?.media_urls?.[0] ? stripPrefix(currentPost.media_urls[0]) : null;
     const audioUrl = currentPost?.audio_url ? stripPrefix(currentPost.audio_url) : null;
 
+    // Verificar se o áudio atual está tocando
+    const isCurrentAudioPlaying = playingAudio === currentPost.audio_url;
+
     return (
-      <Card className="mb-6 border-0 shadow-lg bg-gradient-to-br from-card to-card/80">
-        <CardContent className="p-6">
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold">Fotos com Áudio</h3>
-            <div className="flex items-center gap-2">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={prevCarouselItem}
-                className="rounded-full"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              <span className="text-sm text-muted-foreground">
-                {currentCarouselIndex + 1} / {photoAudioPosts.length}
-              </span>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={nextCarouselItem}
-                className="rounded-full"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
+      <Card className="mb-6 border-0 shadow-2xl bg-gradient-to-br from-card/95 to-card/80 backdrop-blur-sm overflow-hidden">
+        <CardContent className="p-0">
+          {/* Header */}
+          <div className="flex items-center justify-between p-6 pb-4 bg-gradient-to-r from-primary/5 to-secondary/5">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-r from-primary to-secondary p-2 rounded-xl shadow-lg">
+                <Volume2 className="h-5 w-5 text-white" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                  Fotos com Áudio
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Toque no ícone de áudio para reproduzir automaticamente
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-3">
+              <div className="flex items-center gap-2 bg-background/50 rounded-full px-3 py-1 shadow-sm">
+                <span className="text-sm font-semibold text-primary">
+                  {currentCarouselIndex + 1}
+                </span>
+                <span className="text-sm text-muted-foreground">/</span>
+                <span className="text-sm text-muted-foreground">{photoAudioPosts.length}</span>
+              </div>
             </div>
           </div>
 
-          <div className="space-y-4">
+          {/* Content */}
+          <div className="p-6 space-y-4">
+            {/* User Info */}
             <div className="flex items-center gap-3">
-              <Avatar className="h-8 w-8">
+              <Avatar className="h-9 w-9 ring-2 ring-primary/20 shadow-md">
                 <AvatarImage src={currentPost.profiles?.avatar_url} />
-                <AvatarFallback>{currentPost.profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                  {currentPost.profiles?.username?.[0]?.toUpperCase()}
+                </AvatarFallback>
               </Avatar>
-              <div>
-                <UserLink userId={currentPost.user_id} username={currentPost.profiles?.username || ""}>
-                  {currentPost.profiles?.username}
-                </UserLink>
+              <div className="flex-1">
+                <div className="flex items-center gap-2">
+                  <UserLink 
+                    userId={currentPost.user_id} 
+                    username={currentPost.profiles?.username || ""}
+                    className="font-semibold hover:text-primary transition-colors"
+                  >
+                    {currentPost.profiles?.username}
+                  </UserLink>
+                  {isCurrentAudioPlaying && (
+                    <div className="flex gap-1">
+                      {[1, 2, 3].map(i => (
+                        <div
+                          key={i}
+                          className="w-1 h-4 bg-primary rounded-full animate-pulse"
+                          style={{
+                            animationDelay: `${i * 0.2}s`,
+                            animationDuration: '0.6s'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
                 <p className="text-xs text-muted-foreground">
                   {fmtDateTime(currentPost.created_at)}
                 </p>
               </div>
             </div>
 
-            {imageUrl && (
-              <div className="relative aspect-square max-w-md mx-auto">
-                <img
-                  src={imageUrl}
-                  alt="Post com áudio"
-                  className="w-full h-full object-cover rounded-xl shadow-lg"
-                />
-                {audioUrl && (
-                  <Button
-                    onClick={() => handlePhotoAudioPlay(currentPost.audio_url, currentPost.id)}
-                    className={cn(
-                      "absolute bottom-4 right-4 rounded-full shadow-lg transition-all duration-300",
-                      playingAudio === currentPost.audio_url 
-                        ? "bg-primary text-primary-foreground scale-110" 
-                        : "bg-white/90 text-foreground hover:bg-white"
-                    )}
-                    size="icon"
-                  >
-                    <Volume2 className="h-5 w-5" />
-                  </Button>
-                )}
-              </div>
-            )}
+            {/* Image and Audio */}
+            <div className="relative group">
+              {/* Navigation Arrows */}
+              <button
+                onClick={prevCarouselItem}
+                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full shadow-2xl transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
+              >
+                <ChevronLeft className="h-5 w-5" />
+              </button>
+              
+              <button
+                onClick={nextCarouselItem}
+                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full shadow-2xl transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
+              >
+                <ChevronRight className="h-5 w-5" />
+              </button>
 
-            {playingAudio === currentPost.audio_url && (
+              {/* Main Image */}
+              {imageUrl && (
+                <div className="relative aspect-[4/5] max-w-md mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-muted to-muted/50">
+                  <img
+                    src={imageUrl}
+                    alt="Post com áudio"
+                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
+                  />
+                  
+                  {/* Audio Play Button */}
+                  {audioUrl && (
+                    <button
+                      onClick={() => {
+                        if (isCurrentAudioPlaying) {
+                          stopCurrentAudio();
+                        } else {
+                          handlePhotoAudioPlay(currentPost.audio_url, currentPost.id);
+                        }
+                      }}
+                      className={cn(
+                        "absolute bottom-6 right-6 z-10 p-4 rounded-full shadow-2xl transition-all duration-500 hover:scale-110",
+                        isCurrentAudioPlaying 
+                          ? "bg-gradient-to-r from-primary to-secondary text-white scale-110 shadow-primary/50" 
+                          : "bg-white/95 text-foreground hover:bg-white backdrop-blur-sm"
+                      )}
+                    >
+                      <Volume2 className={cn(
+                        "h-6 w-6 transition-all duration-300",
+                        isCurrentAudioPlaying && "animate-pulse"
+                      )} />
+                    </button>
+                  )}
+
+                  {/* Gradient Overlay */}
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
+                </div>
+              )}
+
+              {/* Progress Dots */}
+              {photoAudioPosts.length > 1 && (
+                <div className="flex justify-center gap-2 mt-4">
+                  {photoAudioPosts.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        stopCurrentAudio(); // Parar áudio ao clicar nos dots
+                        setCurrentCarouselIndex(index);
+                      }}
+                      className={cn(
+                        "w-2 h-2 rounded-full transition-all duration-300",
+                        index === currentCarouselIndex
+                          ? "bg-primary w-6"
+                          : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Auto-play Indicator */}
+            {isCurrentAudioPlaying && (
               <div className="text-center">
-                <div className="inline-flex items-center gap-2 px-3 py-1 bg-primary/10 rounded-full">
+                <div className="inline-flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
                   <div className="flex gap-1">
-                    {[1, 2, 3].map(i => (
+                    {[1, 2, 3, 4, 5].map(i => (
                       <div
                         key={i}
                         className="w-1 h-4 bg-primary rounded-full animate-pulse"
                         style={{
-                          animationDelay: `${i * 0.2}s`,
-                          animationDuration: '0.6s'
+                          animationDelay: `${i * 0.1}s`,
+                          animationDuration: '0.8s'
                         }}
                       />
                     ))}
                   </div>
-                  <span className="text-sm text-primary">Reproduzindo áudio...</span>
+                  <span className="text-sm font-medium text-primary">
+                    Reproduzindo • Próximo em breve
+                  </span>
                 </div>
               </div>
             )}
@@ -751,7 +873,15 @@ export default function Feed() {
       </Card>
     );
   };
-    /* ---------- UI ---------- */
+
+  // Cleanup effect para parar áudio quando componente desmontar
+  useEffect(() => {
+    return () => {
+      stopCurrentAudio();
+    };
+  }, []);
+
+  /* ---------- UI ---------- */
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
@@ -767,10 +897,7 @@ export default function Feed() {
         {/* Espaço de 1 linha */}
         <div className="h-4"></div>
 
-        {/* Photo Audio Carousel */}
-        {renderPhotoAudioCarousel()}
-
-        {/* Composer */}
+        {/* Composer - AGORA ANTES DO CARROSSEL */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
             {/* Post Type Selector */}
@@ -996,6 +1123,9 @@ export default function Feed() {
           </CardContent>
         </Card>
 
+        {/* Photo Audio Carousel - NOVO DESIGN MODERNO */}
+        {renderPhotoAudioCarousel()}
+
         {/* Feed - Todas as postagens */}
         {posts?.map((post) => {
           const isOwnPost = post.user_id === user?.id;
@@ -1043,7 +1173,7 @@ export default function Feed() {
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="end" className="w-44 rounded-xl shadow-xl">
                         <DropdownMenuItem 
-                          onClick={() => { setEditingPost(post); setEditContent(post.content || ""); }}
+                          onClick={() => openEdit(post)}
                           className="rounded-lg cursor-pointer"
                         >
                           <Pencil className="h-4 w-4 mr-2" /> Editar postagem
@@ -1292,7 +1422,7 @@ export default function Feed() {
         </DialogContent>
       </Dialog>
 
-      {/* Comentários---- */}
+      {/* Comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => { if (!o) setOpeningCommentsFor(null); }}>
         <DialogContent className="max-w-xl rounded-2xl shadow-2xl">
           <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
