@@ -1297,7 +1297,7 @@ export default function Feed() {
         </DialogContent>
       </Dialog>
 
-      {/* Comentários */}
+      {/* Comentários.... */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => { if (!o) setOpeningCommentsFor(null); }}>
         <DialogContent className="max-w-xl rounded-2xl shadow-2xl">
           <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
