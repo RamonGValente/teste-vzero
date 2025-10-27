@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
-  ChevronLeft, ChevronRight, Volume2
+  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -115,6 +115,111 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 /* ---------- Types ---------- */
 type PostRow = any;
 
+/* ---------- Video Auto Player Hook ---------- */
+const useVideoAutoPlayer = () => {
+  const [playingVideo, setPlayingVideo] = useState<string | null>(null);
+  const [muted, setMuted] = useState(true);
+  const videoRefs = useRef<Map<string, HTMLVideoElement>>(new Map());
+  const observerRef = useRef<IntersectionObserver | null>(null);
+
+  const playVideo = useCallback(async (videoId: string) => {
+    const video = videoRefs.current.get(videoId);
+    if (video && playingVideo !== videoId) {
+      try {
+        // Pausar vídeo atual
+        if (playingVideo) {
+          const currentVideo = videoRefs.current.get(playingVideo);
+          if (currentVideo) {
+            currentVideo.pause();
+            currentVideo.currentTime = 0;
+          }
+        }
+
+        // Reproduzir novo vídeo
+        setPlayingVideo(videoId);
+        video.currentTime = 0;
+        video.muted = muted;
+        await video.play();
+      } catch (error) {
+        console.error('Error playing video:', error);
+      }
+    }
+  }, [playingVideo, muted]);
+
+  const pauseVideo = useCallback((videoId: string) => {
+    if (playingVideo === videoId) {
+      const video = videoRefs.current.get(videoId);
+      if (video) {
+        video.pause();
+        setPlayingVideo(null);
+      }
+    }
+  }, [playingVideo]);
+
+  const toggleMute = useCallback(() => {
+    setMuted(prev => !prev);
+    if (playingVideo) {
+      const video = videoRefs.current.get(playingVideo);
+      if (video) {
+        video.muted = !muted;
+      }
+    }
+  }, [playingVideo, muted]);
+
+  // Setup intersection observer para auto-play
+  useEffect(() => {
+    observerRef.current = new IntersectionObserver(
+      (entries) => {
+        entries.forEach(entry => {
+          const videoId = entry.target.getAttribute('data-video-id');
+          if (!videoId) return;
+
+          if (entry.isIntersecting && entry.intersectionRatio > 0.8) {
+            playVideo(videoId);
+          } else if (playingVideo === videoId) {
+            pauseVideo(videoId);
+          }
+        });
+      },
+      {
+        threshold: [0, 0.8, 1],
+        rootMargin: '0px 0px -10% 0px'
+      }
+    );
+
+    return () => {
+      if (observerRef.current) {
+        observerRef.current.disconnect();
+      }
+    };
+  }, [playVideo, pauseVideo, playingVideo]);
+
+  const registerVideo = useCallback((videoId: string, videoElement: HTMLVideoElement) => {
+    videoRefs.current.set(videoId, videoElement);
+    if (observerRef.current) {
+      observerRef.current.observe(videoElement);
+    }
+  }, []);
+
+  const unregisterVideo = useCallback((videoId: string) => {
+    const video = videoRefs.current.get(videoId);
+    if (video && observerRef.current) {
+      observerRef.current.unobserve(video);
+    }
+    videoRefs.current.delete(videoId);
+  }, []);
+
+  return {
+    playingVideo,
+    muted,
+    playVideo,
+    pauseVideo,
+    toggleMute,
+    registerVideo,
+    unregisterVideo,
+  };
+};
+
 /* ---------- Audio Recording Hook ---------- */
 const useAudioRecorder = () => {
   const [isRecording, setIsRecording] = useState(false);
@@ -215,6 +320,17 @@ export default function Feed() {
     resetRecording
   } = useAudioRecorder();
 
+  /* Video Auto Player */
+  const {
+    playingVideo,
+    muted,
+    playVideo,
+    pauseVideo,
+    toggleMute,
+    registerVideo,
+    unregisterVideo,
+  } = useVideoAutoPlayer();
+
   /* Native Inputs */
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -232,6 +348,10 @@ export default function Feed() {
   /* Photo Audio Carousel */
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [currentTranslate, setCurrentTranslate] = useState(0);
+  const carouselRef = useRef<HTMLDivElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   /* Mark as viewed */
@@ -515,26 +635,6 @@ export default function Feed() {
     audio.onended = () => {
       setPlayingAudio(null);
       currentAudioRef.current = null;
-      
-      // Aguardar um pouco antes de avançar para próxima
-      setTimeout(() => {
-        const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
-        const currentIndex = photoAudioPosts.findIndex(p => p.id === postId);
-        
-        if (currentIndex !== -1 && photoAudioPosts.length > 1) {
-          const nextIndex = (currentIndex + 1) % photoAudioPosts.length;
-          setCurrentCarouselIndex(nextIndex);
-          
-          // Reproduzir automaticamente o próximo áudio
-          const nextPost = photoAudioPosts[nextIndex];
-          if (nextPost?.audio_url) {
-            // Pequeno delay antes de reproduzir o próximo
-            setTimeout(() => {
-              handlePhotoAudioPlay(nextPost.audio_url, nextPost.id);
-            }, 1000);
-          }
-        }
-      }, 500);
     };
     
     audio.play().catch(console.error);
@@ -558,6 +658,240 @@ export default function Feed() {
     if (photoAudioPosts.length === 0) return;
     const prevIndex = (currentCarouselIndex - 1 + photoAudioPosts.length) % photoAudioPosts.length;
     setCurrentCarouselIndex(prevIndex);
+  };
+
+  /* --------- Touch Gestures ---------- */
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setIsDragging(true);
+    setStartX(e.touches[0].clientX);
+    setCurrentTranslate(0);
+  };
+
+  const handleTouchMove = (e: React.TouchEvent) => {
+    if (!isDragging) return;
+    const currentX = e.touches[0].clientX;
+    const diff = currentX - startX;
+    setCurrentTranslate(diff);
+  };
+
+  const handleTouchEnd = () => {
+    if (!isDragging) return;
+    setIsDragging(false);
+
+    const threshold = 50;
+    if (currentTranslate > threshold) {
+      prevCarouselItem();
+    } else if (currentTranslate < -threshold) {
+      nextCarouselItem();
+    }
+    setCurrentTranslate(0);
+  };
+
+  /* --------- Render Photo Audio Carousel ---------- */
+  const renderPhotoAudioCarousel = () => {
+    const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
+    
+    if (photoAudioPosts.length === 0) return null;
+
+    const currentPost = photoAudioPosts[currentCarouselIndex];
+    const imageUrl = currentPost?.media_urls?.[0] ? stripPrefix(currentPost.media_urls[0]) : null;
+    const audioUrl = currentPost?.audio_url ? stripPrefix(currentPost.audio_url) : null;
+
+    // Verificar se o áudio atual está tocando
+    const isCurrentAudioPlaying = playingAudio === currentPost.audio_url;
+
+    return (
+      <Card className="mb-6 border-0 shadow-2xl bg-gradient-to-br from-card/95 to-card/80 backdrop-blur-sm overflow-hidden max-w-sm mx-auto">
+        <CardContent className="p-0">
+          {/* Header Elegante */}
+          <div className="flex items-center justify-between p-4 bg-gradient-to-r from-primary/10 via-primary/5 to-secondary/5 border-b border-primary/10">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-r from-primary to-secondary p-2 rounded-xl shadow-lg">
+                <Volume2 className="h-4 w-4 text-white" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+                  Fotos com Áudio
+                </h3>
+                <p className="text-xs text-muted-foreground">
+                  Deslize para navegar • Toque no áudio
+                </p>
+              </div>
+            </div>
+            
+            <div className="flex items-center gap-2 bg-background/80 rounded-full px-3 py-1.5 shadow-sm border border-primary/10">
+              <span className="text-sm font-semibold text-primary">
+                {currentCarouselIndex + 1}
+              </span>
+              <span className="text-sm text-muted-foreground">/</span>
+              <span className="text-sm text-muted-foreground">{photoAudioPosts.length}</span>
+            </div>
+          </div>
+
+          {/* Content */}
+          <div className="p-4 space-y-4">
+            {/* User Info */}
+            <div className="flex items-center gap-3">
+              <Avatar className="h-8 w-8 ring-2 ring-primary/20 shadow-md">
+                <AvatarImage src={currentPost.profiles?.avatar_url} />
+                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold text-xs">
+                  {currentPost.profiles?.username?.[0]?.toUpperCase()}
+                </AvatarFallback>
+              </Avatar>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <UserLink 
+                    userId={currentPost.user_id} 
+                    username={currentPost.profiles?.username || ""}
+                    className="text-sm font-semibold hover:text-primary transition-colors truncate"
+                  >
+                    {currentPost.profiles?.username}
+                  </UserLink>
+                  {isCurrentAudioPlaying && (
+                    <div className="flex gap-1">
+                      {[1, 2, 3].map(i => (
+                        <div
+                          key={i}
+                          className="w-1 h-3 bg-primary rounded-full animate-pulse"
+                          style={{
+                            animationDelay: `${i * 0.2}s`,
+                            animationDuration: '0.6s'
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  {fmtDateTime(currentPost.created_at)}
+                </p>
+              </div>
+            </div>
+
+            {/* Carousel Container */}
+            <div className="relative">
+              {/* Navigation Arrows - Elegantes e Sempre Visíveis */}
+              {photoAudioPosts.length > 1 && (
+                <>
+                  <button
+                    onClick={prevCarouselItem}
+                    className="absolute left-2 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 backdrop-blur-sm"
+                  >
+                    <ChevronLeft className="h-4 w-4" />
+                  </button>
+                  
+                  <button
+                    onClick={nextCarouselItem}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 z-20 bg-black/60 hover:bg-black/80 text-white p-2 rounded-full shadow-2xl transition-all duration-300 hover:scale-110 backdrop-blur-sm"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
+                </>
+              )}
+
+              {/* Main Image Container with Gestures */}
+              <div
+                ref={carouselRef}
+                className="relative aspect-[9/16] rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-muted to-muted/50 cursor-grab active:cursor-grabbing"
+                onTouchStart={handleTouchStart}
+                onTouchMove={handleTouchMove}
+                onTouchEnd={handleTouchEnd}
+                style={{
+                  transform: `translateX(${currentTranslate}px)`,
+                  transition: isDragging ? 'none' : 'transform 0.3s ease-out'
+                }}
+              >
+                {imageUrl && (
+                  <>
+                    <img
+                      src={imageUrl}
+                      alt="Post com áudio"
+                      className="w-full h-full object-cover transition-transform duration-700"
+                    />
+                    
+                    {/* Audio Play Button - Elegante */}
+                    {audioUrl && (
+                      <button
+                        onClick={() => {
+                          if (isCurrentAudioPlaying) {
+                            stopCurrentAudio();
+                          } else {
+                            handlePhotoAudioPlay(currentPost.audio_url, currentPost.id);
+                          }
+                        }}
+                        className={cn(
+                          "absolute bottom-4 right-4 z-10 p-3 rounded-full shadow-2xl transition-all duration-500 hover:scale-110 backdrop-blur-sm border",
+                          isCurrentAudioPlaying 
+                            ? "bg-gradient-to-r from-primary to-secondary text-white scale-110 shadow-primary/50 border-primary/30" 
+                            : "bg-white/90 text-foreground hover:bg-white border-white/30"
+                        )}
+                      >
+                        <Volume2 className={cn(
+                          "h-5 w-5 transition-all duration-300",
+                          isCurrentAudioPlaying && "animate-pulse"
+                        )} />
+                      </button>
+                    )}
+
+                    {/* Gradient Overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/30 via-transparent to-transparent" />
+
+                    {/* Swipe Indicator */}
+                    <div className="absolute top-4 left-1/2 -translate-x-1/2 bg-black/50 text-white text-xs px-3 py-1.5 rounded-full backdrop-blur-sm opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+                      ← Deslize →
+                    </div>
+                  </>
+                )}
+              </div>
+
+              {/* Progress Dots - Elegantes */}
+              {photoAudioPosts.length > 1 && (
+                <div className="flex justify-center gap-2 mt-4">
+                  {photoAudioPosts.map((_, index) => (
+                    <button
+                      key={index}
+                      onClick={() => {
+                        stopCurrentAudio();
+                        setCurrentCarouselIndex(index);
+                      }}
+                      className={cn(
+                        "h-1.5 rounded-full transition-all duration-300",
+                        index === currentCarouselIndex
+                          ? "bg-primary w-8"
+                          : "bg-muted-foreground/30 hover:bg-muted-foreground/50 w-3"
+                      )}
+                    />
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Audio Status */}
+            {isCurrentAudioPlaying && (
+              <div className="text-center">
+                <div className="inline-flex items-center gap-3 px-4 py-2 bg-gradient-to-r from-primary/10 to-secondary/10 rounded-2xl border border-primary/20 backdrop-blur-sm">
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map(i => (
+                      <div
+                        key={i}
+                        className="w-1 h-4 bg-primary rounded-full animate-pulse"
+                        style={{
+                          animationDelay: `${i * 0.1}s`,
+                          animationDuration: '0.8s'
+                        }}
+                      />
+                    ))}
+                  </div>
+                  <span className="text-sm font-medium text-primary">
+                    Reproduzindo Áudio
+                  </span>
+                </div>
+              </div>
+            )}
+          </div>
+        </CardContent>
+      </Card>
+    );
   };
     /* --------- Vote/Like/Comments/Edit/Delete ---------- */
   const handleVote = async (postId: string, voteType: "heart" | "bomb") => {
@@ -686,194 +1020,6 @@ export default function Feed() {
       }),
   });
 
-  /* --------- Render Photo Audio Carousel ---------- */
-  const renderPhotoAudioCarousel = () => {
-    const photoAudioPosts = posts?.filter(post => post.post_type === 'photo_audio') || [];
-    
-    if (photoAudioPosts.length === 0) return null;
-
-    const currentPost = photoAudioPosts[currentCarouselIndex];
-    const imageUrl = currentPost?.media_urls?.[0] ? stripPrefix(currentPost.media_urls[0]) : null;
-    const audioUrl = currentPost?.audio_url ? stripPrefix(currentPost.audio_url) : null;
-
-    // Verificar se o áudio atual está tocando
-    const isCurrentAudioPlaying = playingAudio === currentPost.audio_url;
-
-    return (
-      <Card className="mb-6 border-0 shadow-2xl bg-gradient-to-br from-card/95 to-card/80 backdrop-blur-sm overflow-hidden">
-        <CardContent className="p-0">
-          {/* Header */}
-          <div className="flex items-center justify-between p-6 pb-4 bg-gradient-to-r from-primary/5 to-secondary/5">
-            <div className="flex items-center gap-3">
-              <div className="bg-gradient-to-r from-primary to-secondary p-2 rounded-xl shadow-lg">
-                <Volume2 className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-lg font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-                  Fotos com Áudio
-                </h3>
-                <p className="text-xs text-muted-foreground">
-                  Toque no ícone de áudio para reproduzir automaticamente
-                </p>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-3">
-              <div className="flex items-center gap-2 bg-background/50 rounded-full px-3 py-1 shadow-sm">
-                <span className="text-sm font-semibold text-primary">
-                  {currentCarouselIndex + 1}
-                </span>
-                <span className="text-sm text-muted-foreground">/</span>
-                <span className="text-sm text-muted-foreground">{photoAudioPosts.length}</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Content */}
-          <div className="p-6 space-y-4">
-            {/* User Info */}
-            <div className="flex items-center gap-3">
-              <Avatar className="h-9 w-9 ring-2 ring-primary/20 shadow-md">
-                <AvatarImage src={currentPost.profiles?.avatar_url} />
-                <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
-                  {currentPost.profiles?.username?.[0]?.toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
-              <div className="flex-1">
-                <div className="flex items-center gap-2">
-                  <UserLink 
-                    userId={currentPost.user_id} 
-                    username={currentPost.profiles?.username || ""}
-                    className="font-semibold hover:text-primary transition-colors"
-                  >
-                    {currentPost.profiles?.username}
-                  </UserLink>
-                  {isCurrentAudioPlaying && (
-                    <div className="flex gap-1">
-                      {[1, 2, 3].map(i => (
-                        <div
-                          key={i}
-                          className="w-1 h-4 bg-primary rounded-full animate-pulse"
-                          style={{
-                            animationDelay: `${i * 0.2}s`,
-                            animationDuration: '0.6s'
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
-                <p className="text-xs text-muted-foreground">
-                  {fmtDateTime(currentPost.created_at)}
-                </p>
-              </div>
-            </div>
-
-            {/* Image and Audio */}
-            <div className="relative group">
-              {/* Navigation Arrows */}
-              <button
-                onClick={prevCarouselItem}
-                className="absolute left-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full shadow-2xl transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
-              >
-                <ChevronLeft className="h-5 w-5" />
-              </button>
-              
-              <button
-                onClick={nextCarouselItem}
-                className="absolute right-4 top-1/2 -translate-y-1/2 z-20 bg-black/50 hover:bg-black/70 text-white p-3 rounded-full shadow-2xl transition-all duration-300 opacity-0 group-hover:opacity-100 hover:scale-110"
-              >
-                <ChevronRight className="h-5 w-5" />
-              </button>
-
-              {/* Main Image */}
-              {imageUrl && (
-                <div className="relative aspect-[4/5] max-w-md mx-auto rounded-2xl overflow-hidden shadow-2xl bg-gradient-to-br from-muted to-muted/50">
-                  <img
-                    src={imageUrl}
-                    alt="Post com áudio"
-                    className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-105"
-                  />
-                  
-                  {/* Audio Play Button */}
-                  {audioUrl && (
-                    <button
-                      onClick={() => {
-                        if (isCurrentAudioPlaying) {
-                          stopCurrentAudio();
-                        } else {
-                          handlePhotoAudioPlay(currentPost.audio_url, currentPost.id);
-                        }
-                      }}
-                      className={cn(
-                        "absolute bottom-6 right-6 z-10 p-4 rounded-full shadow-2xl transition-all duration-500 hover:scale-110",
-                        isCurrentAudioPlaying 
-                          ? "bg-gradient-to-r from-primary to-secondary text-white scale-110 shadow-primary/50" 
-                          : "bg-white/95 text-foreground hover:bg-white backdrop-blur-sm"
-                      )}
-                    >
-                      <Volume2 className={cn(
-                        "h-6 w-6 transition-all duration-300",
-                        isCurrentAudioPlaying && "animate-pulse"
-                      )} />
-                    </button>
-                  )}
-
-                  {/* Gradient Overlay */}
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500" />
-                </div>
-              )}
-
-              {/* Progress Dots */}
-              {photoAudioPosts.length > 1 && (
-                <div className="flex justify-center gap-2 mt-4">
-                  {photoAudioPosts.map((_, index) => (
-                    <button
-                      key={index}
-                      onClick={() => {
-                        stopCurrentAudio(); // Parar áudio ao clicar nos dots
-                        setCurrentCarouselIndex(index);
-                      }}
-                      className={cn(
-                        "w-2 h-2 rounded-full transition-all duration-300",
-                        index === currentCarouselIndex
-                          ? "bg-primary w-6"
-                          : "bg-muted-foreground/30 hover:bg-muted-foreground/50"
-                      )}
-                    />
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Auto-play Indicator */}
-            {isCurrentAudioPlaying && (
-              <div className="text-center">
-                <div className="inline-flex items-center gap-3 px-4 py-2 bg-primary/10 rounded-full border border-primary/20">
-                  <div className="flex gap-1">
-                    {[1, 2, 3, 4, 5].map(i => (
-                      <div
-                        key={i}
-                        className="w-1 h-4 bg-primary rounded-full animate-pulse"
-                        style={{
-                          animationDelay: `${i * 0.1}s`,
-                          animationDuration: '0.8s'
-                        }}
-                      />
-                    ))}
-                  </div>
-                  <span className="text-sm font-medium text-primary">
-                    Reproduzindo • Próximo em breve
-                  </span>
-                </div>
-              </div>
-            )}
-          </div>
-        </CardContent>
-      </Card>
-    );
-  };
-
   // Cleanup effect para parar áudio quando componente desmontar
   useEffect(() => {
     return () => {
@@ -897,7 +1043,7 @@ export default function Feed() {
         {/* Espaço de 1 linha */}
         <div className="h-4"></div>
 
-        {/* Composer - AGORA ANTES DO CARROSSEL */}
+        {/* Composer */}
         <Card className="border-0 shadow-lg bg-gradient-to-br from-card to-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
             {/* Post Type Selector */}
@@ -908,7 +1054,7 @@ export default function Feed() {
                 className="rounded-xl"
                 size="sm"
               >
-                Postagem Normal
+                Feed
               </Button>
               <Button
                 variant={postType === 'photo_audio' ? "default" : "outline"}
@@ -916,7 +1062,7 @@ export default function Feed() {
                 className="rounded-xl"
                 size="sm"
               >
-                Foto + Áudio
+                Flash
               </Button>
             </div>
 
@@ -1123,7 +1269,7 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Photo Audio Carousel - NOVO DESIGN MODERNO */}
+        {/* Photo Audio Carousel - NOVO DESIGN ELEGANTE COM GESTOS */}
         {renderPhotoAudioCarousel()}
 
         {/* Feed - Todas as postagens */}
@@ -1138,6 +1284,7 @@ export default function Feed() {
           const isVotingActive = post.voting_period_active && post.voting_ends_at;
           const mediaList: string[] = post.media_urls || [];
           const isPhotoAudio = post.post_type === 'photo_audio';
+          const hasVideos = mediaList.some(url => isVideoUrl(url));
 
           // Pular postagens photo_audio no feed normal (já estão no carrossel)
           if (isPhotoAudio) return null;
@@ -1209,40 +1356,102 @@ export default function Feed() {
                     {mediaList.map((raw: string, index: number) => {
                       const url = stripPrefix(raw);
                       const isVideo = isVideoUrl(raw);
+                      const videoId = `${post.id}-${index}`;
+                      const isPlaying = playingVideo === videoId;
+
                       return (
-                        <button
+                        <div
                           key={index}
                           className="rounded-xl overflow-hidden group relative bg-gradient-to-br from-muted to-muted/50 shadow-lg hover:shadow-xl transition-all duration-500 focus:outline-none focus:ring-2 focus:ring-primary/50"
-                          onClick={() => { setViewerUrl(url); setViewerIsVideo(isVideo); setViewerOpen(true); }}
                         >
                           {isVideo ? (
                             <div className="relative w-full aspect-square">
-                              <video 
-                                src={url} 
-                                className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
-                                playsInline 
+                              <video
+                                ref={(el) => {
+                                  if (el) {
+                                    registerVideo(videoId, el);
+                                    el.setAttribute('data-video-id', videoId);
+                                  } else {
+                                    unregisterVideo(videoId);
+                                  }
+                                }}
+                                src={url}
+                                className="w-full h-full object-cover transition-transform duration-500"
+                                playsInline
                                 preload="metadata"
+                                loop
+                                muted={muted}
+                                onClick={() => isPlaying ? pauseVideo(videoId) : playVideo(videoId)}
                               />
-                              <div className="absolute inset-0 bg-black/0 group-hover:bg-black/10 transition-all duration-300 flex items-center justify-center">
-                                <div className="bg-black/60 rounded-full p-3 shadow-2xl transform group-hover:scale-110 transition-transform duration-300">
-                                  <Play className="h-6 w-6 text-white fill-white" />
+                              
+                              {/* Video Controls Overlay */}
+                              <div 
+                                className="absolute inset-0 flex items-center justify-center cursor-pointer"
+                                onClick={() => isPlaying ? pauseVideo(videoId) : playVideo(videoId)}
+                              >
+                                <div className={cn(
+                                  "bg-black/60 rounded-full p-3 shadow-2xl transform transition-all duration-300",
+                                  isPlaying ? "scale-100 opacity-0 group-hover:opacity-100" : "scale-110 opacity-100"
+                                )}>
+                                  {isPlaying ? (
+                                    <Pause className="h-6 w-6 text-white" />
+                                  ) : (
+                                    <Play className="h-6 w-6 text-white fill-white" />
+                                  )}
                                 </div>
                               </div>
+
+                              {/* Mute Button */}
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  toggleMute();
+                                }}
+                                className="absolute bottom-3 left-3 bg-black/50 hover:bg-black/70 text-white p-2 rounded-full shadow-lg transition-all duration-300 opacity-0 group-hover:opacity-100"
+                              >
+                                {muted ? (
+                                  <VolumeX className="h-3 w-3" />
+                                ) : (
+                                  <Volume2 className="h-3 w-3" />
+                                )}
+                              </button>
+
+                              {/* Playing Indicator */}
+                              {isPlaying && (
+                                <div className="absolute top-3 right-3 bg-black/50 text-white text-xs px-2 py-1 rounded-full shadow-lg">
+                                  <div className="flex gap-0.5">
+                                    {[1, 2, 3].map(i => (
+                                      <div
+                                        key={i}
+                                        className="w-0.5 h-2 bg-white rounded-full animate-pulse"
+                                        style={{
+                                          animationDelay: `${i * 0.2}s`,
+                                          animationDuration: '0.6s'
+                                        }}
+                                      />
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           ) : (
-                            <div className="w-full aspect-square">
+                            <button
+                              onClick={() => { setViewerUrl(url); setViewerIsVideo(false); setViewerOpen(true); }}
+                              className="w-full aspect-square"
+                            >
                               <img 
                                 src={url} 
                                 alt="Post media" 
                                 className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105" 
                               />
-                            </div>
+                            </button>
                           )}
+                          
                           <span className="absolute bottom-3 right-3 bg-black/70 text-white text-xs px-2 py-1.5 rounded-full opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-y-2 group-hover:translate-y-0 shadow-lg flex items-center gap-1">
                             <Maximize2 className="h-3 w-3" />
                             Expandir
                           </span>
-                        </button>
+                        </div>
                       );
                     })}
                   </div>
