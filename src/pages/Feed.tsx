@@ -382,7 +382,7 @@ export default function Feed() {
     markAsViewed();
   }, [user, queryClient]);
 
-  /* Load posts - MODIFICADO: Todos os usuários podem ver todas as postagens */
+  /* Load posts - CORRIGIDO: Todos os usuários podem ver todas as postagens */
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
