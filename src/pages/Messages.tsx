@@ -9,6 +9,7 @@ import {
   UserPlus,
   MessageSquarePlus,
 } from "lucide-react";
+import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
 import { Button } from "@/components/ui/button";
@@ -550,7 +551,7 @@ export default function Messages() {
               </Button>
               {(() => {
                 const currentConv = conversations?.find(
-                  (c) => c.id === selectedConversation
+                  (c: any) => c.id === selectedConversation
                 );
                 const otherParticipant = currentConv?.conversation_participants?.find(
                   (p: any) => p.user_id !== user?.id
@@ -587,7 +588,27 @@ export default function Messages() {
                 );
               })()}
             </div>
+
+            {/* AÇÕES (inclui o botão de atenção com cálculo local do peerId) */}
             <div className="flex items-center gap-1">
+              {(() => {
+                const peerId =
+                  conversations
+                    ?.find((c: any) => c.id === selectedConversation)
+                    ?.conversation_participants
+                    ?.find((p: any) => p.user_id !== user?.id)
+                    ?.user_id;
+
+                if (!peerId) return null;
+
+                return (
+                  <AttentionButton
+                    contactId={peerId}
+                    className="hidden sm:flex"
+                  />
+                );
+              })()}
+
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Phone className="h-5 w-5" />
               </Button>
@@ -603,7 +624,7 @@ export default function Messages() {
           {/* Messages */}
           <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-muted/20">
             {messages && messages.length > 0 ? (
-              messages.map((message) => {
+              messages.map((message: any) => {
                 const isOwn = message.user_id === user?.id;
                 const hasAudio = message.media_urls && message.media_urls.length > 0;
 
@@ -802,7 +823,7 @@ export default function Messages() {
   }
 
   return (
-    <div className="h?[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden">
+    <div className="h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden">
       <ResizablePanelGroup direction="horizontal" className="w-full">
         {/* Conversations Panel */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>

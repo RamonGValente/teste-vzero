@@ -1,3 +1,5 @@
+import { RealtimeAttentionListener } from '@/components/realtime/RealtimeAttentionListener';
+import '@/styles/attention.css';
 import React, { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -35,7 +37,13 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  return <>{children}</>;
+  // ✅ Usuário logado: monta o listener aqui e depois renderiza o conteúdo protegido
+  return (
+    <>
+      <RealtimeAttentionListener />
+      {children}
+    </>
+  );
 }
 
 function StealthGuard({ children }: { children: React.ReactNode }) {
