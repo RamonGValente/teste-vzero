@@ -68,7 +68,6 @@ export default function Messages() {
             },
             { onConflict: "user_id,section" }
           );
-        // Invalidar o contador imediatamente
         queryClient.invalidateQueries({ queryKey: ["unread-messages", user.id] });
       } catch (e) {
         console.warn("last_viewed network fail", e);
@@ -140,7 +139,7 @@ export default function Messages() {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, [selectedConversation, refetchConversations]); // manter refetch nas deps
+  }, [selectedConversation, refetchConversations]);
 
   const { data: messages, refetch: refetchMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
@@ -198,7 +197,6 @@ export default function Messages() {
       .select()
       .single();
 
-    // Save mentions
     if (messageData) {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(messageData.id, "message", message, user.id);
@@ -325,12 +323,8 @@ export default function Messages() {
 
       const {
         data: { session },
-        error: sessionError,
       } = await supabase.auth.getSession();
-      console.log("Session completa:", session);
-      console.log("Session error:", sessionError);
       console.log("Access token:", session?.access_token ? "Present" : "Missing");
-      console.log("User role:", session?.user?.role);
 
       const { data: newConv, error: createError } = await supabase
         .from("conversations")
@@ -589,7 +583,7 @@ export default function Messages() {
               })()}
             </div>
 
-            {/* AÇÕES (inclui o botão de atenção com cálculo local do peerId) */}
+            {/* AÇÕES - botão de alerta visível também no mobile */}
             <div className="flex items-center gap-1">
               {(() => {
                 const peerId =
@@ -604,11 +598,12 @@ export default function Messages() {
                 return (
                   <AttentionButton
                     contactId={peerId}
-                    className="hidden sm:flex"
+                    className="inline-flex"   // <-- antes era "hidden sm:flex"
                   />
                 );
               })()}
 
+              {/* Estes continuam escondidos no mobile */}
               <Button variant="ghost" size="icon" className="hidden sm:flex">
                 <Phone className="h-5 w-5" />
               </Button>
@@ -703,7 +698,7 @@ export default function Messages() {
                           className={cn(
                             "p-3",
                             isOwn
-                              ? "bg-gradient-to-r from-primary to-secondary text-white border-0"
+                              ? "bg-gradient-to-r from-primary to secondary text-white border-0".replace(" to ", " to-")
                               : "bg-card"
                           )}
                         >
