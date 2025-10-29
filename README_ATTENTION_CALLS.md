@@ -1,42 +1,17 @@
 
-# Melhorias de 'Chamar Atenção' — Sistema Completo
-- **Cooldown global**: 1 alerta por remetente a cada **10 minutos**.
-- **Idempotência por par**: se já existir alerta do mesmo remetente→destinatário nos **últimos 30s**, não cria outro.
-- **TTL 30s**: alertas são excluídos após 30s (pg_cron agendado ou função agendada).
-- **Coalescência no cliente**: ao logar e em tempo real, mostra **no máximo 1 notificação por remetente** em uma janela de 30s.
+# Chamar Atenção — Pacote Completo (TS/TSX)
 
-## Uso no Frontend
-```ts
-import { startAttentionListeners } from "@/services/attentionCalls";
+## Servidor (Supabase)
+- RPC `attention_call_create`: idempotência por par (30s) + cooldown global 10 min
+- TTL 30s: `prune_old_attention_calls` + agendamento via pg_cron (se disponível)
+- ACK: `attention_call_ack` e `attention_call_ack_many` — apagam no recebimento
 
-let stop: null | (() => void) = null;
+## Frontend
+- `src/services/attentionCalls.ts`: enviar, ouvir coalescido (1 por remetente/30s), auto-ack
+- `src/components/chat/AttentionButton.tsx`: botão TSX pronto
+- `src/hooks/useAttentionListeners.ts`: inicia carga inicial + realtime com auto-ack
 
-async function onLogin(userId: string) {
-  stop = await startAttentionListeners(userId, (call) => {
-    // exiba UM toast por remetente / 30s
-    // toast.info(`🔔 Atenção de ${call.sender_id}`);
-  });
-}
-
-function onLogout() {
-  if (stop) stop();
-  stop = null;
-}
-```
-
-## Migrações
-- `*_attention_call_base.sql` cria índice, políticas e função de limpeza + agenda cron (se disponível).
-- `*_attention_call_idempotent_per_pair.sql` atualiza o RPC `attention_call_create` com idempotência + cooldown.
-```
--- Teste rápido:
-select public.attention_call_create('UUID-DO-DESTINATARIO', 'olá');
-```
-
-## Componentes TSX prontos
-- `src/components/chat/AttentionButton.tsx`
-- `src/hooks/useAttentionListeners.ts`
-
-### Exemplo (TSX)
+### Uso rápido (TSX)
 ```tsx
 import AttentionButton from "@/components/chat/AttentionButton";
 import { useAttentionListeners } from "@/hooks/useAttentionListeners";
@@ -44,7 +19,7 @@ import { useAttentionListeners } from "@/hooks/useAttentionListeners";
 type Props = { currentUserId: string; receiverId: string; };
 export default function ChatHeader({ currentUserId, receiverId }: Props) {
   useAttentionListeners(currentUserId, (call) => {
-    console.log("Atenção:", call);
+    // toast.info(`🔔 Atenção de ${call.sender_id}`);
   });
 
   return (

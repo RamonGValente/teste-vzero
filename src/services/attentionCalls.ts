@@ -1,10 +1,4 @@
 
-/**
- * Attention Call service com:
- * - RPC idempotente (30s por par sender->receiver) + cooldown global 10 min
- * - TTL 30s no servidor (pg_cron ou função agendada)
- * - Coalescência no cliente (1 notificação por remetente / 30s)
- */
 import { supabase } from "@/lib/supabaseClient";
 
 export type AttentionCallError =
@@ -27,7 +21,7 @@ export async function sendAttentionCall(receiverId: string, message?: string) {
       "unknown";
     throw new Error(code);
   }
-  return data as string; // attention_calls.id
+  return data as string;
 }
 
 export function attentionErrorMessage(e: unknown) {
@@ -48,9 +42,7 @@ export function attentionErrorMessage(e: unknown) {
   }
 }
 
-/**
- * Carga inicial: no máximo 1 alerta por remetente, últimos 30s.
- */
+/** Carga inicial: no máximo 1 por remetente, últimos 30s */
 export async function fetchRecentAttentionCallsDistinctBySender(receiverId: string) {
   const since = new Date(Date.now() - 30_000).toISOString();
   const { data, error } = await supabase
@@ -71,21 +63,12 @@ export async function fetchRecentAttentionCallsDistinctBySender(receiverId: stri
   return distinct;
 }
 
-/**
- * Tempo real coalescido: 1 por remetente a cada 30s.
- */
+/** Realtime: 1 por remetente a cada 30s */
 export function listenAttentionCallsOnePerSender(
   receiverId: string,
-  onCall: (call: {
-    id: string;
-    sender_id: string;
-    receiver_id: string;
-    message: string | null;
-    created_at: string;
-  }) => void
+  onCall: (call: { id: string; sender_id: string; receiver_id: string; message: string | null; created_at: string; }) => void
 ) {
   const senderWindow = new Map<string, number>();
-
   const channel = supabase
     .channel("attention_calls_" + receiverId + "_dedupe")
     .on(
@@ -103,24 +86,36 @@ export function listenAttentionCallsOnePerSender(
       }
     )
     .subscribe();
-
-  return () => {
-    supabase.removeChannel(channel);
-  };
+  return () => supabase.removeChannel(channel);
 }
 
-/**
- * Conveniência: inicia carga inicial + realtime deduplicado.
- */
+/* ========== ACK / AUTO-DELETE ========== */
+
+export async function ackAttentionCall(callId: string) {
+  const { error } = await supabase.rpc("attention_call_ack", { p_call_id: callId });
+  if (error) throw error;
+}
+
+export async function ackAttentionCalls(callIds: string[]) {
+  if (!callIds.length) return;
+  const { error } = await supabase.rpc("attention_call_ack_many", { p_call_ids: callIds });
+  if (error) throw error;
+}
+
+export function listenAttentionCallsOnePerSenderAutoAck(
+  receiverId: string,
+  onCall: (call: { id: string; sender_id: string; receiver_id: string; message: string | null; created_at: string; }) => void
+) {
+  const unsub = listenAttentionCallsOnePerSender(receiverId, (call) => {
+    onCall(call);
+    ackAttentionCall(call.id).catch((e) => console.error("ack failed", e));
+  });
+  return unsub;
+}
+
 export async function startAttentionListeners(
   currentUserId: string,
-  onCall: (call: {
-    id: string;
-    sender_id: string;
-    receiver_id: string;
-    message: string | null;
-    created_at: string;
-  }) => void
+  onCall: (call: { id: string; sender_id: string; receiver_id: string; message: string | null; created_at: string; }) => void
 ) {
   try {
     const initial = await fetchRecentAttentionCallsDistinctBySender(currentUserId);
@@ -129,4 +124,22 @@ export async function startAttentionListeners(
     console.error("Falha ao carregar alertas recentes:", attentionErrorMessage(e));
   }
   return listenAttentionCallsOnePerSender(currentUserId, onCall);
+}
+
+export async function startAttentionListenersAutoAck(
+  currentUserId: string,
+  onCall: (call: { id: string; sender_id: string; receiver_id: string; message: string | null; created_at: string; }) => void
+) {
+  try {
+    const initial = await fetchRecentAttentionCallsDistinctBySender(currentUserId);
+    const ids: string[] = [];
+    for (const call of initial) {
+      onCall(call);
+      ids.push(call.id);
+    }
+    await ackAttentionCalls(ids);
+  } catch (e) {
+    console.error("Falha na carga inicial:", e);
+  }
+  return listenAttentionCallsOnePerSenderAutoAck(currentUserId, onCall);
 }

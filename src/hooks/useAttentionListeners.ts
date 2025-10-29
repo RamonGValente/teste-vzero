@@ -1,6 +1,6 @@
 
 import * as React from "react";
-import { startAttentionListeners } from "@/services/attentionCalls";
+import { startAttentionListenersAutoAck } from "@/services/attentionCalls";
 
 type AttentionCall = {
   id: string;
@@ -18,7 +18,7 @@ export function useAttentionListeners(
     let stop: null | (() => void) = null;
     (async () => {
       if (!currentUserId) return;
-      stop = await startAttentionListeners(currentUserId, onCall);
+      stop = await startAttentionListenersAutoAck(currentUserId, onCall);
     })();
     return () => {
       if (stop) stop();

@@ -1,20 +1,11 @@
 import * as React from "react";
 import { cn } from "@/lib/utils";
 import { Paperclip, Mic, Square, Send } from "lucide-react";
-import { sendAttentionCall, attentionErrorMessage } from "@/services/attentionCalls";
 import AttentionButton from "@/components/chat/AttentionButton";
+import { sendAttentionCall, attentionErrorMessage } from "@/services/attentionCalls";
 
 type Props = { onSend: (text: string, files?: File[], audioBlob?: Blob) => void; disabled?: boolean; };
 
-
-
-async function handleAttentionCall(receiverId: string, message?: string) {
-  try {
-    await sendAttentionCall(receiverId, message);
-  } catch (e) {
-    console.error(attentionErrorMessage(e));
-  }
-}
 export default function ChatComposer({ onSend, disabled }: Props) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
@@ -103,8 +94,7 @@ export default function ChatComposer({ onSend, disabled }: Props) {
   );
 }
 
-// <AttentionButton/> placement
-// Exemplo de uso no seu TSX (toolbar do chat):
+// Exemplo TSX de uso:
 // <AttentionButton
 //   receiverId={receiverId}
 //   className="px-3 py-2 rounded-xl border"
