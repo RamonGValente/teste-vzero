@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
@@ -8,6 +8,10 @@ import {
   Video,
   UserPlus,
   MessageSquarePlus,
+  Users,
+  MessageCircle,
+  ArrowUp,
+  ArrowDown,
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -40,6 +44,7 @@ import {
   ResizableHandle,
 } from "@/components/ui/resizable";
 import { MentionText } from "@/components/MentionText";
+import { Badge } from "@/components/ui/badge";
 
 export default function Messages() {
   const { user } = useAuth();
@@ -49,10 +54,84 @@ export default function Messages() {
   const [searchQuery, setSearchQuery] = useState("");
   const [contactsSearchQuery, setContactsSearchQuery] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
+  const [showContactsModal, setShowContactsModal] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
 
-  // Mark messages as viewed when user visits
+  // Estados de scroll simplificados
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
+  const [showScrollToTop, setShowScrollToTop] = useState(false);
+
+  // --- Helpers de scroll simplificados ---
+  const scrollToBottom = useCallback((instant: boolean = false) => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: messagesContainerRef.current.scrollHeight,
+        behavior: instant ? "auto" : "smooth",
+      });
+    }
+  }, []);
+
+  const scrollToTop = useCallback((instant: boolean = false) => {
+    if (messagesContainerRef.current) {
+      messagesContainerRef.current.scrollTo({
+        top: 0,
+        behavior: instant ? "auto" : "smooth",
+      });
+    }
+  }, []);
+
+  // Handler de scroll manual - CORRIGIDO
+  const handleScroll = useCallback(() => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+
+    const scrollTop = el.scrollTop;
+    const scrollHeight = el.scrollHeight;
+    const clientHeight = el.clientHeight;
+    
+    // Verifica se está no topo
+    const atTop = scrollTop <= 10;
+    
+    // Verifica se está no fundo (com margem de tolerância)
+    const atBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 10;
+
+    setIsAtBottom(atBottom);
+    setShowScrollToBottom(!atBottom);
+    setShowScrollToTop(scrollTop > 100);
+  }, []);
+
+  // Configura o observer do scroll
+  useEffect(() => {
+    const container = messagesContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
+  // Atalhos de teclado
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const active = document.activeElement as HTMLElement | null;
+      const isTyping = active && (active.tagName === "INPUT" || active.tagName === "TEXTAREA" || active.isContentEditable);
+      if (isTyping) return;
+
+      if (e.key === "End") {
+        e.preventDefault();
+        scrollToBottom(false);
+      } else if (e.key === "Home") {
+        e.preventDefault();
+        scrollToTop(false);
+      }
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [scrollToBottom, scrollToTop]);
+
+  // Marca mensagens como vistas ao entrar
   useEffect(() => {
     if (!user) return;
 
@@ -110,6 +189,37 @@ export default function Messages() {
     },
   });
 
+  // Query para mensagens não lidas
+  const { data: unreadMessages } = useQuery({
+    queryKey: ["unread-messages", user?.id],
+    enabled: !!user,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(`
+          id,
+          conversation_id,
+          user_id,
+          created_at,
+          conversations!inner(
+            conversation_participants!inner(user_id)
+          )
+        `)
+        .neq("user_id", user!.id)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+
+      const unreadCounts: { [conversationId: string]: number } = {};
+      data?.forEach((message) => {
+        if (!unreadCounts[message.conversation_id]) unreadCounts[message.conversation_id] = 0;
+        unreadCounts[message.conversation_id]++;
+      });
+
+      return unreadCounts;
+    },
+  });
+
   // Real-time subscriptions
   useEffect(() => {
     const messagesChannel = supabase
@@ -120,6 +230,7 @@ export default function Messages() {
         () => {
           refetchMessages();
           refetchConversations();
+          queryClient.invalidateQueries({ queryKey: ["unread-messages", user?.id] });
         }
       )
       .subscribe();
@@ -139,7 +250,7 @@ export default function Messages() {
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(conversationsChannel);
     };
-  }, [selectedConversation, refetchConversations]);
+  }, [selectedConversation, refetchConversations, queryClient, user?.id]);
 
   const { data: messages, refetch: refetchMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
@@ -147,12 +258,10 @@ export default function Messages() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from("messages")
-        .select(
-          `
+        .select(`
           *,
           profiles:user_id (username, avatar_url)
-        `
-        )
+        `)
         .eq("conversation_id", selectedConversation)
         .order("created_at", { ascending: true });
 
@@ -161,28 +270,31 @@ export default function Messages() {
     },
   });
 
-  // Auto scroll to bottom
-  const scrollToBottom = (instant = false) => {
-    setTimeout(() => {
-      if (instant) {
-        messagesEndRef.current?.scrollIntoView({ behavior: "auto", block: "end" });
-      } else {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      }
-    }, 100);
-  };
-
+  // Scroll ao selecionar conversa - CORRIGIDO
   useEffect(() => {
-    if (selectedConversation) {
-      scrollToBottom(true);
+    if (selectedConversation && messagesContainerRef.current) {
+      // Pequeno delay para garantir que o DOM foi atualizado
+      setTimeout(() => {
+        scrollToBottom(true);
+        setIsAtBottom(true);
+        setShowScrollToBottom(false);
+        setShowScrollToTop(false);
+      }, 100);
     }
-  }, [selectedConversation]);
+  }, [selectedConversation, scrollToBottom]);
 
+  // Scroll em novas mensagens - CORRIGIDO
   useEffect(() => {
-    if (messages && messages.length > 0) {
-      scrollToBottom(false);
+    if (!messages || messages.length === 0) return;
+    
+    if (isAtBottom) {
+      setTimeout(() => {
+        scrollToBottom(false);
+      }, 50);
+    } else {
+      setShowScrollToBottom(true);
     }
-  }, [messages]);
+  }, [messages, isAtBottom, scrollToBottom]);
 
   const handleSendMessage = async (message: string) => {
     if (!message.trim() || !selectedConversation || !user) return;
@@ -201,6 +313,12 @@ export default function Messages() {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(messageData.id, "message", message, user.id);
     }
+
+    setTimeout(() => {
+      if (isAtBottom) {
+        scrollToBottom(true);
+      }
+    }, 50);
 
     refetchMessages();
   };
@@ -228,6 +346,12 @@ export default function Messages() {
         media_urls: [publicUrl],
       });
 
+      setTimeout(() => {
+        if (isAtBottom) {
+          scrollToBottom(true);
+        }
+      }, 50);
+
       refetchMessages();
       toast({ title: "Áudio enviado!" });
     } catch (error) {
@@ -242,9 +366,7 @@ export default function Messages() {
     try {
       const uploadPromises = files.map(async (file) => {
         const fileExt = file.name.split(".").pop();
-        const fileName = `${Date.now()}_${Math.random()
-          .toString(36)
-          .substring(7)}.${fileExt}`;
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
 
         const { error: uploadError } = await supabase.storage
@@ -268,6 +390,12 @@ export default function Messages() {
         media_urls: mediaUrls,
       });
 
+      setTimeout(() => {
+        if (isAtBottom) {
+          scrollToBottom(true);
+        }
+      }, 50);
+
       refetchMessages();
       toast({ title: "Mídia enviada!" });
     } catch (error) {
@@ -287,19 +415,11 @@ export default function Messages() {
       return;
     }
 
-    console.log("Iniciando chat com:", friendId);
-
     try {
-      const { data: existingConv, error: convError } = await supabase
+      const { data: existingConv } = await supabase
         .from("conversation_participants")
         .select("conversation_id")
         .eq("user_id", user.id);
-
-      console.log("Conversas existentes:", existingConv);
-
-      if (convError) {
-        console.error("Erro ao buscar conversas:", convError);
-      }
 
       if (existingConv && existingConv.length > 0) {
         for (const conv of existingConv) {
@@ -311,20 +431,13 @@ export default function Messages() {
             .single();
 
           if (otherParticipant?.user_id === friendId) {
-            console.log("Conversa encontrada:", conv.conversation_id);
             setSelectedConversation(conv.conversation_id);
+            setShowContactsModal(false);
             await refetchConversations();
             return;
           }
         }
       }
-
-      console.log("Criando nova conversa...");
-
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      console.log("Access token:", session?.access_token ? "Present" : "Missing");
 
       const { data: newConv, error: createError } = await supabase
         .from("conversations")
@@ -332,10 +445,7 @@ export default function Messages() {
         .select()
         .single();
 
-      console.log("Nova conversa:", newConv, "Erro:", createError);
-
       if (createError) {
-        console.error("Erro ao criar conversa:", createError);
         toast({
           title: "Erro ao criar conversa",
           description: createError.message,
@@ -344,10 +454,7 @@ export default function Messages() {
         return;
       }
 
-      if (!newConv) {
-        console.error("Conversa não foi criada");
-        return;
-      }
+      if (!newConv) return;
 
       const { error: participantsError } = await supabase
         .from("conversation_participants")
@@ -355,8 +462,6 @@ export default function Messages() {
           { conversation_id: newConv.id, user_id: user.id },
           { conversation_id: newConv.id, user_id: friendId },
         ]);
-
-      console.log("Participantes adicionados, erro:", participantsError);
 
       if (participantsError) {
         toast({
@@ -368,21 +473,13 @@ export default function Messages() {
       }
 
       setSelectedConversation(newConv.id);
+      setShowContactsModal(false);
       await refetchConversations();
 
-      toast({
-        title: "Chat iniciado!",
-        description: "Agora você pode conversar",
-      });
-
-      console.log("Chat iniciado com sucesso!");
+      toast({ title: "Chat iniciado!", description: "Agora você pode conversar" });
     } catch (error) {
       console.error("Erro ao iniciar chat:", error);
-      toast({
-        title: "Erro inesperado",
-        description: "Tente novamente mais tarde",
-        variant: "destructive",
-      });
+      toast({ title: "Erro inesperado", description: "Tente novamente mais tarde", variant: "destructive" });
     }
   };
 
@@ -392,87 +489,85 @@ export default function Messages() {
 
   const ConversationsList = () => (
     <>
-      <div className="p-4 border-b space-y-3">
+      <div className="p-6 border-b bg-gradient-to-r from-background to-muted/20 space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-bold">Conversas</h2>
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Conversas
+            </h2>
+          </div>
           <CreatePrivateRoom />
-        </div>
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-          <Input
-            placeholder="Buscar conversas..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-9"
-          />
         </div>
       </div>
 
-      <div className="overflow-y-auto h-[calc(100%-90px)]">
+      <div className="overflow-y-auto h-[calc(100%-120px)] custom-scrollbar">
         {filteredConversations && filteredConversations.length > 0 ? (
           filteredConversations.map((conversation) => {
             const lastMessage = conversation.messages?.[0];
             const otherParticipant = conversation.conversation_participants?.find(
               (p: any) => p.user_id !== user?.id
             );
+            const unreadCount = unreadMessages?.[conversation.id] || 0;
 
             return (
               <button
                 key={conversation.id}
                 onClick={() => setSelectedConversation(conversation.id)}
                 className={cn(
-                  "w-full p-4 flex items-center gap-3 hover:bg-accent transition-colors border-b",
-                  selectedConversation === conversation.id && "bg-accent"
+                  "w-full p-4 flex items-center gap-3 hover:bg-accent/50 transition-all duration-200 border-b border-muted/30 group",
+                  selectedConversation === conversation.id && "bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-l-primary"
                 )}
               >
-                <Avatar className="h-12 w-12">
-                  <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
-                  <AvatarFallback className="bg-primary text-primary-foreground">
-                    {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || "U"}
-                  </AvatarFallback>
-                </Avatar>
+                <div className="relative">
+                  <Avatar className="h-12 w-12 ring-2 ring-background group-hover:ring-primary/20 transition-all">
+                    <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
+                    <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                      {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-background"></div>
+                </div>
                 <div className="flex-1 text-left min-w-0">
-                  <div className="truncate">
-                    {otherParticipant?.user_id ? (
-                      <UserLink
-                        userId={otherParticipant.user_id}
-                        username={otherParticipant.profiles?.username || ""}
-                      >
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <p className="font-semibold text-sm truncate">
                         {conversation.name ||
                           otherParticipant?.profiles?.username ||
                           "Usuário"}
-                      </UserLink>
-                    ) : (
-                      <p className="font-medium">
-                        {conversation.name || "Usuário"}
                       </p>
+                      {otherParticipant?.user_id && (
+                        <UserLink
+                          userId={otherParticipant.user_id}
+                          username={otherParticipant.profiles?.username || ""}
+                        />
+                      )}
+                    </div>
+                    {unreadCount > 0 && (
+                      <Badge className="bg-red-500 text-white text-xs min-w-[20px] h-5 flex items-center justify-center">
+                        {unreadCount}
+                      </Badge>
                     )}
                   </div>
-                  <p className="text-sm text-muted-foreground truncate">
+                  <p className="text-sm text-muted-foreground truncate mt-1">
                     {lastMessage?.content || "Inicie uma conversa"}
                   </p>
                 </div>
                 {lastMessage && (
-                  <span className="text-xs text-muted-foreground">
-                    {new Date(lastMessage.created_at).toLocaleTimeString("pt-BR", {
-                      hour: "2-digit",
-                      minute: "2-digit",
-                    })}
-                  </span>
+                  <div className="flex flex-col items-end gap-1">
+                    <span className="text-xs text-muted-foreground whitespace-nowrap">
+                      {new Date(lastMessage.created_at).toLocaleTimeString("pt-BR", {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </span>
+                  </div>
                 )}
               </button>
             );
           })
         ) : (
-          <div className="flex flex-col items-center justify-center py-16 px-4 text-center">
-            <div className="bg-muted/50 rounded-full p-6 mb-4">
-              <MessageSquarePlus className="h-12 w-12 text-muted-foreground" />
-            </div>
-            <h3 className="font-semibold mb-2">Nenhuma conversa</h3>
-            <p className="text-sm text-muted-foreground mb-4">
-              Adicione contatos ao lado para iniciar conversas
-            </p>
-          </div>
+          <div className="h-full flex items-center justify-center"></div>
         )}
       </div>
     </>
@@ -480,21 +575,32 @@ export default function Messages() {
 
   const ContactsPanel = () => (
     <>
-      <div className="p-4 border-b">
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-xl font-bold">Contatos</h2>
+      <div className="p-6 border-b bg-gradient-to-r from-background to-muted/20">
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-2">
+            <Users className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Contatos
+            </h2>
+          </div>
           <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
             <DialogTrigger asChild>
-              <Button size="sm" variant="outline">
+              <Button 
+                size="sm" 
+                className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+              >
                 <UserPlus className="h-4 w-4 mr-2" />
                 Adicionar
               </Button>
             </DialogTrigger>
-            <DialogContent>
+            <DialogContent className="sm:max-w-md">
               <DialogHeader>
-                <DialogTitle>Adicionar Amigo</DialogTitle>
+                <DialogTitle className="flex items-center gap-2">
+                  <UserPlus className="h-5 w-5" />
+                  Adicionar Amigo
+                </DialogTitle>
                 <DialogDescription>
-                  Use o código do amigo para adicionar
+                  Use o código do amigo para adicionar à sua lista de contatos
                 </DialogDescription>
               </DialogHeader>
               <AddFriend userCode={profile?.friend_code} />
@@ -507,20 +613,30 @@ export default function Messages() {
             placeholder="Buscar contatos..."
             value={contactsSearchQuery}
             onChange={(e) => setContactsSearchQuery(e.target.value)}
-            className="pl-9"
+            className="pl-9 bg-background/50 backdrop-blur-sm border-muted-foreground/20"
           />
         </div>
       </div>
-      <div className="overflow-y-auto h-[calc(100%-120px)]">
-        <Tabs defaultValue="contacts" className="w-full">
-          <TabsList className="w-full grid grid-cols-2">
-            <TabsTrigger value="contacts">Amigos</TabsTrigger>
-            <TabsTrigger value="requests">Pedidos</TabsTrigger>
+      <div className="overflow-y-auto h-[calc(100%-140px)] custom-scrollbar">
+        <Tabs defaultValue="contacts" className="w-full p-4">
+          <TabsList className="w-full grid grid-cols-2 bg-muted/50 p-1">
+            <TabsTrigger 
+              value="contacts"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-secondary data-[state=active]:text-white transition-all"
+            >
+              Amigos
+            </TabsTrigger>
+            <TabsTrigger 
+              value="requests"
+              className="data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-secondary data-[state=active]:text-white transition-all"
+            >
+              Pedidos
+            </TabsTrigger>
           </TabsList>
-          <TabsContent value="contacts" className="mt-4 px-4">
+          <TabsContent value="contacts" className="mt-4">
             <ContactsList onStartChat={startChatWithFriend} />
           </TabsContent>
-          <TabsContent value="requests" className="mt-4 px-4">
+          <TabsContent value="requests" className="mt-4">
             <FriendRequests />
           </TabsContent>
         </Tabs>
@@ -531,14 +647,14 @@ export default function Messages() {
   const ChatArea = () => (
     <>
       {selectedConversation ? (
-        <>
-          {/* Chat Header */}
-          <div className="p-4 border-b bg-card flex items-center justify-between">
+        <div className="h-full flex flex-col relative">
+          {/* Header */}
+          <div className="p-4 border-b bg-card/50 backdrop-blur-sm flex items-center justify-between shadow-sm flex-shrink-0">
             <div className="flex items-center gap-3">
               <Button
                 variant="ghost"
                 size="icon"
-                className="lg:hidden -ml-2"
+                className="lg:hidden -ml-2 hover:bg-accent/50"
                 onClick={() => setSelectedConversation(null)}
               >
                 ←
@@ -553,37 +669,43 @@ export default function Messages() {
 
                 return (
                   <>
-                    <Avatar className="h-10 w-10">
-                      <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
-                      <AvatarFallback className="bg-primary text-primary-foreground">
-                        {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
+                    <div className="relative">
+                      <Avatar className="h-12 w-12 ring-2 ring-primary/20">
+                        <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold">
+                          {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || "U"}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-green-500 rounded-full ring-2 ring-background"></div>
+                    </div>
                     <div>
-                      <div>
+                      <div className="flex items-center gap-2">
                         {otherParticipant?.user_id ? (
                           <UserLink
                             userId={otherParticipant.user_id}
                             username={otherParticipant.profiles?.username || ""}
+                            className="font-semibold text-lg hover:text-primary transition-colors"
                           >
                             {currentConv?.name ||
                               otherParticipant?.profiles?.username ||
                               "Usuário"}
                           </UserLink>
                         ) : (
-                          <p className="font-medium">
+                          <p className="font-semibold text-lg">
                             {currentConv?.name || "Usuário"}
                           </p>
                         )}
                       </div>
-                      <p className="text-xs text-muted-foreground">Online</p>
+                      <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                        <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                        Online agora
+                      </p>
                     </div>
                   </>
                 );
               })()}
             </div>
 
-            {/* AÇÕES - botão de alerta visível também no mobile */}
             <div className="flex items-center gap-1">
               {(() => {
                 const peerId =
@@ -598,159 +720,195 @@ export default function Messages() {
                 return (
                   <AttentionButton
                     contactId={peerId}
-                    className="inline-flex"   // <-- antes era "hidden sm:flex"
+                    className="inline-flex hover:scale-110 transition-transform"
                   />
                 );
               })()}
 
-              {/* Estes continuam escondidos no mobile */}
-              <Button variant="ghost" size="icon" className="hidden sm:flex">
+              <Button variant="ghost" size="icon" className="hidden sm:flex hover:bg-primary/10">
                 <Phone className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon" className="hidden sm:flex">
+              <Button variant="ghost" size="icon" className="hidden sm:flex hover:bg-primary/10">
                 <Video className="h-5 w-5" />
               </Button>
-              <Button variant="ghost" size="icon">
+              <Button variant="ghost" size="icon" className="hover:bg-primary/10">
                 <MoreVertical className="h-5 w-5" />
               </Button>
             </div>
           </div>
 
-          {/* Messages */}
-          <div className="flex-1 overflow-y-auto overflow-x-hidden p-4 space-y-4 bg-muted/20">
-            {messages && messages.length > 0 ? (
-              messages.map((message: any) => {
-                const isOwn = message.user_id === user?.id;
-                const hasAudio = message.media_urls && message.media_urls.length > 0;
+          {/* Messages Container - CORRIGIDO */}
+          <div
+            ref={messagesContainerRef}
+            className="flex-1 overflow-y-auto overflow-x-hidden bg-gradient-to-b from-background to-muted/5 custom-scrollbar relative"
+            style={{ minHeight: 0 }} // Importante para flexbox
+          >
+            <div className="max-w-4xl mx-auto p-4 space-y-4">
+              {messages && messages.length > 0 ? (
+                messages.map((message: any) => {
+                  const isOwn = message.user_id === user?.id;
+                  const hasAudio = message.media_urls && message.media_urls.length > 0;
 
-                return (
-                  <div
-                    key={message.id}
-                    className={cn("flex gap-2", isOwn && "flex-row-reverse")}
-                  >
-                    <Avatar className="h-8 w-8 flex-shrink-0">
-                      <AvatarImage src={message.profiles?.avatar_url} />
-                      <AvatarFallback className="bg-gradient-to-r from-primary to-secondary text-white text-xs">
-                        {message.profiles?.username?.[0]?.toUpperCase() || "U"}
-                      </AvatarFallback>
-                    </Avatar>
-                    <div className={cn("max-w-[75%] sm:max-w-[60%]")}>
-                      {hasAudio ? (
-                        <div className="space-y-2">
-                          {message.media_urls.map((url: string, idx: number) => {
-                            const isAudio =
-                              url.includes(".webm") || url.includes("audio");
-                            const isVideo =
-                              url.match(/\.(mp4|mov|avi|webm)$/i) && !isAudio;
-                            const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
+                  return (
+                    <div
+                      key={message.id}
+                      className={cn("flex gap-3 group", isOwn && "flex-row-reverse")}
+                    >
+                      {!isOwn && (
+                        <Avatar className="h-8 w-8 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <AvatarImage src={message.profiles?.avatar_url} />
+                          <AvatarFallback className="bg-gradient-to-r from-primary to-secondary text-white text-xs">
+                            {message.profiles?.username?.[0]?.toUpperCase() || "U"}
+                          </AvatarFallback>
+                        </Avatar>
+                      )}
+                      <div className={cn("max-w-[75%] sm:max-w-[60%]", isOwn && "flex flex-col items-end")}>                        
+                        {hasAudio ? (
+                          <div className="space-y-2">
+                            {message.media_urls.map((url: string, idx: number) => {
+                              const isAudio = url.includes(".webm") || url.includes("audio");
+                              const isVideo = url.match(/\.(mp4|mov|avi|webm)$/i) && !isAudio;
+                              const isImage = url.match(/\.(jpg|jpeg|png|gif|webp)$/i);
 
-                            if (isAudio) {
-                              return (
-                                <AudioPlayer
-                                  key={idx}
-                                  audioUrl={url}
-                                  className={cn(
-                                    isOwn &&
-                                      "bg-gradient-to-r from-primary/10 to-secondary/10"
-                                  )}
-                                />
-                              );
-                            }
-
-                            if (isImage) {
-                              return (
-                                <div
-                                  key={idx}
-                                  className="rounded-lg overflow-hidden max-w-sm"
-                                >
-                                  <img
-                                    src={url}
-                                    alt="Imagem"
-                                    className="w-full h-auto select-none pointer-events-none"
-                                    draggable={false}
-                                    onContextMenu={(e) => e.preventDefault()}
+                              if (isAudio) {
+                                return (
+                                  <AudioPlayer
+                                    key={idx}
+                                    audioUrl={url}
+                                    className={cn(
+                                      "shadow-lg max-w-full",
+                                      isOwn && "bg-gradient-to-r from-primary/10 to-secondary/10"
+                                    )}
                                   />
-                                </div>
-                              );
-                            }
+                                );
+                              }
 
-                            if (isVideo) {
-                              return (
-                                <div
-                                  key={idx}
-                                  className="rounded-lg overflow-hidden max-w-sm"
-                                >
-                                  <video
-                                    src={url}
-                                    controls
-                                    className="w-full h-auto"
-                                    preload="metadata"
-                                  />
-                                </div>
-                              );
-                            }
+                              if (isImage) {
+                                return (
+                                  <div key={idx} className="rounded-xl overflow-hidden max-w-sm shadow-lg border">
+                                    <img
+                                      src={url}
+                                      alt="Imagem"
+                                      className="w-full h-auto max-w-full select-none pointer-events-none transition-transform hover:scale-105"
+                                      draggable={false}
+                                      onContextMenu={(e) => e.preventDefault()}
+                                    />
+                                  </div>
+                                );
+                              }
 
-                            return null;
-                          })}
-                        </div>
-                      ) : message.content ? (
-                        <Card
+                              if (isVideo) {
+                                return (
+                                  <div key={idx} className="rounded-xl overflow-hidden max-w-sm shadow-lg border">
+                                    <video src={url} controls className="w-full h-auto max-w-full" preload="metadata" />
+                                  </div>
+                                );
+                              }
+
+                              return null;
+                            })}
+                          </div>
+                        ) : message.content ? (
+                          <Card
+                            className={cn(
+                              "p-4 shadow-sm border transition-all duration-200 max-w-full",
+                              isOwn
+                                ? "bg-gradient-to-r from-primary to-secondary text-white border-0 shadow-lg"
+                                : "bg-card border-muted/50 shadow-md"
+                            )}
+                          >
+                            <p className="text-sm break-words leading-relaxed max-w-full overflow-hidden">
+                              <MentionText text={message.content ?? ""} />
+                            </p>
+                          </Card>
+                        ) : null}
+                        <span
                           className={cn(
-                            "p-3",
-                            isOwn
-                              ? "bg-gradient-to-r from-primary to secondary text-white border-0".replace(" to ", " to-")
-                              : "bg-card"
+                            "text-xs text-muted-foreground mt-2 px-1 opacity-0 group-hover:opacity-100 transition-opacity",
+                            isOwn ? "text-right" : "text-left"
                           )}
                         >
-                          <p className="text-sm break-words">
-                            <MentionText text={message.content ?? ""} />
-                          </p>
-                        </Card>
-                      ) : null}
-                      <span
-                        className={cn(
-                          "text-xs text-muted-foreground mt-1 block",
-                          isOwn ? "text-right" : "text-left"
-                        )}
-                      >
-                        {new Date(message.created_at).toLocaleTimeString("pt-BR", {
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
+                          {new Date(message.created_at).toLocaleTimeString("pt-BR", {
+                            hour: "2-digit",
+                            minute: "2-digit",
+                          })}
+                        </span>
+                      </div>
                     </div>
+                  );
+                })
+              ) : (
+                <div className="flex items-center justify-center h-full text-center py-8">
+                  <div className="max-w-md">
+                    <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full p-8 mb-4 inline-block">
+                      <MessageSquarePlus className="h-16 w-16 text-primary" />
+                    </div>
+                    <h3 className="text-xl font-semibold mb-2">Conversa vazia</h3>
+                    <p className="text-muted-foreground mb-4">Envie uma mensagem para iniciar a conversa</p>
                   </div>
-                );
-              })
-            ) : (
-              <div className="flex items-center justify-center h-full text-center">
-                <div>
-                  <MessageSquarePlus className="h-12 w-12 text-muted-foreground mx-auto mb-2" />
-                  <p className="text-sm text-muted-foreground">
-                    Nenhuma mensagem ainda
-                  </p>
                 </div>
-              </div>
-            )}
-            <div ref={messagesEndRef} />
+              )}
+              {/* Marcador invisível no final */}
+              <div ref={messagesEndRef} style={{ height: '1px', visibility: 'hidden' }} />
+            </div>
           </div>
 
-          {/* Message Input */}
-          <MessageInput
-            onSendMessage={handleSendMessage}
-            onAudioReady={handleAudioSend}
-            onMediaReady={handleMediaSend}
-            disabled={!selectedConversation}
-          />
-        </>
-      ) : (
-        <div className="flex-1 flex items-center justify-center text-center p-8">
-          <div className="max-w-sm">
-            <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-full p-8 mb-4 inline-block">
-              <MessageSquarePlus className="h-16 w-16 text-primary" />
+          {/* Botão flutuante para voltar ao fim */}
+          {showScrollToBottom && (
+            <div className="absolute bottom-20 left-1/2 transform -translate-x-1/2 z-10">
+              <Button
+                onClick={() => {
+                  scrollToBottom(false);
+                  setShowScrollToBottom(false);
+                }}
+                className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg"
+                size="sm"
+              >
+                <ArrowDown className="h-4 w-4 mr-2" />
+                Ir para o final
+              </Button>
             </div>
-            <h3 className="text-xl font-semibold mb-2">Bem-vindo!</h3>
-            <p className="text-muted-foreground mb-6">
+          )}
+
+          {/* Botão flutuante para ir ao topo */}
+          {showScrollToTop && (
+            <div className="absolute top-20 left-1/2 transform -translate-x-1/2 z-10">
+              <Button
+                onClick={() => {
+                  scrollToTop(false);
+                  setShowScrollToTop(false);
+                }}
+                className="bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90 shadow-lg"
+                size="sm"
+              >
+                <ArrowUp className="h-4 w-4 mr-2" />
+                Ir para o topo
+              </Button>
+            </div>
+          )}
+
+          {/* Input */}
+          <div className="border-t bg-card/50 backdrop-blur-sm flex-shrink-0">
+            <div className="max-w-4xl mx-auto">
+              <MessageInput
+                onSendMessage={handleSendMessage}
+                onAudioReady={handleAudioSend}
+                onMediaReady={handleMediaSend}
+                disabled={!selectedConversation}
+              />
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="h-full flex items-center justify-center text-center p-8 bg-gradient-to-br from-background to-muted/10">
+          <div className="max-w-md">
+            <div className="bg-gradient-to-br from-primary/10 to-secondary/10 rounded-3xl p-12 mb-6 inline-block shadow-lg">
+              <MessageSquarePlus className="h-20 w-20 text-primary" />
+            </div>
+            <h3 className="text-2xl font-bold mb-3 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Bem-vindo às Mensagens!
+            </h3>
+            <p className="text-muted-foreground mb-6 text-lg">
               Selecione uma conversa ou clique em um contato para começar a trocar mensagens
             </p>
           </div>
@@ -763,64 +921,61 @@ export default function Messages() {
     return (
       <div className="h-[calc(100vh-4rem)] bg-background overflow-hidden">
         <div className="h-full flex">
-          {/* Mobile view with just conversations or chat */}
-          <div
-            className={cn(
-              "w-full border-r bg-card",
-              selectedConversation && "hidden"
-            )}
-          >
+          {/* Lista / Conversas */}
+          <div className={cn("w-full border-r bg-card", selectedConversation && "hidden")}>
             <ConversationsList />
-            <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
-              <DialogTrigger asChild>
-                <Button
-                  className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-lg z-10"
-                  size="icon"
-                >
-                  <UserPlus className="h-6 w-6" />
-                </Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Contatos</DialogTitle>
-                  <DialogDescription>
-                    Gerencie seus contatos e amigos
-                  </DialogDescription>
-                </DialogHeader>
-                <Tabs defaultValue="contacts" className="w-full">
-                  <TabsList className="grid w-full grid-cols-3">
-                    <TabsTrigger value="contacts">Amigos</TabsTrigger>
-                    <TabsTrigger value="requests">Pedidos</TabsTrigger>
-                    <TabsTrigger value="add">Adicionar</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="contacts" className="mt-4">
-                    <ContactsList onStartChat={startChatWithFriend} />
-                  </TabsContent>
-                  <TabsContent value="requests" className="mt-4">
-                    <FriendRequests />
-                  </TabsContent>
-                  <TabsContent value="add" className="mt-4">
-                    <AddFriend userCode={profile?.friend_code} />
-                  </TabsContent>
-                </Tabs>
-              </DialogContent>
-            </Dialog>
+            <Button
+              className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-2xl z-10 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
+              size="icon"
+              onClick={() => setShowContactsModal(true)}
+            >
+              <UserPlus className="h-6 w-6" />
+            </Button>
           </div>
 
-          <div
-            className={cn("w-full flex flex-col", !selectedConversation && "hidden")}
-          >
+          <div className={cn("w-full flex flex-col", !selectedConversation && "hidden")}>
             <ChatArea />
           </div>
+
+          {/* Modal de Contatos */}
+          <Dialog open={showContactsModal} onOpenChange={setShowContactsModal}>
+            <DialogContent className="max-w-[95vw] rounded-2xl h-[90vh]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  Contatos
+                </DialogTitle>
+              </DialogHeader>
+              <Tabs defaultValue="contacts" className="w-full flex-1 flex flex-col">
+                <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-1">
+                  <TabsTrigger value="contacts">Amigos</TabsTrigger>
+                  <TabsTrigger value="requests">Pedidos</TabsTrigger>
+                  <TabsTrigger value="add">Adicionar</TabsTrigger>
+                </TabsList>
+                <div className="flex-1 overflow-y-auto mt-4">
+                  <TabsContent value="contacts" className="h-full mt-0">
+                    <ContactsList onStartChat={startChatWithFriend} />
+                  </TabsContent>
+                  <TabsContent value="requests" className="h-full mt-0">
+                    <FriendRequests />
+                  </TabsContent>
+                  <TabsContent value="add" className="h-full mt-0">
+                    <AddFriend userCode={profile?.friend_code} />
+                  </TabsContent>
+                </div>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
         </div>
       </div>
     );
   }
 
+  // Desktop
   return (
     <div className="h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden">
       <ResizablePanelGroup direction="horizontal" className="w-full">
-        {/* Conversations Panel */}
+        {/* Painel de Conversas */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
           <div className="h-full bg-card border-r flex flex-col">
             <ConversationsList />
@@ -829,7 +984,7 @@ export default function Messages() {
 
         <ResizableHandle withHandle />
 
-        {/* Chat Area Panel */}
+        {/* Painel do Chat */}
         <ResizablePanel defaultSize={50} minSize={30}>
           <div className="h-full flex flex-col">
             <ChatArea />
@@ -838,7 +993,7 @@ export default function Messages() {
 
         <ResizableHandle withHandle />
 
-        {/* Contacts Panel */}
+        {/* Painel de Contatos */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
           <div className="h-full bg-card border-l flex flex-col">
             <ContactsPanel />
