@@ -12,6 +12,7 @@ import {
   MessageCircle,
   ArrowUp,
   ArrowDown,
+  Lock,
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,6 +56,7 @@ export default function Messages() {
   const [contactsSearchQuery, setContactsSearchQuery] = useState("");
   const [showAddFriend, setShowAddFriend] = useState(false);
   const [showContactsModal, setShowContactsModal] = useState(false);
+  const [activeContactsTab, setActiveContactsTab] = useState("contacts");
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const isMobile = useIsMobile();
@@ -487,7 +489,192 @@ export default function Messages() {
     conv.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  const ConversationsList = () => (
+  // ============ VERSÃO MOBILE ============
+  const MobileContactsSection = () => (
+    <div className="p-4 border-t border-muted/30">
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <Users className="h-5 w-5 text-primary" />
+          <h3 className="font-semibold text-lg">Contatos</h3>
+        </div>
+        <Dialog open={showAddFriend} onOpenChange={setShowAddFriend}>
+          <DialogTrigger asChild>
+            <Button 
+              size="sm" 
+              variant="outline"
+              className="h-8"
+            >
+              <UserPlus className="h-3 w-3 mr-1" />
+              Adicionar
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle className="flex items-center gap-2">
+                <UserPlus className="h-5 w-5" />
+                Adicionar Amigo
+              </DialogTitle>
+              <DialogDescription>
+                Use o código do amigo para adicionar à sua lista de contatos
+              </DialogDescription>
+            </DialogHeader>
+            <AddFriend userCode={profile?.friend_code} />
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <Tabs value={activeContactsTab} onValueChange={setActiveContactsTab} className="w-full">
+        <TabsList className="w-full grid grid-cols-3 bg-muted/50 p-1 mb-4">
+          <TabsTrigger 
+            value="contacts"
+            className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-secondary data-[state=active]:text-white transition-all"
+          >
+            Amigos
+          </TabsTrigger>
+          <TabsTrigger 
+            value="requests"
+            className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-secondary data-[state=active]:text-white transition-all"
+          >
+            Pedidos
+          </TabsTrigger>
+          <TabsTrigger 
+            value="add"
+            className="text-xs data-[state=active]:bg-gradient-to-r data-[state=active]:from-primary data-[state=active]:to-secondary data-[state=active]:text-white transition-all"
+          >
+            Adicionar
+          </TabsTrigger>
+        </TabsList>
+        
+        <div className="max-h-64 overflow-y-auto custom-scrollbar">
+          <TabsContent value="contacts" className="mt-0">
+            <ContactsList onStartChat={startChatWithFriend} />
+          </TabsContent>
+          <TabsContent value="requests" className="mt-0">
+            <FriendRequests />
+          </TabsContent>
+          <TabsContent value="add" className="mt-0">
+            <AddFriend userCode={profile?.friend_code} />
+          </TabsContent>
+        </div>
+      </Tabs>
+    </div>
+  );
+
+  const MobileConversationsList = () => (
+    <>
+      <div className="p-6 border-b bg-gradient-to-r from-background to-muted/20 space-y-4">
+        <div className="flex items-center justify-center">
+          <div className="flex items-center gap-2">
+            <MessageCircle className="h-6 w-6 text-primary" />
+            <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
+              Conversas
+            </h2>
+          </div>
+        </div>
+        
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Buscar conversas..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            className="pl-9 bg-background/50 backdrop-blur-sm border-muted-foreground/20"
+          />
+        </div>
+      </div>
+
+      {/* Seção Salas Privadas */}
+      <div className="p-4 border-b bg-muted/20">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <Lock className="h-5 w-5 text-primary" />
+            <h3 className="font-semibold text-lg">Salas Privadas</h3>
+          </div>
+          {isMobile && <CreatePrivateRoom />}
+        </div>
+        <div className="overflow-y-auto max-h-64 custom-scrollbar">
+          {filteredConversations && filteredConversations.length > 0 ? (
+            filteredConversations.map((conversation) => {
+              const lastMessage = conversation.messages?.[0];
+              const otherParticipant = conversation.conversation_participants?.find(
+                (p: any) => p.user_id !== user?.id
+              );
+              const unreadCount = unreadMessages?.[conversation.id] || 0;
+
+              return (
+                <button
+                  key={conversation.id}
+                  onClick={() => setSelectedConversation(conversation.id)}
+                  className={cn(
+                    "w-full p-3 flex items-center gap-3 hover:bg-accent/50 transition-all duration-200 border-b border-muted/30 group",
+                    selectedConversation === conversation.id && "bg-gradient-to-r from-primary/10 to-secondary/10 border-l-4 border-l-primary"
+                  )}
+                >
+                  <div className="relative">
+                    <Avatar className="h-10 w-10 ring-2 ring-background group-hover:ring-primary/20 transition-all">
+                      <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
+                      <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white font-semibold text-sm">
+                        {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="absolute -bottom-1 -right-1 w-2 h-2 bg-green-500 rounded-full ring-2 ring-background"></div>
+                  </div>
+                  <div className="flex-1 text-left min-w-0">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <p className="font-semibold text-sm truncate">
+                          {conversation.name ||
+                            otherParticipant?.profiles?.username ||
+                            "Usuário"}
+                        </p>
+                        {otherParticipant?.user_id && (
+                          <UserLink
+                            userId={otherParticipant.user_id}
+                            username={otherParticipant.profiles?.username || ""}
+                          />
+                        )}
+                      </div>
+                      {unreadCount > 0 && (
+                        <Badge className="bg-red-500 text-white text-xs min-w-[18px] h-4 flex items-center justify-center">
+                          {unreadCount}
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-xs text-muted-foreground truncate mt-1">
+                      {lastMessage?.content || "Inicie uma conversa"}
+                    </p>
+                  </div>
+                  {lastMessage && (
+                    <div className="flex flex-col items-end gap-1">
+                      <span className="text-xs text-muted-foreground whitespace-nowrap">
+                        {new Date(lastMessage.created_at).toLocaleTimeString("pt-BR", {
+                          hour: "2-digit",
+                          minute: "2-digit",
+                        })}
+                      </span>
+                    </div>
+                  )}
+                </button>
+              );
+            })
+          ) : (
+            <div className="flex items-center justify-center p-4">
+              <div className="text-center text-muted-foreground">
+                <MessageCircle className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                <p className="text-sm">Nenhuma sala encontrada</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Seção de Contatos integrada diretamente */}
+      <MobileContactsSection />
+    </>
+  );
+
+  // ============ VERSÃO DESKTOP ============
+  const DesktopConversationsList = () => (
     <>
       <div className="p-6 border-b bg-gradient-to-r from-background to-muted/20 space-y-4">
         <div className="flex items-center justify-between">
@@ -573,7 +760,7 @@ export default function Messages() {
     </>
   );
 
-  const ContactsPanel = () => (
+  const DesktopContactsPanel = () => (
     <>
       <div className="p-6 border-b bg-gradient-to-r from-background to-muted/20">
         <div className="flex items-center justify-between mb-4">
@@ -644,6 +831,7 @@ export default function Messages() {
     </>
   );
 
+  // ============ CHAT AREA (COMUM) ============
   const ChatArea = () => (
     <>
       {selectedConversation ? (
@@ -917,55 +1105,19 @@ export default function Messages() {
     </>
   );
 
+  // ============ RENDERIZAÇÃO POR PLATAFORMA ============
   if (isMobile) {
     return (
       <div className="h-[calc(100vh-4rem)] bg-background overflow-hidden">
         <div className="h-full flex">
           {/* Lista / Conversas */}
           <div className={cn("w-full border-r bg-card", selectedConversation && "hidden")}>
-            <ConversationsList />
-            <Button
-              className="fixed bottom-6 right-6 rounded-full h-14 w-14 shadow-2xl z-10 bg-gradient-to-r from-primary to-secondary hover:from-primary/90 hover:to-secondary/90"
-              size="icon"
-              onClick={() => setShowContactsModal(true)}
-            >
-              <UserPlus className="h-6 w-6" />
-            </Button>
+            <MobileConversationsList />
           </div>
 
           <div className={cn("w-full flex flex-col", !selectedConversation && "hidden")}>
             <ChatArea />
           </div>
-
-          {/* Modal de Contatos */}
-          <Dialog open={showContactsModal} onOpenChange={setShowContactsModal}>
-            <DialogContent className="max-w-[95vw] rounded-2xl h-[90vh]">
-              <DialogHeader>
-                <DialogTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Contatos
-                </DialogTitle>
-              </DialogHeader>
-              <Tabs defaultValue="contacts" className="w-full flex-1 flex flex-col">
-                <TabsList className="grid w-full grid-cols-3 bg-muted/50 p-1">
-                  <TabsTrigger value="contacts">Amigos</TabsTrigger>
-                  <TabsTrigger value="requests">Pedidos</TabsTrigger>
-                  <TabsTrigger value="add">Adicionar</TabsTrigger>
-                </TabsList>
-                <div className="flex-1 overflow-y-auto mt-4">
-                  <TabsContent value="contacts" className="h-full mt-0">
-                    <ContactsList onStartChat={startChatWithFriend} />
-                  </TabsContent>
-                  <TabsContent value="requests" className="h-full mt-0">
-                    <FriendRequests />
-                  </TabsContent>
-                  <TabsContent value="add" className="h-full mt-0">
-                    <AddFriend userCode={profile?.friend_code} />
-                  </TabsContent>
-                </div>
-              </Tabs>
-            </DialogContent>
-          </Dialog>
         </div>
       </div>
     );
@@ -978,7 +1130,7 @@ export default function Messages() {
         {/* Painel de Conversas */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
           <div className="h-full bg-card border-r flex flex-col">
-            <ConversationsList />
+            <DesktopConversationsList />
           </div>
         </ResizablePanel>
 
@@ -996,7 +1148,7 @@ export default function Messages() {
         {/* Painel de Contatos */}
         <ResizablePanel defaultSize={25} minSize={20} maxSize={35}>
           <div className="h-full bg-card border-l flex flex-col">
-            <ContactsPanel />
+            <DesktopContactsPanel />
           </div>
         </ResizablePanel>
       </ResizablePanelGroup>
