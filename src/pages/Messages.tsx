@@ -44,6 +44,8 @@ interface MessageTimer {
   timeLeft: number; // em segundos
   status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
   currentText?: string; // para o efeito de deleção letra por letra
+  isAudioPlayed?: boolean; // para controlar se áudio foi ouvido
+  deletionStartTime?: number; // timestamp quando iniciou a deleção
 }
 
 export default function Messages() {
@@ -67,6 +69,7 @@ export default function Messages() {
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [viewedMessages, setViewedMessages] = useState<Set<string>>(new Set());
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
+  const [playedAudios, setPlayedAudios] = useState<Set<string>>(new Set());
 
   // --- Scroll Helpers ---
   const scrollToBottom = useCallback((instant: boolean = false) => {
@@ -199,12 +202,32 @@ export default function Messages() {
     messages.forEach(message => {
       // Se a mensagem não é do usuário atual e ainda não foi visualizada
       if (message.user_id !== user.id && !viewedMessages.has(message.id) && !deletedMessages.has(message.id)) {
-        newTimers.push({
-          messageId: message.id,
-          timeLeft: 120, // 2 minutos em segundos
-          status: 'counting'
-        });
-        newViewedMessages.add(message.id);
+        
+        // Verifica se é áudio
+        const isAudio = message.media_urls && message.media_urls.some((url: string) => 
+          url.includes(".webm") || url.includes("audio")
+        );
+
+        // Se for áudio, só inicia o timer se já foi ouvido
+        if (isAudio) {
+          if (playedAudios.has(message.id)) {
+            newTimers.push({
+              messageId: message.id,
+              timeLeft: 120, // 2 minutos em segundos
+              status: 'counting',
+              isAudioPlayed: true
+            });
+            newViewedMessages.add(message.id);
+          }
+        } else {
+          // Para outros tipos de mensagem, inicia o timer imediatamente
+          newTimers.push({
+            messageId: message.id,
+            timeLeft: 120, // 2 minutos em segundos
+            status: 'counting'
+          });
+          newViewedMessages.add(message.id);
+        }
       }
     });
 
@@ -212,7 +235,29 @@ export default function Messages() {
       setMessageTimers(prev => [...prev, ...newTimers]);
       setViewedMessages(newViewedMessages);
     }
-  }, [messages, user, deletedMessages]);
+  }, [messages, user, deletedMessages, playedAudios]);
+
+  // Função para marcar áudio como ouvido
+  const markAudioAsPlayed = useCallback((messageId: string) => {
+    setPlayedAudios(prev => {
+      const newSet = new Set(prev);
+      newSet.add(messageId);
+      return newSet;
+    });
+
+    // Inicia o timer para o áudio ouvido
+    setMessageTimers(prev => {
+      const existingTimer = prev.find(timer => timer.messageId === messageId);
+      if (existingTimer) return prev;
+
+      return [...prev, {
+        messageId,
+        timeLeft: 120,
+        status: 'counting',
+        isAudioPlayed: true
+      }];
+    });
+  }, []);
 
   // Função para arquivar mensagem antes de excluir
   const archiveMessage = async (messageId: string) => {
@@ -294,15 +339,16 @@ export default function Messages() {
           switch (timer.status) {
             case 'counting':
               if (timer.timeLeft <= 1) {
-                // Inicia processo de deleção
+                // Inicia processo de deleção - SEMPRE 2 MINUTOS INDEPENDENTE DO TEXTO
                 const message = messages?.find(m => m.id === timer.messageId);
                 if (message?.content) {
-                  // Para mensagens de texto, inicia deleção letra por letra
+                  // Para mensagens de texto, inicia deleção letra por letra com tempo fixo
                   updatedTimers.push({
                     ...timer,
                     status: 'deleting',
                     currentText: message.content,
-                    timeLeft: message.content.length // 1 segundo por letra
+                    timeLeft: 120, // SEMPRE 2 MINUTOS (120 segundos) para deleção
+                    deletionStartTime: Date.now()
                   });
                 } else {
                   // Para mídia, vai direto para "UnDoInG"
@@ -321,15 +367,8 @@ export default function Messages() {
               break;
 
             case 'deleting':
-              if (timer.timeLeft <= 1 && timer.currentText && timer.currentText.length > 1) {
-                // Remove uma letra
-                updatedTimers.push({
-                  ...timer,
-                  currentText: timer.currentText.slice(0, -1),
-                  timeLeft: timer.currentText.length - 1
-                });
-              } else if (timer.timeLeft <= 1) {
-                // Terminou de deletar letras, mostra "UnDoInG"
+              if (timer.timeLeft <= 1) {
+                // Terminou o tempo de deleção, mostra "UnDoInG"
                 updatedTimers.push({
                   ...timer,
                   status: 'showingUndoing',
@@ -337,9 +376,20 @@ export default function Messages() {
                   currentText: undefined
                 });
               } else {
+                // Continua contagem regressiva e remove letras proporcionalmente
+                const message = messages?.find(m => m.id === timer.messageId);
+                const originalText = message?.content || '';
+                const totalDeletionTime = 120; // 2 minutos fixos
+                const elapsedTime = 120 - timer.timeLeft + 1; // Tempo decorrido
+                
+                // Calcula quantas letras devem ser removidas baseado no tempo decorrido
+                const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / totalDeletionTime))));
+                const currentText = originalText.slice(0, lettersToKeep);
+
                 updatedTimers.push({
                   ...timer,
-                  timeLeft: timer.timeLeft - 1
+                  timeLeft: timer.timeLeft - 1,
+                  currentText: currentText
                 });
               }
               break;
@@ -761,12 +811,18 @@ export default function Messages() {
             {/* Lista de Mensagens */}
             <div 
               ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar"
+              className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden"
+              style={{ overflowX: 'hidden' }}
             >
               {!isLoadingMessages && messages?.map((msg, idx) => {
                 const isOwn = msg.user_id === user?.id;
                 const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
                 const timerState = getMessageState(msg.id);
+
+                // Verifica se é áudio
+                const isAudio = msg.media_urls && msg.media_urls.some((url: string) => 
+                  url.includes(".webm") || url.includes("audio")
+                );
 
                 // Se a mensagem foi deletada, não renderiza
                 if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) {
@@ -786,7 +842,7 @@ export default function Messages() {
                       </div>
                     )}
 
-                    <div className={cn("flex flex-col max-w-[85%] sm:max-w-[70%]", isOwn ? "items-end" : "items-start")}>
+                    <div className={cn("flex flex-col max-w-[85%] sm:max-w-[70%] min-w-0", isOwn ? "items-end" : "items-start")}>
                       
                       {/* Indicador de Temporizador */}
                       {timerState && timerState.status !== 'deleted' && (
@@ -794,7 +850,7 @@ export default function Messages() {
                           <Clock className="h-3 w-3" />
                           <span>
                             {timerState.status === 'counting' && formatTime(timerState.timeLeft)}
-                            {timerState.status === 'deleting' && `Apagando... ${timerState.timeLeft}s`}
+                            {timerState.status === 'deleting' && `Apagando... ${formatTime(timerState.timeLeft)}`}
                             {timerState.status === 'showingUndoing' && `${timerState.timeLeft}s`}
                           </span>
                         </div>
@@ -811,12 +867,27 @@ export default function Messages() {
 
                       {/* Mídia */}
                       {msg.media_urls && msg.media_urls.length > 0 && timerState?.status !== 'showingUndoing' && (
-                        <div className="mb-1 space-y-1">
+                        <div className="mb-1 space-y-1 max-w-full">
                           {msg.media_urls.map((url: string, i: number) => {
-                            const isAudio = url.includes(".webm") || url.includes("audio");
-                            if(isAudio) return <AudioPlayer key={i} audioUrl={url} className="bg-card border shadow-sm w-[250px]" />;
+                            if (isAudio) {
+                              return (
+                                <div key={i} className="max-w-full">
+                                  <AudioPlayer 
+                                    audioUrl={url} 
+                                    className="bg-card border shadow-sm max-w-[250px] w-full" 
+                                    onPlay={() => !isOwn && markAudioAsPlayed(msg.id)}
+                                  />
+                                </div>
+                              );
+                            }
                             return (
-                              <img key={i} src={url} alt="midia" className="rounded-lg max-h-[300px] border shadow-sm w-auto object-cover bg-black/10" />
+                              <img 
+                                key={i} 
+                                src={url} 
+                                alt="midia" 
+                                className="rounded-lg max-h-[300px] max-w-full border shadow-sm w-auto object-cover bg-black/10" 
+                                style={{ maxWidth: '100%' }}
+                              />
                             );
                           })}
                         </div>
@@ -826,13 +897,16 @@ export default function Messages() {
                       {msg.content && timerState?.status !== 'showingUndoing' && (
                         <div 
                            className={cn(
-                             "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px]",
+                             "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full",
                              isOwn 
                                ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" 
                                : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
                            )}
+                           style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
                         >
-                          <MentionText text={timerState?.status === 'deleting' ? (timerState.currentText || '') : msg.content} />
+                          <div className="break-words overflow-hidden">
+                            <MentionText text={timerState?.status === 'deleting' ? (timerState.currentText || '') : msg.content} />
+                          </div>
                           <span className={cn(
                             "text-[10px] absolute bottom-1 right-3 opacity-60",
                             isOwn ? "text-primary-foreground" : "text-muted-foreground"
@@ -860,7 +934,7 @@ export default function Messages() {
 
             {/* Input */}
             <div className="p-4 bg-background border-t">
-               <div className="max-w-4xl mx-auto">
+               <div className="max-w-4xl mx-auto w-full">
                  <MessageInput
                    onSendMessage={handleSendMessage}
                    onAudioReady={handleAudioUpload}
