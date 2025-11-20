@@ -50,7 +50,7 @@ export default function AppLayout() {
   });
 
   const navigation = [
-    { name: "Feed", href: "/", icon: Home, badge: unreadFeed },
+    { name: "FeeD", href: "/", icon: Home, badge: unreadFeed },
     { name: "Explorar", href: "/explore", icon: Search },
     { name: "Mensagens", href: "/messages", icon: MessageCircle, badge: unreadMessages },
     { name: "Comunidades", href: "/communities", icon: Users, badge: unreadCommunities },
