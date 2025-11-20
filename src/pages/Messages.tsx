@@ -58,14 +58,16 @@ const SelfDestructMessage = ({
 
   // 1. Efeito para disparar o "Visto" no banco se eu for o destinatário
   useEffect(() => {
+    // Se não sou o dono (sou o destinatário) E o viewed_at está nulo no banco
     if (!isOwn && !dbViewedAt) {
+      // Dispara a função para salvar o viewed_at no banco
       onView(message.id);
     }
   }, [isOwn, dbViewedAt, message.id, onView]);
 
   // 2. Lógica Central de Estado Baseada no Tempo Real
   useEffect(() => {
-    // Se não foi visto ainda, fica aguardando
+    // Se dbViewedAt ainda for null (o banco não confirmou a visualização)
     if (!dbViewedAt) {
       setStatus('waiting');
       return;
@@ -83,7 +85,14 @@ const SelfDestructMessage = ({
       // Se tiver texto, demora 1s por letra, senão 0
       const ERASE_TIME = (message.content && message.content.length > 0) ? message.content.length : 0;
       const UNDOING_TIME = 5;
+      const TOTAL_TIME = COUNTDOWN_TIME + ERASE_TIME + UNDOING_TIME;
 
+      // FASE 4: Sumiu (Mensagem antiga que já terminou o ciclo)
+      if (secondsPassed >= TOTAL_TIME) {
+        setStatus('gone');
+        return;
+      }
+      
       // FASE 1: Contagem Regressiva (0 a 120s)
       if (secondsPassed < COUNTDOWN_TIME) {
         setStatus('countdown');
@@ -93,22 +102,17 @@ const SelfDestructMessage = ({
       // FASE 2: Apagando Texto (120s a 120s + tamanho do texto)
       else if (secondsPassed < (COUNTDOWN_TIME + ERASE_TIME) && !hasMedia) {
         setStatus('erasing');
-        // Calcula quantas letras já deveriam ter sido apagadas
         const timeInErase = secondsPassed - COUNTDOWN_TIME;
         const charsToKeep = Math.max(0, Math.floor(textLength - timeInErase));
         setContent(message.content.substring(0, charsToKeep));
       }
       // FASE 3: UnDoInG (Após apagar ou direto se for mídia)
-      else if (secondsPassed < (COUNTDOWN_TIME + ERASE_TIME + UNDOING_TIME)) {
-        setStatus('undoing');
-      }
-      // FASE 4: Sumiu
       else {
-        setStatus('gone');
+        // Inclui o caso de mídia que pula a fase de "erasing" de texto
+        setStatus('undoing');
       }
     };
 
-    // Roda imediatamente e depois a cada frame/segundo
     calculateState();
     const interval = setInterval(calculateState, 1000); // Atualiza a cada segundo
 
@@ -140,7 +144,7 @@ const SelfDestructMessage = ({
     <div className={cn("flex flex-col gap-1 max-w-[85%] sm:max-w-[70%]", isOwn ? "items-end" : "items-start")}>
       
       {/* Mídia: Só mostra durante o countdown. Se entrar em erasing ou undoing, some. */}
-      {status === 'countdown' && message.media_urls && message.media_urls.length > 0 && (
+      {status !== 'erasing' && status !== 'undoing' && message.media_urls && message.media_urls.length > 0 && (
         <div className="mb-1 space-y-1">
           {message.media_urls.map((url: string, i: number) => {
             const isAudio = url.includes(".webm") || url.includes("audio");
@@ -173,12 +177,12 @@ const SelfDestructMessage = ({
           )}>
             {status === 'waiting' ? (
                <span className="flex items-center gap-1 opacity-70">
-                 <Clock className="h-3 w-3" /> Aguardando...
+                 <Clock className="h-3 w-3" /> Aguardando visualização...
                </span>
             ) : status === 'countdown' ? (
                <span className="flex items-center gap-1 text-orange-500">
                  <Clock className="h-3.5 w-3.5" /> 
-                 {formatTime(timeLeft)}
+                 {formatTime(timeLeft)} restantes
                </span>
             ) : (
                <span className="flex items-center gap-1 text-red-500">
@@ -199,6 +203,7 @@ const SelfDestructMessage = ({
   );
 };
 
+// --- COMPONENTE MESSAGES PRINCIPAL (COM CORREÇÕES NO REFETCH) ---
 export default function Messages() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -237,8 +242,6 @@ export default function Messages() {
     container.addEventListener('scroll', handleScroll);
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
-
-  // --- API Calls ---
 
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -284,7 +287,7 @@ export default function Messages() {
     queryKey: ["messages", selectedConversation],
     enabled: !!selectedConversation,
     queryFn: async () => {
-      // Seleciona viewed_at explicitamente para garantir
+      // Garante que o viewed_at seja buscado
       const { data, error } = await supabase
         .from("messages")
         .select(`*, profiles:user_id(username, avatar_url)`)
@@ -295,22 +298,28 @@ export default function Messages() {
     },
   });
 
-  // --- Nova função para marcar mensagens específicas como vistas ---
+  // --- FUNÇÃO DE MARCAR VISTO (CORRIGIDA) ---
   const markMessageViewed = useCallback(async (messageId: string) => {
-    if (!user) return;
+    if (!user || !selectedConversation) return;
     try {
-      // Atualiza apenas se ainda estiver null para evitar chamadas excessivas
-      await supabase
+      const { error, status } = await supabase
         .from("messages")
         .update({ viewed_at: new Date().toISOString() })
         .eq("id", messageId)
-        .is("viewed_at", null);
+        .is("viewed_at", null); // Só atualiza se ainda não foi visto
+      
+      // Se a atualização foi bem-sucedida (status 204), invalida o cache
+      if (!error && status === 204) {
+        // ESSA É A CHAVE DA CORREÇÃO: Força o React Query a buscar a nova mensagem
+        // Isso garante que o temporizador inicie para o destinatário e o remetente receba o update Realtime.
+        queryClient.invalidateQueries({ queryKey: ["messages", selectedConversation] });
+      }
     } catch (err) {
       console.error("Erro ao marcar visto:", err);
     }
-  }, [user]);
+  }, [user, selectedConversation, queryClient]);
 
-  // Atualiza que EU visualizei a SALA (genérico) para limpar notificações
+  // Atualiza que EU visualizei a SALA (genérico)
   useEffect(() => {
     if (user && selectedConversation) {
       const markRoomRead = () => {
@@ -457,7 +466,6 @@ export default function Messages() {
                   <div key={msg.id} className={cn("flex w-full gap-2", isOwn ? "justify-end" : "justify-start")}>
                     {!isOwn && <div className="w-8 flex-shrink-0 flex flex-col justify-end">{showAvatar && <Avatar className="h-8 w-8"><AvatarImage src={msg.profiles?.avatar_url} /><AvatarFallback>{msg.profiles?.username?.[0]}</AvatarFallback></Avatar>}</div>}
                     
-                    {/* Passamos a função de marcar visto para o componente */}
                     <SelfDestructMessage 
                       message={msg} 
                       isOwn={isOwn} 
