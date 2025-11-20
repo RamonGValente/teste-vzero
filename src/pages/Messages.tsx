@@ -18,6 +18,8 @@ import {
   Loader2,
   Lock,
   Clock,
+  Play,
+  Pause,
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -31,22 +33,201 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import AddFriend from "@/components/AddFriend";
 import ContactsList from "@/components/ContactsList";
 import FriendRequests from "@/components/FriendRequests";
-import AudioPlayer from "@/components/AudioPlayer";
 import CreatePrivateRoom from "@/components/CreatePrivateRoom";
 import { MessageInput } from "@/components/MessageInput";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// Interface para controle de temporizadores das mensagens
+// Interface para controle de temporizadores das mensagens (MANTIDA)
 interface MessageTimer {
   messageId: string;
-  timeLeft: number; // em segundos
+  timeLeft: number;
   status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
-  currentText?: string; // para o efeito de deleção letra por letra
-  isAudioPlayed?: boolean; // para controlar se áudio foi ouvido
-  deletionStartTime?: number; // timestamp quando iniciou a deleção
+  currentText?: string;
+  messageType: 'text' | 'audio' | 'media';
 }
+
+// Interface aprimorada para o player
+interface CustomAudioPlayerProps { 
+  audioUrl: string; 
+  className?: string;
+  onPlay: () => void;
+  isOwn: boolean; // NOVO: Determina o esquema de cores
+}
+
+// Componente AudioPlayer customizado, aprimorado e com nova cor
+const CustomAudioPlayer = ({ 
+  audioUrl, 
+  className,
+  onPlay,
+  isOwn // Usando a nova propriedade
+}: CustomAudioPlayerProps) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement>(null);
+  const hasTriggeredOnPlay = useRef(false);
+
+  // --- Lógica de Reprodução (MANTIDA) ---
+
+  const handlePlayPause = async () => {
+    if (!audioRef.current) return;
+
+    try {
+      if (isPlaying) {
+        audioRef.current.pause();
+        setIsPlaying(false);
+      } else {
+        await audioRef.current.play();
+        setIsPlaying(true);
+        
+        if (!hasTriggeredOnPlay.current) {
+          hasTriggeredOnPlay.current = true;
+          onPlay();
+        }
+      }
+    } catch (error) {
+      console.error('Erro ao reproduzir áudio:', error);
+    }
+  };
+
+  const handleTimeUpdate = () => {
+    if (audioRef.current) {
+      const current = audioRef.current.currentTime;
+      const dur = audioRef.current.duration;
+      setCurrentTime(current);
+      setDuration(dur);
+      const progressValue = (current / dur) * 100;
+      setProgress(isNaN(progressValue) ? 0 : progressValue);
+    }
+  };
+
+  const handleEnded = () => {
+    setIsPlaying(false);
+    setProgress(0);
+    setCurrentTime(0);
+  };
+
+  const handleLoadedMetadata = () => {
+    if (audioRef.current) {
+      setDuration(audioRef.current.duration);
+      setProgress(0);
+      setCurrentTime(0);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!audioRef.current || isNaN(duration) || duration === 0) return;
+    
+    const rect = e.currentTarget.getBoundingClientRect();
+    const percent = (e.clientX - rect.left) / rect.width;
+    const newTime = percent * duration;
+    
+    audioRef.current.currentTime = newTime;
+    setCurrentTime(newTime);
+    setProgress(percent * 100);
+  };
+
+  // --- Classes Aprimoradas para Cores ---
+  const playerClasses = cn(
+    "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200",
+    isOwn
+      ? "bg-primary text-primary-foreground" // Usuário: Fundo Primary, Texto Branco
+      : "bg-card border text-foreground/80", // Outro: Fundo Card, Texto escuro
+    className
+  );
+
+  const buttonVariant = isOwn ? "secondary" : "primary"; // Botão com contraste
+  const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
+
+  // Waveform e Progresso
+  const waveformBg = isOwn ? "bg-white/30" : "bg-muted/60";
+  const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
+  const waveformGradient = isOwn 
+    ? "bg-gradient-to-r from-transparent via-white/40 to-transparent"
+    : "bg-gradient-to-r from-transparent via-primary/40 to-transparent";
+
+  const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
+  const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
+  const timeColorSecondary = isOwn ? "text-primary-foreground/60" : "text-muted-foreground";
+
+  // --- Renderização Aprimorada ---
+
+  return (
+    <div className={playerClasses}>
+      <audio
+        ref={audioRef}
+        onTimeUpdate={handleTimeUpdate}
+        onEnded={handleEnded}
+        onLoadedMetadata={handleLoadedMetadata}
+        onPause={() => setIsPlaying(false)}
+        preload="metadata"
+      >
+        <source src={audioUrl} type="audio/webm" />
+        <source src={audioUrl} type="audio/mp3" />
+        <source src={audioUrl} type="audio/wav" />
+        Seu navegador não suporta o elemento de áudio.
+      </audio>
+      
+      {/* Botão de Play/Pause */}
+      <Button
+        variant={buttonVariant}
+        size="icon"
+        onClick={handlePlayPause}
+        className={cn("flex-shrink-0 h-9 w-9 rounded-full hover:bg-opacity-80 transition-colors duration-150", buttonIconColor)}
+      >
+        {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current translate-x-[1px]" />}
+      </Button>
+
+      <div className="flex-1 min-w-0 space-y-1 pr-2">
+        {/* Visualizador/Barra de Progresso (Waveform Simulado) */}
+        <div 
+          className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer"
+          onClick={handleSeek}
+          title="Clique para buscar"
+        >
+          {/* Fundo da Waveform - Cor neutra ou sutilmente colorida */}
+          <div className={cn("absolute inset-0", waveformBg)} />
+          
+          {/* Progresso com efeito de Waveform vibrante */}
+          <div
+            className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)}
+            style={{ width: `${progress}%` }}
+          >
+             {/* Efeito visual - Linhas de forma de onda (simulação) */}
+             <div className={cn(
+               "absolute inset-0",
+               waveformGradient,
+               isPlaying ? "animate-waveform" : "" // Animação simples para simular som
+             )} style={{ backgroundSize: '40px 100%' }}/>
+          </div>
+          
+          {/* Ponto de Arrasto/Thumb - Cor contrastante */}
+          <div
+            className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)}
+            style={{ left: `calc(${progress}% - 8px)` }} 
+          />
+        </div>
+        
+        {/* Tempo */}
+        <div className="flex justify-between text-xs font-medium opacity-80">
+          <span className={timeColorPrimary}>{formatTime(currentTime)}</span> 
+          <span className={timeColorSecondary}>{formatTime(duration)}</span> 
+        </div>
+      </div>
+    </div>
+  );
+};
+
 
 export default function Messages() {
   const { user } = useAuth();
@@ -54,24 +235,19 @@ export default function Messages() {
   const queryClient = useQueryClient();
   const isMobile = useIsMobile();
   
-  // --- Estados de Navegação e UI ---
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"chats" | "contacts">("chats");
   const [searchQuery, setSearchQuery] = useState("");
   
-  // --- Refs e Estados de Scroll ---
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [showScrollButton, setShowScrollButton] = useState(false);
 
-  // --- Estado para controle dos temporizadores ---
+  // Estados simplificados
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
-  const [viewedMessages, setViewedMessages] = useState<Set<string>>(new Set());
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
-  const [playedAudios, setPlayedAudios] = useState<Set<string>>(new Set());
 
-  // --- Scroll Helpers ---
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
@@ -97,8 +273,6 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // --- Queries de Dados ---
-
   // 1. Perfil do Usuário
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -113,7 +287,7 @@ export default function Messages() {
     },
   });
 
-  // 2. Conversas (Salas) - Busca bruta do banco
+  // 2. Conversas
   const { data: rawConversations, refetch: refetchConversations, isLoading: isLoadingConversations } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
@@ -134,14 +308,13 @@ export default function Messages() {
     },
   });
 
-  // 3. Processamento e Filtragem (Lógica de "Apenas 1 por usuário")
+  // 3. Processamento de conversas
   const processedConversations = useMemo(() => {
     if (!rawConversations || !user) return [];
 
     const uniqueMap = new Map();
 
     rawConversations.forEach((conv) => {
-      // Tenta encontrar a última mensagem para ordenação
       const lastMsgDate = conv.messages?.[0]?.created_at 
         ? new Date(conv.messages[0].created_at).getTime() 
         : new Date(conv.created_at).getTime();
@@ -149,15 +322,12 @@ export default function Messages() {
       const convWithDate = { ...conv, sortTime: lastMsgDate };
 
       if (conv.is_group) {
-        // Se for grupo, a chave é o ID da sala (único)
         uniqueMap.set(conv.id, convWithDate);
       } else {
-        // Se for Chat Privado (DM), a chave é o ID do OUTRO participante
         const otherParticipant = conv.conversation_participants.find((p: any) => p.user_id !== user.id);
         const partnerId = otherParticipant?.user_id;
 
         if (partnerId) {
-          // Se já existe uma conversa com esse usuário, mantemos apenas a mais recente
           const existing = uniqueMap.get(partnerId);
           if (!existing || lastMsgDate > existing.sortTime) {
             uniqueMap.set(partnerId, convWithDate);
@@ -166,11 +336,10 @@ export default function Messages() {
       }
     });
 
-    // Converte o Map de volta para Array e ordena pela data mais recente
     return Array.from(uniqueMap.values()).sort((a, b) => b.sortTime - a.sortTime);
   }, [rawConversations, user]);
 
-  // 4. Mensagens da Conversa Atual (FILTRANDO MENSAGENS EXCLUÍDAS)
+  // 4. Mensagens da Conversa Atual
   const { data: messages, refetch: refetchMessages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
     enabled: !!selectedConversation,
@@ -182,7 +351,7 @@ export default function Messages() {
           profiles:user_id (username, avatar_url)
         `)
         .eq("conversation_id", selectedConversation)
-        .is("deleted_at", null) // APENAS MENSAGENS NÃO EXCLUÍDAS
+        .is("deleted_at", null)
         .order("created_at", { ascending: true });
 
       if (error) throw error;
@@ -190,94 +359,63 @@ export default function Messages() {
     },
   });
 
-  // --- Efeitos para controle dos temporizadores ---
+  // Função para detectar tipo de mensagem
+  const getMessageType = useCallback((msg: any): 'text' | 'audio' | 'media' => {
+    if (msg.content) return 'text';
+    if (msg.media_urls && msg.media_urls.some((url: string) => 
+      url.includes(".webm") || url.includes("audio") || url.includes(".mp3") || url.includes(".wav")
+    )) return 'audio';
+    return 'media';
+  }, []);
 
-  // Inicializar temporizadores para mensagens não visualizadas
-  useEffect(() => {
-    if (!messages || !user) return;
-
-    const newTimers: MessageTimer[] = [];
-    const newViewedMessages = new Set(viewedMessages);
-
-    messages.forEach(message => {
-      // Se a mensagem não é do usuário atual e ainda não foi visualizada
-      if (message.user_id !== user.id && !viewedMessages.has(message.id) && !deletedMessages.has(message.id)) {
-        
-        // Verifica se é áudio
-        const isAudio = message.media_urls && message.media_urls.some((url: string) => 
-          url.includes(".webm") || url.includes("audio")
-        );
-
-        // Se for áudio, só inicia o timer se já foi ouvido
-        if (isAudio) {
-          if (playedAudios.has(message.id)) {
-            newTimers.push({
-              messageId: message.id,
-              timeLeft: 120, // 2 minutos em segundos
-              status: 'counting',
-              isAudioPlayed: true
-            });
-            newViewedMessages.add(message.id);
-          }
-        } else {
-          // Para outros tipos de mensagem, inicia o timer imediatamente
-          newTimers.push({
-            messageId: message.id,
-            timeLeft: 120, // 2 minutos em segundos
-            status: 'counting'
-          });
-          newViewedMessages.add(message.id);
-        }
-      }
-    });
-
-    if (newTimers.length > 0) {
-      setMessageTimers(prev => [...prev, ...newTimers]);
-      setViewedMessages(newViewedMessages);
-    }
-  }, [messages, user, deletedMessages, playedAudios]);
-
-  // Função para marcar áudio como ouvido - CORRIGIDA
-  const markAudioAsPlayed = useCallback((messageId: string) => {
-    console.log('Áudio marcado como ouvido:', messageId);
+  // Função para iniciar timer de áudio (MANTIDA)
+  const startAudioTimer = useCallback((messageId: string) => {
+    console.log('🎵 VERIFICANDO TIMER PARA ÁUDIO:', messageId);
     
-    setPlayedAudios(prev => {
-      const newSet = new Set(prev);
-      newSet.add(messageId);
-      return newSet;
-    });
-
-    // Inicia o timer para o áudio ouvido - CORREÇÃO APLICADA
     setMessageTimers(prev => {
       const existingTimer = prev.find(timer => timer.messageId === messageId);
       
-      // Se já existe um timer, não cria outro
       if (existingTimer) {
-        console.log('Timer já existe para este áudio:', messageId);
-        return prev;
+        console.log('⏰ Timer já existe, mantendo:', messageId);
+        return prev; 
       }
-
-      console.log('Criando novo timer para áudio:', messageId);
+      
+      console.log('✅ CRIANDO NOVO TIMER PARA ÁUDIO:', messageId);
       return [...prev, {
         messageId,
-        timeLeft: 120, // 2 minutos fixos - MESMO TEMPO QUE MENSAGENS DE TEXTO
+        timeLeft: 120, // 2 minutos
         status: 'counting',
-        isAudioPlayed: true
+        messageType: 'audio'
       }];
-    });
-
-    // Também marca como visualizada para evitar duplicação
-    setViewedMessages(prev => {
-      const newSet = new Set(prev);
-      newSet.add(messageId);
-      return newSet;
     });
   }, []);
 
-  // Função para arquivar mensagem antes de excluir
+  // Efeito para inicializar timers para mensagens não do usuário (MANTIDO)
+  useEffect(() => {
+    if (!messages || !user) return;
+
+    messages.forEach(message => {
+      if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
+        const messageType = getMessageType(message);
+        const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
+        
+        if (existingTimer) return;
+
+        if (messageType === 'text' || messageType === 'media') {
+          setMessageTimers(prev => [...prev, {
+            messageId: message.id,
+            timeLeft: 120,
+            status: 'counting',
+            messageType
+          }]);
+        }
+      }
+    });
+  }, [messages, user, deletedMessages, messageTimers, getMessageType]);
+
+  // Função para arquivar mensagem (MANTIDA)
   const archiveMessage = async (messageId: string) => {
     try {
-      // Busca a mensagem original
       const { data: originalMessage, error: fetchError } = await supabase
         .from('messages')
         .select('*')
@@ -286,7 +424,6 @@ export default function Messages() {
 
       if (fetchError) throw fetchError;
 
-      // Arquiva a mensagem
       const { error: archiveError } = await supabase
         .from('temporary_messages_archive')
         .insert({
@@ -301,7 +438,6 @@ export default function Messages() {
         });
 
       if (archiveError) throw archiveError;
-
       return true;
     } catch (error) {
       console.error('Erro ao arquivar mensagem:', error);
@@ -309,14 +445,12 @@ export default function Messages() {
     }
   };
 
-  // Função para excluir mensagens do banco
+  // Função para excluir mensagens (MANTIDA)
   const deleteMessages = async (messageIds: string[]) => {
     try {
-      // Primeiro arquiva as mensagens
       const archivePromises = messageIds.map(messageId => archiveMessage(messageId));
       await Promise.all(archivePromises);
 
-      // Depois marca como excluídas na tabela original
       const { error } = await supabase
         .from('messages')
         .update({ 
@@ -328,14 +462,12 @@ export default function Messages() {
 
       if (error) throw error;
 
-      // Atualiza o estado local
       setDeletedMessages(prev => {
         const newSet = new Set(prev);
         messageIds.forEach(id => newSet.add(id));
         return newSet;
       });
 
-      // Atualiza a lista de mensagens
       refetchMessages();
       refetchConversations();
     } catch (error) {
@@ -343,7 +475,7 @@ export default function Messages() {
     }
   };
 
-  // Efeito principal para controle dos temporizadores
+  // Efeito principal do timer (MANTIDO)
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageTimers(prev => {
@@ -351,95 +483,74 @@ export default function Messages() {
         const messagesToDelete: string[] = [];
 
         prev.forEach(timer => {
-          switch (timer.status) {
-            case 'counting':
-              if (timer.timeLeft <= 1) {
-                // Inicia processo de deleção - SEMPRE 2 MINUTOS INDEPENDENTE DO TIPO
-                const message = messages?.find(m => m.id === timer.messageId);
-                
-                // Verifica se é áudio
-                const isAudio = message?.media_urls && message.media_urls.some((url: string) => 
-                  url.includes(".webm") || url.includes("audio")
-                );
-
-                if (message?.content && !isAudio) {
-                  // Para mensagens de texto, inicia deleção letra por letra com tempo fixo
+          if (timer.timeLeft <= 1) {
+            // Próximo estágio
+            switch (timer.status) {
+              case 'counting':
+                if (timer.messageType === 'text') {
+                  // Texto: vai para deleção
                   updatedTimers.push({
                     ...timer,
                     status: 'deleting',
-                    currentText: message.content,
-                    timeLeft: 120, // SEMPRE 2 MINUTOS (120 segundos) para deleção
-                    deletionStartTime: Date.now()
+                    currentText: messages?.find(m => m.id === timer.messageId)?.content || '',
+                    timeLeft: 120
                   });
                 } else {
-                  // Para áudios e outras mídias, vai direto para "UnDoInG" após os 2 minutos
+                  // Áudio e mídia: vai direto para UnDoInG
                   updatedTimers.push({
                     ...timer,
                     status: 'showingUndoing',
-                    timeLeft: 5 // 5 segundos para "UnDoInG"
+                    timeLeft: 5
                   });
                 }
-              } else {
-                updatedTimers.push({
-                  ...timer,
-                  timeLeft: timer.timeLeft - 1
-                });
-              }
-              break;
-
-            case 'deleting':
-              if (timer.timeLeft <= 1) {
-                // Terminou o tempo de deleção, mostra "UnDoInG"
+                break;
+              
+              case 'deleting':
+                // Texto: terminou de deletar, vai para UnDoInG
                 updatedTimers.push({
                   ...timer,
                   status: 'showingUndoing',
                   timeLeft: 5,
                   currentText: undefined
                 });
-              } else {
-                // Continua contagem regressiva e remove letras proporcionalmente
-                const message = messages?.find(m => m.id === timer.messageId);
-                const originalText = message?.content || '';
-                const totalDeletionTime = 120; // 2 minutos fixos
-                const elapsedTime = 120 - timer.timeLeft + 1; // Tempo decorrido
-                
-                // Calcula quantas letras devem ser removidas baseado no tempo decorrido
-                const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / totalDeletionTime))));
-                const currentText = originalText.slice(0, lettersToKeep);
-
-                updatedTimers.push({
-                  ...timer,
-                  timeLeft: timer.timeLeft - 1,
-                  currentText: currentText
-                });
-              }
-              break;
-
-            case 'showingUndoing':
-              if (timer.timeLeft <= 1) {
+                break;
+              
+              case 'showingUndoing':
                 // Marca para exclusão
                 messagesToDelete.push(timer.messageId);
                 updatedTimers.push({
                   ...timer,
                   status: 'deleted'
                 });
-              } else {
-                updatedTimers.push({
-                  ...timer,
-                  timeLeft: timer.timeLeft - 1
-                });
-              }
-              break;
-
-            default:
-              // Remove timers deletados
-              if (timer.status !== 'deleted') {
+                break;
+              
+              default:
                 updatedTimers.push(timer);
-              }
+            }
+          } else {
+            // Apenas decrementa o tempo
+            if (timer.status === 'deleting' && timer.currentText) {
+              // Para texto em deleção, remove letras proporcionalmente
+              const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
+              const elapsedTime = 120 - timer.timeLeft + 1;
+              const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / 120))));
+              const currentText = originalText.slice(0, lettersToKeep);
+              
+              updatedTimers.push({
+                ...timer,
+                timeLeft: timer.timeLeft - 1,
+                currentText
+              });
+            } else {
+              updatedTimers.push({
+                ...timer,
+                timeLeft: timer.timeLeft - 1
+              });
+            }
           }
         });
 
-        // Exclui mensagens marcadas para deleção
+        // Exclui mensagens marcadas
         if (messagesToDelete.length > 0) {
           deleteMessages(messagesToDelete);
         }
@@ -451,21 +562,18 @@ export default function Messages() {
     return () => clearInterval(interval);
   }, [messages]);
 
-  // Função para obter o estado atual de uma mensagem
+  // Função auxiliar (MANTIDA)
   const getMessageState = (messageId: string) => {
     return messageTimers.find(timer => timer.messageId === messageId);
   };
 
-  // Função para formatar o tempo restante
   const formatTime = (seconds: number) => {
     const mins = Math.floor(seconds / 60);
     const secs = seconds % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // --- Efeitos (Side Effects) ---
-
-  // Realtime
+  // Realtime (MANTIDO)
   useEffect(() => {
     if (!user) return;
     
@@ -483,7 +591,7 @@ export default function Messages() {
     return () => { supabase.removeChannel(channel); };
   }, [refetchMessages, refetchConversations, user]);
 
-  // Marcar como visto
+  // Marcar como visto (MANTIDO)
   useEffect(() => {
     if (user && selectedConversation) {
       supabase.from("last_viewed").upsert(
@@ -495,7 +603,7 @@ export default function Messages() {
     }
   }, [user, selectedConversation, queryClient]);
 
-  // Auto-scroll
+  // Auto-scroll (MANTIDO)
   useEffect(() => {
     if (messages && isAtBottom) {
       setTimeout(() => scrollToBottom(false), 100);
@@ -508,8 +616,7 @@ export default function Messages() {
     }
   }, [selectedConversation, scrollToBottom]);
 
-  // --- Handlers ---
-
+  // Handlers (MANTIDOS)
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversation || !user) return;
     
@@ -584,7 +691,6 @@ export default function Messages() {
   const startChatWithFriend = async (friendId: string) => {
     if (!user) return;
     
-    // 1. Verifica primeiro na lista carregada se já existe conversa com este amigo
     const existingLocal = processedConversations.find(c => 
       !c.is_group && c.conversation_participants.some((p: any) => p.user_id === friendId)
     );
@@ -595,7 +701,6 @@ export default function Messages() {
       return;
     }
 
-    // 2. Se não achou localmente (segurança), tenta criar
     try {
       const { data: newConv } = await supabase.from("conversations").insert({ is_group: false }).select().single();
       if (newConv) {
@@ -613,42 +718,32 @@ export default function Messages() {
     }
   };
 
-  // --- Filtro de busca visual ---
+  // Filtro de busca (MANTIDO)
   const filteredConversations = processedConversations.filter(c => 
     c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.conversation_participants.some((p: any) => p.profiles?.username?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Lógica de visualização condicional para mobile
+  // Lógica de visualização (MANTIDA)
   const showSidebar = !isMobile || (isMobile && !selectedConversation);
   const showChat = !isMobile || (isMobile && selectedConversation);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
       
-      {/* ================= SIDEBAR ================= */}
-      <div 
-        className={cn(
-          "flex flex-col bg-card border-r transition-all duration-300",
-          showSidebar ? "w-full lg:w-[380px]" : "hidden lg:flex lg:w-[380px]"
-        )}
-      >
-        {/* Header da Sidebar */}
+      {/* SIDEBAR */}
+      <div className={cn("flex flex-col bg-card border-r transition-all duration-300", showSidebar ? "w-full lg:w-[380px]" : "hidden lg:flex lg:w-[380px]")}>
         <div className="p-4 border-b space-y-4 bg-gradient-to-r from-background to-muted/20">
           <div className="relative flex items-center justify-center min-h-[28px]">
-            {/* Título Centralizado */}
             <h2 className="text-xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent flex items-center gap-2">
               <MessageCircle className="h-6 w-6 text-primary" />
               Mensagens
             </h2>
-            
-            {/* Botão Posicionado à Direita */}
             <div className="absolute right-0">
               <CreatePrivateRoom />
             </div>
           </div>
 
-          {/* Tabs Principais */}
           <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as any)} className="w-full">
             <TabsList className="w-full grid grid-cols-2">
               <TabsTrigger value="chats">Conversas</TabsTrigger>
@@ -656,7 +751,6 @@ export default function Messages() {
             </TabsList>
           </Tabs>
 
-          {/* Busca */}
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input 
@@ -668,7 +762,6 @@ export default function Messages() {
           </div>
         </div>
 
-        {/* Conteúdo da Sidebar */}
         <div className="flex-1 overflow-hidden relative">
           {sidebarTab === "chats" ? (
             <ScrollArea className="h-full">
@@ -680,7 +773,6 @@ export default function Messages() {
                 <div className="flex flex-col">
                   {filteredConversations.map((conv) => {
                     const otherParticipant = conv.conversation_participants.find((p:any) => p.user_id !== user?.id);
-                    
                     const lastMessage = conv.messages?.[0];
                     const isActive = selectedConversation === conv.id;
 
@@ -697,7 +789,7 @@ export default function Messages() {
                           <Avatar className="h-12 w-12 border-2 border-background">
                             <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
                             <AvatarFallback className="bg-muted font-semibold">
-                              {otherParticipant?.profiles?.username?.[0]?.toUpperCase() || <Users className="h-4 w-4" />}
+                              {conv.is_group ? <Users className="h-4 w-4" /> : otherParticipant?.profiles?.username?.[0]?.toUpperCase()}
                             </AvatarFallback>
                           </Avatar>
                         </div>
@@ -736,7 +828,6 @@ export default function Messages() {
               )}
             </ScrollArea>
           ) : (
-            /* ABA CONTATOS */
             <Tabs defaultValue="list" className="h-full flex flex-col">
                <div className="px-4 pb-2 bg-card border-b">
                  <TabsList className="w-full h-9 bg-muted/40">
@@ -768,16 +859,10 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* ================= ÁREA PRINCIPAL (CHAT) ================= */}
-      <div 
-        className={cn(
-          "flex-1 flex flex-col bg-gradient-to-br from-background via-background to-muted/20 relative",
-          showChat ? "flex" : "hidden"
-        )}
-      >
+      {/* ÁREA PRINCIPAL (CHAT) */}
+      <div className={cn("flex-1 flex flex-col bg-gradient-to-br from-background via-background to-muted/20 relative", showChat ? "flex" : "hidden")}>
         {selectedConversation ? (
           <>
-            {/* Header do Chat */}
             <div className="h-16 border-b flex items-center justify-between px-4 bg-card/80 backdrop-blur-md z-10 shadow-sm">
               <div className="flex items-center gap-3">
                 {isMobile && (
@@ -787,7 +872,6 @@ export default function Messages() {
                 )}
                 
                 {(() => {
-                   // Busca nos processados para manter consistência
                    const conv = processedConversations.find(c => c.id === selectedConversation) || rawConversations?.find(c => c.id === selectedConversation);
                    const peer = conv?.conversation_participants.find((p:any) => p.user_id !== user?.id);
                    
@@ -829,23 +913,14 @@ export default function Messages() {
               </div>
             </div>
 
-            {/* Lista de Mensagens */}
-            <div 
-              ref={messagesContainerRef}
-              className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden"
-              style={{ overflowX: 'hidden' }}
-            >
+            {/* LISTA DE MENSAGENS */}
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden">
               {!isLoadingMessages && messages?.map((msg, idx) => {
                 const isOwn = msg.user_id === user?.id;
                 const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
                 const timerState = getMessageState(msg.id);
+                const messageType = getMessageType(msg);
 
-                // Verifica se é áudio
-                const isAudio = msg.media_urls && msg.media_urls.some((url: string) => 
-                  url.includes(".webm") || url.includes("audio")
-                );
-
-                // Se a mensagem foi deletada, não renderiza
                 if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) {
                   return null;
                 }
@@ -865,7 +940,7 @@ export default function Messages() {
 
                     <div className={cn("flex flex-col max-w-[85%] sm:max-w-[70%] min-w-0", isOwn ? "items-end" : "items-start")}>
                       
-                      {/* Indicador de Temporizador */}
+                      {/* INDICADOR DE TEMPORIZADOR */}
                       {timerState && timerState.status !== 'deleted' && (
                         <div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
@@ -877,7 +952,15 @@ export default function Messages() {
                         </div>
                       )}
 
-                      {/* Conteúdo "UnDoInG" */}
+                      {/* INDICADOR PARA ÁUDIO NÃO OUVIDO */}
+                      {!isOwn && messageType === 'audio' && !timerState && (
+                        <div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
+                          <Clock className="h-3 w-3" />
+                          <span>Reproduza o áudio para iniciar o timer</span>
+                        </div>
+                      )}
+
+                      {/* CONTEÚDO "UnDoInG" */}
                       {timerState?.status === 'showingUndoing' && (
                         <div className="px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg mb-2 animate-pulse">
                           <span className="text-destructive font-mono font-bold tracking-wider">
@@ -886,30 +969,23 @@ export default function Messages() {
                         </div>
                       )}
 
-                      {/* Mídia */}
+                      {/* MÍDIA - O PLAYER SEMPRE APARECE AGORA */}
                       {msg.media_urls && msg.media_urls.length > 0 && timerState?.status !== 'showingUndoing' && (
                         <div className="mb-1 space-y-1 max-w-full">
                           {msg.media_urls.map((url: string, i: number) => {
-                            if (isAudio) {
+                            if (messageType === 'audio') {
                               return (
                                 <div key={i} className="max-w-full">
-                                  <AudioPlayer 
+                                  <CustomAudioPlayer 
                                     audioUrl={url} 
-                                    className="bg-card border shadow-sm max-w-[250px] w-full" 
+                                    isOwn={isOwn} // PROPRIEDADE isOwn PASSADA
+                                    className={cn(isOwn ? "max-w-[250px] w-full" : "max-w-[300px] w-full")} 
                                     onPlay={() => {
                                       if (!isOwn) {
-                                        console.log('Áudio reproduzido pelo destinatário:', msg.id);
-                                        markAudioAsPlayed(msg.id);
+                                        startAudioTimer(msg.id);
                                       }
                                     }}
                                   />
-                                  {/* Indicador de áudio não ouvido */}
-                                  {!isOwn && !playedAudios.has(msg.id) && !timerState && (
-                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
-                                      <Clock className="h-3 w-3" />
-                                      <span>Timer iniciará após ouvir</span>
-                                    </div>
-                                  )}
                                 </div>
                               );
                             }
@@ -919,31 +995,19 @@ export default function Messages() {
                                 src={url} 
                                 alt="midia" 
                                 className="rounded-lg max-h-[300px] max-w-full border shadow-sm w-auto object-cover bg-black/10" 
-                                style={{ maxWidth: '100%' }}
                               />
                             );
                           })}
                         </div>
                       )}
 
-                      {/* Texto */}
+                      {/* TEXTO */}
                       {msg.content && timerState?.status !== 'showingUndoing' && (
-                        <div 
-                           className={cn(
-                             "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full",
-                             isOwn 
-                               ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" 
-                               : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
-                           )}
-                           style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}
-                        >
+                        <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden">
                             <MentionText text={timerState?.status === 'deleting' ? (timerState.currentText || '') : msg.content} />
                           </div>
-                          <span className={cn(
-                            "text-[10px] absolute bottom-1 right-3 opacity-60",
-                            isOwn ? "text-primary-foreground" : "text-muted-foreground"
-                          )}>
+                          <span className={cn("text-[10px] absolute bottom-1 right-3 opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
                             {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                           </span>
                         </div>
@@ -956,16 +1020,11 @@ export default function Messages() {
             </div>
 
             {showScrollButton && (
-               <Button 
-                 size="icon" 
-                 className="absolute bottom-24 right-6 rounded-full shadow-xl z-20 animate-in fade-in zoom-in duration-300" 
-                 onClick={() => scrollToBottom(false)}
-               >
+               <Button size="icon" className="absolute bottom-24 right-6 rounded-full shadow-xl z-20 animate-in fade-in zoom-in duration-300" onClick={() => scrollToBottom(false)}>
                  <ArrowDown className="h-5 w-5" />
                </Button>
             )}
 
-            {/* Input */}
             <div className="p-4 bg-background border-t">
                <div className="max-w-4xl mx-auto w-full">
                  <MessageInput
@@ -978,7 +1037,6 @@ export default function Messages() {
             </div>
           </>
         ) : (
-          /* EMPTY STATE */
           <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in duration-500">
              <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
                 <MessageSquarePlus className="h-16 w-16 text-primary" />
