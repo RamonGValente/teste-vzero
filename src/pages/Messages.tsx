@@ -18,7 +18,7 @@ import {
   Loader2,
   Lock,
   Clock,
-  AlertTriangle // Ícone para debug se necessário
+  AlertTriangle
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,108 +39,85 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// --- COMPONENTE DE AUTODESTRUIÇÃO (CORRIGIDO) ---
+// --- COMPONENTE DE AUTODESTRUIÇÃO (CORRIGIDO E PERSISTENTE) ---
 const SelfDestructMessage = ({ 
   message, 
   isOwn, 
-  viewedAt, 
+  onView 
 }: { 
   message: any, 
-  isOwn: boolean, 
-  viewedAt: number | null // Timestamp numérico para facilitar cálculos
+  isOwn: boolean,
+  onView: (id: string) => void 
 }) => {
   const [content, setContent] = useState(message.content || "");
-  // Estados: 
-  // 'waiting' = Ainda não visto
-  // 'countdown' = Contagem de 2 minutos
-  // 'erasing' = Apagando texto letra por letra
-  // 'undoing' = Texto animado UnDoInG
-  // 'gone' = Sumiu
   const [status, setStatus] = useState<'waiting' | 'countdown' | 'erasing' | 'undoing' | 'gone'>('waiting');
-  const [timeLeft, setTimeLeft] = useState(120); // 120 segundos = 2 minutos
+  const [timeLeft, setTimeLeft] = useState(120);
+  
+  // Recupera a data de visualização real do banco de dados
+  const dbViewedAt = message.viewed_at ? new Date(message.viewed_at).getTime() : null;
 
-  // 1. Inicializa o processo assim que tivermos um 'viewedAt' válido
+  // 1. Efeito para disparar o "Visto" no banco se eu for o destinatário
   useEffect(() => {
-    if (!viewedAt && status === 'waiting') return;
-    
-    if (viewedAt && status === 'waiting') {
-      const now = Date.now();
-      const secondsPassed = Math.floor((now - viewedAt) / 1000);
-
-      if (secondsPassed >= 120) {
-        // Se já passou o tempo todo, pula para apagar
-        setStatus('erasing');
-        setTimeLeft(0);
-      } else {
-        setStatus('countdown');
-        setTimeLeft(120 - secondsPassed);
-      }
+    if (!isOwn && !dbViewedAt) {
+      onView(message.id);
     }
-  }, [viewedAt, status]);
+  }, [isOwn, dbViewedAt, message.id, onView]);
 
-  // 2. Lógica do Timer (2 minutos)
+  // 2. Lógica Central de Estado Baseada no Tempo Real
   useEffect(() => {
-    if (status !== 'countdown') return;
-
-    const timer = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          setStatus('erasing'); // Tempo acabou -> iniciar deleção
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-
-    return () => clearInterval(timer);
-  }, [status]);
-
-  // 3. Lógica de Apagar (Letra por letra de trás pra frente ou Mídia)
-  useEffect(() => {
-    if (status !== 'erasing') return;
-
-    const hasText = content && content.length > 0;
-    const hasMedia = message.media_urls && message.media_urls.length > 0;
-
-    if (!hasText && hasMedia) {
-      // Se é só mídia, vai direto para UnDoInG
-      setStatus('undoing');
+    // Se não foi visto ainda, fica aguardando
+    if (!dbViewedAt) {
+      setStatus('waiting');
       return;
     }
 
-    if (hasText) {
-      const eraseTimer = setInterval(() => {
-        setContent((prev: string) => {
-          if (prev.length <= 0) {
-            clearInterval(eraseTimer);
-            setStatus('undoing');
-            return "";
-          }
-          // Remove o último caractere (de trás pra frente)
-          return prev.slice(0, -1);
-        });
-      }, 1000); // 1 segundo por letra
-      return () => clearInterval(eraseTimer);
-    } else {
-      setStatus('undoing');
-    }
-  }, [status, message.media_urls]);
+    const calculateState = () => {
+      const now = Date.now();
+      const secondsPassed = (now - dbViewedAt) / 1000;
+      
+      // Constantes de tempo
+      const COUNTDOWN_TIME = 120; // 2 minutos
+      const textLength = message.content ? message.content.length : 0;
+      const hasMedia = message.media_urls && message.media_urls.length > 0;
+      
+      // Se tiver texto, demora 1s por letra, senão 0
+      const ERASE_TIME = (message.content && message.content.length > 0) ? message.content.length : 0;
+      const UNDOING_TIME = 5;
 
-  // 4. Lógica UnDoInG (5 segundos)
-  useEffect(() => {
-    if (status !== 'undoing') return;
+      // FASE 1: Contagem Regressiva (0 a 120s)
+      if (secondsPassed < COUNTDOWN_TIME) {
+        setStatus('countdown');
+        setTimeLeft(Math.floor(COUNTDOWN_TIME - secondsPassed));
+        setContent(message.content || ""); // Garante texto completo
+      } 
+      // FASE 2: Apagando Texto (120s a 120s + tamanho do texto)
+      else if (secondsPassed < (COUNTDOWN_TIME + ERASE_TIME) && !hasMedia) {
+        setStatus('erasing');
+        // Calcula quantas letras já deveriam ter sido apagadas
+        const timeInErase = secondsPassed - COUNTDOWN_TIME;
+        const charsToKeep = Math.max(0, Math.floor(textLength - timeInErase));
+        setContent(message.content.substring(0, charsToKeep));
+      }
+      // FASE 3: UnDoInG (Após apagar ou direto se for mídia)
+      else if (secondsPassed < (COUNTDOWN_TIME + ERASE_TIME + UNDOING_TIME)) {
+        setStatus('undoing');
+      }
+      // FASE 4: Sumiu
+      else {
+        setStatus('gone');
+      }
+    };
 
-    const undoTimer = setTimeout(() => {
-      setStatus('gone');
-    }, 5000);
+    // Roda imediatamente e depois a cada frame/segundo
+    calculateState();
+    const interval = setInterval(calculateState, 1000); // Atualiza a cada segundo
 
-    return () => clearTimeout(undoTimer);
-  }, [status]);
-
+    return () => clearInterval(interval);
+  }, [dbViewedAt, message.content, message.media_urls]);
 
   // --- RENDERIZAÇÃO ---
 
-  if (status === 'gone') return null; // Remove do DOM visualmente
+  if (status === 'gone') return null; // Remove do DOM
 
   if (status === 'undoing') {
     return (
@@ -153,7 +130,6 @@ const SelfDestructMessage = ({
     );
   }
 
-  // Formata o tempo MM:SS
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
@@ -163,7 +139,7 @@ const SelfDestructMessage = ({
   return (
     <div className={cn("flex flex-col gap-1 max-w-[85%] sm:max-w-[70%]", isOwn ? "items-end" : "items-start")}>
       
-      {/* Exibe Mídia (se não estiver 'gone' e se não for texto puro sendo apagado, a midia some quando o texto começa a apagar ou quando timer zera) */}
+      {/* Mídia: Só mostra durante o countdown. Se entrar em erasing ou undoing, some. */}
       {status === 'countdown' && message.media_urls && message.media_urls.length > 0 && (
         <div className="mb-1 space-y-1">
           {message.media_urls.map((url: string, i: number) => {
@@ -176,7 +152,7 @@ const SelfDestructMessage = ({
         </div>
       )}
 
-      {/* Conteúdo de Texto + Timer */}
+      {/* Texto e Timer */}
       {(content || (!message.media_urls?.length)) && (
         <div 
            className={cn(
@@ -186,30 +162,25 @@ const SelfDestructMessage = ({
                : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
            )}
         >
-          {/* Texto */}
           <div className="min-h-[20px]">
             <MentionText text={content} />
           </div>
 
-          {/* --- RELÓGIO DO TEMPORIZADOR --- */}
           <div className={cn(
             "flex items-center gap-1.5 mt-2 pt-1 border-t text-[11px] font-mono font-bold",
             isOwn ? "border-primary-foreground/20 text-primary-foreground/90" : "border-foreground/10 text-foreground/70",
             status === 'countdown' && timeLeft < 10 ? "text-red-500 animate-pulse" : ""
           )}>
             {status === 'waiting' ? (
-               // Se estiver esperando, mostra ícone cinza
                <span className="flex items-center gap-1 opacity-70">
-                 <Clock className="h-3 w-3" /> Aguardando leitura...
+                 <Clock className="h-3 w-3" /> Aguardando...
                </span>
             ) : status === 'countdown' ? (
-               // Contagem Regressiva
                <span className="flex items-center gap-1 text-orange-500">
                  <Clock className="h-3.5 w-3.5" /> 
-                 {formatTime(timeLeft)} restantes
+                 {formatTime(timeLeft)}
                </span>
             ) : (
-               // Apagando
                <span className="flex items-center gap-1 text-red-500">
                  <AlertTriangle className="h-3 w-3" /> Deletando...
                </span>
@@ -267,6 +238,8 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  // --- API Calls ---
+
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     enabled: !!user,
@@ -274,34 +247,6 @@ export default function Messages() {
       const { data } = await supabase.from("profiles").select("friend_code").eq("id", user!.id).single();
       return data;
     },
-  });
-
-  // --- QUERY CRÍTICA: Saber quando o parceiro viu ---
-  const { data: partnerLastViewed } = useQuery({
-    queryKey: ["partner-view-time", selectedConversation],
-    enabled: !!selectedConversation && !!user,
-    refetchInterval: 2000, // Verifica a cada 2 segundos se o parceiro visualizou
-    queryFn: async () => {
-      // 1. Pega o ID do outro participante
-      const { data: participants } = await supabase
-        .from("conversation_participants")
-        .select("user_id")
-        .eq("conversation_id", selectedConversation)
-        .neq("user_id", user!.id)
-        .single();
-      
-      if (!participants) return 0;
-
-      // 2. Pega o last_viewed dele
-      const { data: view } = await supabase
-        .from("last_viewed")
-        .select("viewed_at")
-        .eq("user_id", participants.user_id)
-        .eq("section", "messages")
-        .single();
-
-      return view ? new Date(view.viewed_at).getTime() : 0;
-    }
   });
 
   const { data: rawConversations, refetch: refetchConversations, isLoading: isLoadingConversations } = useQuery({
@@ -339,6 +284,7 @@ export default function Messages() {
     queryKey: ["messages", selectedConversation],
     enabled: !!selectedConversation,
     queryFn: async () => {
+      // Seleciona viewed_at explicitamente para garantir
       const { data, error } = await supabase
         .from("messages")
         .select(`*, profiles:user_id(username, avatar_url)`)
@@ -349,17 +295,32 @@ export default function Messages() {
     },
   });
 
-  // Atualiza que EU visualizei agora
+  // --- Nova função para marcar mensagens específicas como vistas ---
+  const markMessageViewed = useCallback(async (messageId: string) => {
+    if (!user) return;
+    try {
+      // Atualiza apenas se ainda estiver null para evitar chamadas excessivas
+      await supabase
+        .from("messages")
+        .update({ viewed_at: new Date().toISOString() })
+        .eq("id", messageId)
+        .is("viewed_at", null);
+    } catch (err) {
+      console.error("Erro ao marcar visto:", err);
+    }
+  }, [user]);
+
+  // Atualiza que EU visualizei a SALA (genérico) para limpar notificações
   useEffect(() => {
     if (user && selectedConversation) {
-      const markRead = () => {
+      const markRoomRead = () => {
         supabase.from("last_viewed").upsert(
           { user_id: user.id, section: "messages", viewed_at: new Date().toISOString() },
           { onConflict: "user_id,section" }
         );
       };
-      markRead();
-      const interval = setInterval(markRead, 5000); // Garante atualização constante enquanto na tela
+      markRoomRead();
+      const interval = setInterval(markRoomRead, 5000);
       return () => clearInterval(interval);
     }
   }, [user, selectedConversation]);
@@ -492,38 +453,15 @@ export default function Messages() {
                 const isOwn = msg.user_id === user?.id;
                 const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
                 
-                // --- LÓGICA DE VISUALIZAÇÃO CORRIGIDA ---
-                // 1. Se a mensagem é MINHA (isOwn): Começa quando o parceiro viu (partnerLastViewed > created_at)
-                // 2. Se a mensagem é DELE (!isOwn): Começa AGORA (Date.now()), pois eu estou na tela.
-                
-                let viewedAt: number | null = null;
-                const msgTime = new Date(msg.created_at).getTime();
-
-                if (isOwn) {
-                   // Só inicia se o banco disser que ele viu DEPOIS que a mensagem foi criada
-                   if (partnerLastViewed && partnerLastViewed > msgTime) {
-                      viewedAt = partnerLastViewed;
-                   }
-                } else {
-                   // Eu recebi, eu estou vendo. Considere visto AGORA (ou assuma que vi assim que abri o chat)
-                   // Para efeito visual imediato, usamos o próprio tempo da mensagem se ela for antiga,
-                   // ou "agora" se acabei de receber.
-                   // SIMPLIFICAÇÃO: Se estou renderizando a mensagem de outro, o timer conta a partir de quando EU abri a tela.
-                   // Como não temos um state local persistente por mensagem, vamos usar 'Date.now()' como base visual
-                   // mas isso reiniciaria o timer ao recarregar a página. 
-                   // CORREÇÃO IDEAL: Usar o last_viewed DO PRÓPRIO USUÁRIO.
-                   // Mas para você ver funcionando AGORA:
-                   viewedAt = Date.now(); 
-                }
-
                 return (
                   <div key={msg.id} className={cn("flex w-full gap-2", isOwn ? "justify-end" : "justify-start")}>
                     {!isOwn && <div className="w-8 flex-shrink-0 flex flex-col justify-end">{showAvatar && <Avatar className="h-8 w-8"><AvatarImage src={msg.profiles?.avatar_url} /><AvatarFallback>{msg.profiles?.username?.[0]}</AvatarFallback></Avatar>}</div>}
                     
+                    {/* Passamos a função de marcar visto para o componente */}
                     <SelfDestructMessage 
                       message={msg} 
                       isOwn={isOwn} 
-                      viewedAt={viewedAt} 
+                      onView={markMessageViewed} 
                     />
                   </div>
                 );
