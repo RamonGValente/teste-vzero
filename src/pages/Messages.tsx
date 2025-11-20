@@ -245,14 +245,14 @@ export default function Messages() {
       return newSet;
     });
 
-    // Inicia o timer para o áudio ouvido
+    // Inicia o timer para o áudio ouvido - MESMA REGRA DAS MENSAGENS DE TEXTO
     setMessageTimers(prev => {
       const existingTimer = prev.find(timer => timer.messageId === messageId);
       if (existingTimer) return prev;
 
       return [...prev, {
         messageId,
-        timeLeft: 120,
+        timeLeft: 120, // 2 minutos fixos - MESMO TEMPO QUE MENSAGENS DE TEXTO
         status: 'counting',
         isAudioPlayed: true
       }];
@@ -339,9 +339,15 @@ export default function Messages() {
           switch (timer.status) {
             case 'counting':
               if (timer.timeLeft <= 1) {
-                // Inicia processo de deleção - SEMPRE 2 MINUTOS INDEPENDENTE DO TEXTO
+                // Inicia processo de deleção - SEMPRE 2 MINUTOS INDEPENDENTE DO TIPO
                 const message = messages?.find(m => m.id === timer.messageId);
-                if (message?.content) {
+                
+                // Verifica se é áudio
+                const isAudio = message?.media_urls && message.media_urls.some((url: string) => 
+                  url.includes(".webm") || url.includes("audio")
+                );
+
+                if (message?.content && !isAudio) {
                   // Para mensagens de texto, inicia deleção letra por letra com tempo fixo
                   updatedTimers.push({
                     ...timer,
@@ -351,7 +357,7 @@ export default function Messages() {
                     deletionStartTime: Date.now()
                   });
                 } else {
-                  // Para mídia, vai direto para "UnDoInG"
+                  // Para áudios e outras mídias, vai direto para "UnDoInG" após os 2 minutos
                   updatedTimers.push({
                     ...timer,
                     status: 'showingUndoing',
@@ -877,6 +883,13 @@ export default function Messages() {
                                     className="bg-card border shadow-sm max-w-[250px] w-full" 
                                     onPlay={() => !isOwn && markAudioAsPlayed(msg.id)}
                                   />
+                                  {/* Indicador de áudio não ouvido */}
+                                  {!isOwn && !playedAudios.has(msg.id) && !timerState && (
+                                    <div className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+                                      <Clock className="h-3 w-3" />
+                                      <span>Timer iniciará após ouvir</span>
+                                    </div>
+                                  )}
                                 </div>
                               );
                             }
