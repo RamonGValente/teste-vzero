@@ -237,25 +237,40 @@ export default function Messages() {
     }
   }, [messages, user, deletedMessages, playedAudios]);
 
-  // Função para marcar áudio como ouvido
+  // Função para marcar áudio como ouvido - CORRIGIDA
   const markAudioAsPlayed = useCallback((messageId: string) => {
+    console.log('Áudio marcado como ouvido:', messageId);
+    
     setPlayedAudios(prev => {
       const newSet = new Set(prev);
       newSet.add(messageId);
       return newSet;
     });
 
-    // Inicia o timer para o áudio ouvido - MESMA REGRA DAS MENSAGENS DE TEXTO
+    // Inicia o timer para o áudio ouvido - CORREÇÃO APLICADA
     setMessageTimers(prev => {
       const existingTimer = prev.find(timer => timer.messageId === messageId);
-      if (existingTimer) return prev;
+      
+      // Se já existe um timer, não cria outro
+      if (existingTimer) {
+        console.log('Timer já existe para este áudio:', messageId);
+        return prev;
+      }
 
+      console.log('Criando novo timer para áudio:', messageId);
       return [...prev, {
         messageId,
         timeLeft: 120, // 2 minutos fixos - MESMO TEMPO QUE MENSAGENS DE TEXTO
         status: 'counting',
         isAudioPlayed: true
       }];
+    });
+
+    // Também marca como visualizada para evitar duplicação
+    setViewedMessages(prev => {
+      const newSet = new Set(prev);
+      newSet.add(messageId);
+      return newSet;
     });
   }, []);
 
@@ -881,7 +896,12 @@ export default function Messages() {
                                   <AudioPlayer 
                                     audioUrl={url} 
                                     className="bg-card border shadow-sm max-w-[250px] w-full" 
-                                    onPlay={() => !isOwn && markAudioAsPlayed(msg.id)}
+                                    onPlay={() => {
+                                      if (!isOwn) {
+                                        console.log('Áudio reproduzido pelo destinatário:', msg.id);
+                                        markAudioAsPlayed(msg.id);
+                                      }
+                                    }}
                                   />
                                   {/* Indicador de áudio não ouvido */}
                                   {!isOwn && !playedAudios.has(msg.id) && !timerState && (
