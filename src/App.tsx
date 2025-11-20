@@ -11,7 +11,6 @@ import AppLayout from "./components/Layout/AppLayout";
 import Feed from "./pages/Feed";
 import Explore from "./pages/Explore";
 import Messages from "./pages/Messages";
-import MessagesEnhanced from "./pages/MessagesEnhanced";
 import Communities from "./pages/Communities";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
@@ -120,7 +119,7 @@ const App = () => (
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/" element={<Feed />} />
                 <Route path="/explore" element={<Explore />} />
-                <Route path="/messages" element={<MessagesEnhanced />} />
+                <Route path="/messages" element={<Messages />} />
                 <Route path="/communities" element={<Communities />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/:userId" element={<Profile />} />

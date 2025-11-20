@@ -1,7 +1,11 @@
+// src/services/translation.ts
 import { supabase } from "@/integrations/supabase/client";
-export type TranslationResult = { translated: string; source_language: string; target_language: string; };
-export async function translateText(text: string, targetLanguage: string): Promise<TranslationResult> {
-  const { data, error } = await supabase.functions.invoke("translate", { body: { text, targetLanguage } });
+
+export async function translateText(text: string, target: string) {
+  const { data, error } = await supabase.functions.invoke("detect-translate", {
+    body: { text, targetLanguage: target },
+    headers: { "Content-Type": "application/json" },
+  });
   if (error) throw error;
-  return data as TranslationResult;
+  return data as { translated: string; source_language: string | null };
 }
