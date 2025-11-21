@@ -14,7 +14,7 @@
     --card-foreground: 222.2 84% 4.9%;
     --border: 214.3 31.8% 91.4%;
     --input: 214.3 31.8% 91.4%;
-    --primary: 222.2 47.4% 11.2%;
+    --primary: 222.2 47.4% 11.2%; /* Cor principal do tema (Light) */
     --primary-foreground: 210 40% 98%;
     --secondary: 210 40% 96.1%;
     --secondary-foreground: 222.2 47.4% 11.2%;
@@ -36,7 +36,7 @@
     --card-foreground: 210 40% 98%;
     --border: 217.2 32.6% 17.5%;
     --input: 217.2 32.6% 17.5%;
-    --primary: 210 40% 98%;
+    --primary: 210 40% 98%; /* Cor principal do tema (Dark) - Geralmente a mais clara */
     --primary-foreground: 222.2 47.4% 11.2%;
     --secondary: 217.2 32.6% 17.5%;
     --secondary-foreground: 210 40% 98%;
@@ -48,4 +48,30 @@
   }
   * { @apply border-border; }
   body { @apply bg-background text-foreground; }
+}
+
+/* ================================================= */
+/* SCROLLBAR CUSTOMIZADO COM COR DO TEMA (PRIMARY) */
+/* ================================================= */
+
+.custom-scrollbar-primary::-webkit-scrollbar {
+  width: 8px; /* Largura da barra vertical */
+  height: 8px; /* Largura da barra horizontal */
+}
+
+.custom-scrollbar-primary::-webkit-scrollbar-track {
+  /* Cor de fundo da trilha, usando a cor 'muted' do tema */
+  background: hsl(var(--muted)); 
+  border-radius: 10px;
+}
+
+.custom-scrollbar-primary::-webkit-scrollbar-thumb {
+  /* Cor da barra de rolagem, usando a cor 'primary' do tema */
+  background: hsl(var(--primary)); 
+  border-radius: 10px;
+}
+
+/* Estilo ao passar o mouse: usa a cor primary-foreground */
+.custom-scrollbar-primary::-webkit-scrollbar-thumb:hover {
+  background: hsl(var(--primary-foreground)); 
 }

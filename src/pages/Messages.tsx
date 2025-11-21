@@ -58,7 +58,7 @@ interface TranslationState {
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
-  targetLang: string; // Armazena o idioma para o qual foi traduzido
+  targetLang: string; // Armazena o idioma para o qual foi traduzido ('pt', 'en', 'original', etc)
 }
 
 interface CustomAudioPlayerProps { 
@@ -268,7 +268,8 @@ export default function Messages() {
   const translateText = async (text: string, targetLang: string): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     try {
-      const response = await fetch('/.netlify/functions/translate', {
+      // NOTE: Este é o endpoint Netlify Function que você tem configurado
+      const response = await fetch('/.netlify/functions/translate', { 
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
@@ -291,26 +292,28 @@ export default function Messages() {
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
     
-    // Fecha o modal após a seleção, mesmo que o carregamento continue
-    setModalToTranslate(null); 
-
     const existingTranslation = translations.find(t => t.messageId === messageId);
 
-    // Se o usuário clicou em "Ver Original"
+    // 1. Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
       if (existingTranslation) {
-        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
+        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false, targetLang: 'original', translatedText: '' } : t));
+      } else {
+         // Se não tinha tradução mas o usuário abriu e clicou em "ver original" (caso improvável, mas seguro)
+         setTranslations(prev => prev.filter(t => t.messageId !== messageId));
       }
+      setModalToTranslate(null); // Fecha o modal após ver original (ação instantânea)
       return;
     }
 
-    // Se já estiver traduzido para o mesmo idioma, apenas alterna para mostrar
+    // 2. Se já estiver traduzido para o mesmo idioma e o usuário selecionou de novo, apenas alterna para mostrar
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
-       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
+       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true, isLoading: false } : t));
+       setModalToTranslate(null); // Fecha o modal pois a tradução já está pronta
        return;
     }
-
-    // Inicia Loading
+    
+    // 3. Inicia Loading (MANTÉM O MODAL ABERTO)
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
@@ -337,9 +340,16 @@ export default function Messages() {
           targetLang
         } : t
       ));
+      // FECHA O MODAL APENAS AQUI, APÓS O SUCESSO.
+      setModalToTranslate(null); 
     } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível traduzir no momento.", variant: "destructive" });
+      toast({ title: "Erro de Tradução", description: "Não foi possível traduzir no momento. Tente novamente.", variant: "destructive" });
+      
+      // Remove o estado de tradução e loading
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
+      
+      // FECHA O MODAL TAMBÉM NO ERRO
+      setModalToTranslate(null); 
     }
   };
 
@@ -353,6 +363,7 @@ export default function Messages() {
     const { messageId, originalText } = modalToTranslate;
     const translationState = getTranslationState(messageId);
     const isLoading = translationState?.isLoading;
+    const currentTargetLang = translationState?.targetLang;
 
     const handleSelectLanguage = (code: string) => {
       handleTranslate(messageId, originalText, code);
@@ -360,10 +371,10 @@ export default function Messages() {
 
     const handleViewOriginal = () => {
        handleTranslate(messageId, originalText, 'original');
-       setModalToTranslate(null); // Fecha após a ação
     }
 
     const handleClose = () => {
+      // Impede o fechamento se estiver carregando
       if (!isLoading) setModalToTranslate(null);
     };
 
@@ -389,7 +400,7 @@ export default function Messages() {
              {originalText}
           </div>
 
-          {translationState?.isTranslated && translationState.targetLang !== 'original' ? (
+          {translationState?.isTranslated && currentTargetLang && currentTargetLang !== 'original' ? (
             <Button 
               variant="outline"
               className="w-full mb-3 text-red-600 border-red-600/50 hover:bg-red-500/10"
@@ -402,13 +413,15 @@ export default function Messages() {
                <p className="text-sm text-muted-foreground mb-3 font-medium">Selecione o idioma para traduzir a mensagem:</p>
           )}
           
-          <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+          {/* BARRA DE ROLAGEM CUSTOMIZADA APLICADA AQUI */}
+          {/* A lista de idiomas é a rolagem no dropdown que o usuário mencionou */}
+          <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-primary">
             {AVAILABLE_LANGUAGES.map((lang) => (
               <button
                 key={lang.code}
                 className={cn(
                   "w-full text-left px-4 py-3 text-sm border rounded-lg hover:bg-accent/70 transition-colors flex items-center justify-between",
-                  translationState?.targetLang === lang.code && translationState.isTranslated
+                  currentTargetLang === lang.code && translationState.isTranslated && currentTargetLang !== 'original'
                     ? "bg-primary/10 border-primary text-primary font-semibold"
                     : "bg-background hover:border-primary/50"
                 )}
@@ -418,17 +431,18 @@ export default function Messages() {
                 <span className="flex items-center gap-3">
                   <span className="text-lg">{lang.flag}</span> {lang.name}
                 </span>
-                {translationState?.targetLang === lang.code && translationState.isTranslated && (
+                {currentTargetLang === lang.code && translationState.isTranslated && currentTargetLang !== 'original' && (
                   <Check className="h-4 w-4 text-primary" />
                 )}
               </button>
             ))}
           </div>
 
+          {/* OVERLAY DE CARREGAMENTO - ESSENCIAL PARA EVITAR O "PISCAR" */}
           {isLoading && (
              <div className="absolute inset-0 bg-card/70 flex items-center justify-center rounded-xl backdrop-blur-sm">
                <Loader2 className="h-8 w-8 text-primary animate-spin" />
-               <span className="text-primary ml-3 font-semibold text-center text-sm px-4">Aguarde... Traduzindo para {AVAILABLE_LANGUAGES.find(l => l.code === translationState?.targetLang)?.name || '...'}</span>
+               <span className="text-primary ml-3 font-semibold text-center text-sm px-4">Aguarde... Traduzindo para {AVAILABLE_LANGUAGES.find(l => l.code === currentTargetLang)?.name || '...'}</span>
              </div>
           )}
         </div>
@@ -843,7 +857,8 @@ export default function Messages() {
               </div>
             </div>
 
-            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden">
+            {/* BARRA DE ROLAGEM CUSTOMIZADA APLICADA AQUI (CHAT PRINCIPAL) */}
+            <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar-primary overflow-x-hidden">
               {!isLoadingMessages && messages?.map((msg, idx) => {
                 const isOwn = msg.user_id === user?.id;
                 const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
@@ -916,7 +931,7 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO - Agora abre o Modal */}
+                          {/* BOTÃO DE TRADUÇÃO - Abre o Modal */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
@@ -943,11 +958,11 @@ export default function Messages() {
                                 disabled={translationState?.isLoading}
                               >
                                 {translationState?.isLoading ? (
-                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
+                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Aguarde...</>
                                 ) : (
                                   <>
                                     <Globe className="h-3 w-3 mr-1" /> 
-                                    {translationState?.isTranslated ? "Ver Tradução" : "Traduzir"}
+                                    {translationState?.isTranslated && translationState.targetLang !== 'original' ? "Ver Original" : "Traduzir"}
                                     <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
                                   </>
                                 )}
