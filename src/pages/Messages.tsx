@@ -68,7 +68,7 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// Lista de idiomas disponíveis
+// Lista de idiomas disponíveis (EXPANDIDA)
 const AVAILABLE_LANGUAGES = [
   { code: 'pt', name: 'Português (BR)', flag: '🇧🇷' },
   { code: 'en', name: 'Inglês', flag: '🇺🇸' },
@@ -76,7 +76,28 @@ const AVAILABLE_LANGUAGES = [
   { code: 'fr', name: 'Francês', flag: '🇫🇷' },
   { code: 'de', name: 'Alemão', flag: '🇩🇪' },
   { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+  { code: 'zh', name: 'Chinês (Simplificado)', flag: '🇨🇳' },
+  { code: 'ja', name: 'Japonês', flag: '🇯🇵' },
+  { code: 'ko', name: 'Coreano', flag: '🇰🇷' },
+  { code: 'ru', name: 'Russo', flag: '🇷🇺' },
+  { code: 'ar', name: 'Árabe', flag: '🇸🇦' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳' },
+  { code: 'nl', name: 'Holandês', flag: '🇳🇱' },
+  { code: 'sv', name: 'Sueco', flag: '🇸🇪' },
+  { code: 'tr', name: 'Turco', flag: '🇹🇷' },
+  { code: 'pl', name: 'Polonês', flag: '🇵🇱' },
+  { code: 'el', name: 'Grego', flag: '🇬🇷' },
+  { code: 'id', name: 'Indonésio', flag: '🇮🇩' },
+  { code: 'th', name: 'Tailandês', flag: '🇹🇭' },
+  { code: 'vi', name: 'Vietnamita', flag: '🇻🇳' },
+  { code: 'he', name: 'Hebraico', flag: '🇮🇱' },
+  { code: 'no', name: 'Norueguês', flag: '🇳🇴' },
+  { code: 'da', name: 'Dinamarquês', flag: '🇩🇰' },
+  { code: 'fi', name: 'Finlandês', flag: '🇫🇮' },
+  { code: 'cs', name: 'Tcheco', flag: '🇨🇿' },
+  { code: 'hu', name: 'Húngaro', flag: '🇭🇺' },
 ];
+
 
 // --- CustomAudioPlayer Component ---
 const CustomAudioPlayer = ({ 
@@ -226,7 +247,12 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null); // Controla qual menu de tradução está aberto
+  
+  // NOVO ESTADO: Controla a exibição do modal centralizado
+  const [modalToTranslate, setModalToTranslate] = useState<{ 
+    messageId: string; 
+    originalText: string; 
+  } | null>(null);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -264,12 +290,13 @@ export default function Messages() {
   };
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
-    // Fecha o menu
-    setOpenMenuId(null);
+    
+    // Fecha o modal após a seleção, mesmo que o carregamento continue
+    setModalToTranslate(null); 
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
 
-    // Se o usuário clicou em "Ver Original" (passamos targetLang = 'original')
+    // Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
       if (existingTranslation) {
         setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
@@ -277,7 +304,7 @@ export default function Messages() {
       return;
     }
 
-    // Se já estiver traduzido para o mesmo idioma, apenas mostra
+    // Se já estiver traduzido para o mesmo idioma, apenas alterna para mostrar
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
        return;
@@ -287,7 +314,7 @@ export default function Messages() {
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
-         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang } : t);
+         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang, isTranslated: false } : t);
       }
       return [...prev, { 
         messageId, 
@@ -318,15 +345,100 @@ export default function Messages() {
 
   const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
 
-  // Fecha menus ao clicar fora
-  useEffect(() => {
-    const handleClickOutside = () => setOpenMenuId(null);
-    window.addEventListener('click', handleClickOutside);
-    return () => window.removeEventListener('click', handleClickOutside);
-  }, []);
 
+  // Componente de Modal Seletor de Idiomas (dentro de Messages)
+  const LanguageSelectorModal = () => {
+    if (!modalToTranslate) return null;
+
+    const { messageId, originalText } = modalToTranslate;
+    const translationState = getTranslationState(messageId);
+    const isLoading = translationState?.isLoading;
+
+    const handleSelectLanguage = (code: string) => {
+      handleTranslate(messageId, originalText, code);
+    };
+
+    const handleViewOriginal = () => {
+       handleTranslate(messageId, originalText, 'original');
+       setModalToTranslate(null); // Fecha após a ação
+    }
+
+    const handleClose = () => {
+      if (!isLoading) setModalToTranslate(null);
+    };
+
+    return (
+      <div 
+        className="fixed inset-0 z-[100] flex items-center justify-center bg-black/50 backdrop-blur-sm transition-opacity duration-300 p-4"
+        onClick={handleClose} // Fecha ao clicar no backdrop
+      >
+        <div 
+          className="bg-card rounded-xl shadow-2xl p-6 w-[90%] max-w-md max-h-[90vh] overflow-y-auto animate-in zoom-in-95 fade-in-0 duration-300 relative"
+          onClick={(e) => e.stopPropagation()} // Impede o fechamento ao clicar no conteúdo
+        >
+          <div className="flex justify-between items-start mb-4 border-b pb-3">
+            <h3 className="text-xl font-bold flex items-center gap-2 text-primary">
+              <Globe className="h-5 w-5" /> 
+              Escolher Idioma de Tradução
+            </h3>
+            <Button variant="ghost" size="icon" onClick={handleClose} disabled={isLoading} className="-mr-2"><X className="h-5 w-5 text-muted-foreground hover:text-foreground" /></Button>
+          </div>
+          
+          <div className="text-sm mb-4 p-3 bg-muted/50 rounded-lg max-h-32 overflow-y-auto border text-muted-foreground">
+             <span className="font-semibold text-xs text-primary/80 block mb-1">Texto Original:</span>
+             {originalText}
+          </div>
+
+          {translationState?.isTranslated && translationState.targetLang !== 'original' ? (
+            <Button 
+              variant="outline"
+              className="w-full mb-3 text-red-600 border-red-600/50 hover:bg-red-500/10"
+              onClick={handleViewOriginal}
+              disabled={isLoading}
+            >
+              Ver Texto Original
+            </Button>
+          ) : (
+               <p className="text-sm text-muted-foreground mb-3 font-medium">Selecione o idioma para traduzir a mensagem:</p>
+          )}
+          
+          <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar">
+            {AVAILABLE_LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                className={cn(
+                  "w-full text-left px-4 py-3 text-sm border rounded-lg hover:bg-accent/70 transition-colors flex items-center justify-between",
+                  translationState?.targetLang === lang.code && translationState.isTranslated
+                    ? "bg-primary/10 border-primary text-primary font-semibold"
+                    : "bg-background hover:border-primary/50"
+                )}
+                onClick={() => handleSelectLanguage(lang.code)}
+                disabled={isLoading}
+              >
+                <span className="flex items-center gap-3">
+                  <span className="text-lg">{lang.flag}</span> {lang.name}
+                </span>
+                {translationState?.targetLang === lang.code && translationState.isTranslated && (
+                  <Check className="h-4 w-4 text-primary" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          {isLoading && (
+             <div className="absolute inset-0 bg-card/70 flex items-center justify-center rounded-xl backdrop-blur-sm">
+               <Loader2 className="h-8 w-8 text-primary animate-spin" />
+               <span className="text-primary ml-3 font-semibold text-center text-sm px-4">Aguarde... Traduzindo para {AVAILABLE_LANGUAGES.find(l => l.code === translationState?.targetLang)?.name || '...'}</span>
+             </div>
+          )}
+        </div>
+      </div>
+    );
+  };
   // ====================================================================
-
+  
+  // ... (funções de utilidade e hooks)
+  
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
@@ -605,6 +717,10 @@ export default function Messages() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
+      
+      {/* MODAL SELETOR DE IDIOMAS */}
+      <LanguageSelectorModal />
+
       {/* SIDEBAR */}
       <div className={cn("flex flex-col bg-card border-r transition-all duration-300", showSidebar ? "w-full lg:w-[380px]" : "hidden lg:flex lg:w-[380px]")}>
         <div className="p-4 border-b space-y-4 bg-gradient-to-r from-background to-muted/20">
@@ -740,7 +856,7 @@ export default function Messages() {
                 let displayText = msg.content;
                 if (timerState?.status === 'deleting' && timerState.currentText) {
                   displayText = timerState.currentText;
-                } else if (translationState?.isTranslated) {
+                } else if (translationState?.isTranslated && translationState.targetLang !== 'original') {
                   displayText = translationState.translatedText;
                 }
 
@@ -800,14 +916,14 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO E MENU DE IDIOMAS */}
+                          {/* BOTÃO DE TRADUÇÃO - Agora abre o Modal */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
                               {/* Informação de hora e idioma traduzido */}
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                {translationState?.isTranslated && (
+                                {translationState?.isTranslated && translationState.targetLang !== 'original' && (
                                    <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground font-medium">
                                      <Globe className="h-2 w-2"/> 
                                      {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'} 
@@ -816,14 +932,13 @@ export default function Messages() {
                                 )}
                               </div>
                               
-                              {/* Botão que abre o menu */}
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
                                 className={cn("h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", translationState?.isLoading && "opacity-100")}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setOpenMenuId(openMenuId === msg.id ? null : msg.id);
+                                  setModalToTranslate({ messageId: msg.id, originalText: msg.content });
                                 }}
                                 disabled={translationState?.isLoading}
                               >
@@ -832,50 +947,11 @@ export default function Messages() {
                                 ) : (
                                   <>
                                     <Globe className="h-3 w-3 mr-1" /> 
-                                    {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
+                                    {translationState?.isTranslated ? "Ver Tradução" : "Traduzir"}
                                     <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
                                   </>
                                 )}
                               </Button>
-
-                              {/* MENU SUSPENSO DE IDIOMAS */}
-                              {openMenuId === msg.id && (
-                                <div 
-                                  className="absolute bottom-8 right-0 bg-popover border shadow-xl rounded-md z-50 min-w-[160px] animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div className="p-1">
-                                    {translationState?.isTranslated && (
-                                      <button
-                                        className="w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center gap-2 font-semibold text-primary"
-                                        onClick={() => handleTranslate(msg.id, msg.content, 'original')}
-                                      >
-                                        <X className="h-3 w-3" /> Ver Original
-                                      </button>
-                                    )}
-                                    
-                                    <div className="h-[1px] bg-border my-1" />
-
-                                    {AVAILABLE_LANGUAGES.map((lang) => (
-                                      <button
-                                        key={lang.code}
-                                        className={cn(
-                                          "w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center justify-between",
-                                          translationState?.targetLang === lang.code && translationState.isTranslated && "bg-accent/50"
-                                        )}
-                                        onClick={() => handleTranslate(msg.id, msg.content, lang.code)}
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <span>{lang.flag}</span> {lang.name}
-                                        </span>
-                                        {translationState?.targetLang === lang.code && translationState.isTranslated && (
-                                          <Check className="h-3 w-3 text-primary" />
-                                        )}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
-                              )}
 
                             </div>
                           )}
