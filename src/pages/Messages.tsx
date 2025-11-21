@@ -20,6 +20,7 @@ import {
   Clock,
   Play,
   Pause,
+  // REMOVIDO: Globe (Ícone de tradução)
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,7 +40,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// Interface para controle de temporizadores das mensagens (MANTIDA)
+// Interface para controle de temporizadores das mensagens
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
@@ -48,20 +49,20 @@ interface MessageTimer {
   messageType: 'text' | 'audio' | 'media';
 }
 
-// Interface aprimorada para o player
+// Interface aprimorada para o player (MANTIDA)
 interface CustomAudioPlayerProps { 
   audioUrl: string; 
   className?: string;
   onPlay: () => void;
-  isOwn: boolean; // NOVO: Determina o esquema de cores
+  isOwn: boolean; 
 }
 
-// Componente AudioPlayer customizado, aprimorado e com nova cor
+// Componente AudioPlayer customizado, aprimorado e com nova cor (MANTIDO)
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
   onPlay,
-  isOwn // Usando a nova propriedade
+  isOwn 
 }: CustomAudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -137,7 +138,7 @@ const CustomAudioPlayer = ({
     setProgress(percent * 100);
   };
 
-  // --- Classes Aprimoradas para Cores ---
+  // --- Classes Aprimoradas para Cores (RESTAURADO DE ACORDO COM A VERSÃO ANTERIOR MAIS ESTILIZADA) ---
   const playerClasses = cn(
     "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200",
     isOwn
@@ -146,7 +147,7 @@ const CustomAudioPlayer = ({
     className
   );
 
-  const buttonVariant = isOwn ? "secondary" : "primary"; // Botão com contraste
+  const buttonVariant = isOwn ? "secondary" : "primary"; 
   const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
 
   // Waveform e Progresso
@@ -207,7 +208,7 @@ const CustomAudioPlayer = ({
              <div className={cn(
                "absolute inset-0",
                waveformGradient,
-               isPlaying ? "animate-waveform" : "" // Animação simples para simular som
+               isPlaying ? "animate-waveform" : "" 
              )} style={{ backgroundSize: '40px 100%' }}/>
           </div>
           
@@ -247,6 +248,8 @@ export default function Messages() {
   // Estados simplificados
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
+
+  // REMOVIDO: Lógica de tradução (TranslationState, translationMap, handleTranslate)
 
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
@@ -368,19 +371,21 @@ export default function Messages() {
     return 'media';
   }, []);
 
-  // Função para iniciar timer de áudio (MANTIDA)
+  // Função para iniciar timer de áudio - CORRIGIDA para não reiniciar
   const startAudioTimer = useCallback((messageId: string) => {
     console.log('🎵 VERIFICANDO TIMER PARA ÁUDIO:', messageId);
     
     setMessageTimers(prev => {
+      // Verifica se já existe um timer para esta mensagem
       const existingTimer = prev.find(timer => timer.messageId === messageId);
       
       if (existingTimer) {
         console.log('⏰ Timer já existe, mantendo:', messageId);
-        return prev; 
+        return prev; // Não faz nada se o timer já existe
       }
       
       console.log('✅ CRIANDO NOVO TIMER PARA ÁUDIO:', messageId);
+      // Adiciona novo timer apenas se não existir
       return [...prev, {
         messageId,
         timeLeft: 120, // 2 minutos
@@ -390,17 +395,20 @@ export default function Messages() {
     });
   }, []);
 
-  // Efeito para inicializar timers para mensagens não do usuário (MANTIDO)
+  // Efeito para inicializar timers para mensagens não do usuário
   useEffect(() => {
     if (!messages || !user) return;
 
     messages.forEach(message => {
+      // Se a mensagem não é do usuário atual e não foi deletada
       if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
         const messageType = getMessageType(message);
         const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
         
+        // Se já existe timer, não faz nada
         if (existingTimer) return;
 
+        // Para texto e mídia, inicia timer imediatamente
         if (messageType === 'text' || messageType === 'media') {
           setMessageTimers(prev => [...prev, {
             messageId: message.id,
@@ -409,11 +417,12 @@ export default function Messages() {
             messageType
           }]);
         }
+        // Para áudio, o timer será iniciado quando o áudio for reproduzido
       }
     });
   }, [messages, user, deletedMessages, messageTimers, getMessageType]);
 
-  // Função para arquivar mensagem (MANTIDA)
+  // Função para arquivar mensagem
   const archiveMessage = async (messageId: string) => {
     try {
       const { data: originalMessage, error: fetchError } = await supabase
@@ -445,7 +454,7 @@ export default function Messages() {
     }
   };
 
-  // Função para excluir mensagens (MANTIDA)
+  // Função para excluir mensagens
   const deleteMessages = async (messageIds: string[]) => {
     try {
       const archivePromises = messageIds.map(messageId => archiveMessage(messageId));
@@ -475,7 +484,7 @@ export default function Messages() {
     }
   };
 
-  // Efeito principal do timer (MANTIDO)
+  // Efeito principal do timer
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageTimers(prev => {
@@ -562,7 +571,7 @@ export default function Messages() {
     return () => clearInterval(interval);
   }, [messages]);
 
-  // Função auxiliar (MANTIDA)
+  // Função auxiliar
   const getMessageState = (messageId: string) => {
     return messageTimers.find(timer => timer.messageId === messageId);
   };
@@ -573,7 +582,7 @@ export default function Messages() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Realtime (MANTIDO)
+  // Realtime
   useEffect(() => {
     if (!user) return;
     
@@ -591,7 +600,7 @@ export default function Messages() {
     return () => { supabase.removeChannel(channel); };
   }, [refetchMessages, refetchConversations, user]);
 
-  // Marcar como visto (MANTIDO)
+  // Marcar como visto
   useEffect(() => {
     if (user && selectedConversation) {
       supabase.from("last_viewed").upsert(
@@ -603,7 +612,7 @@ export default function Messages() {
     }
   }, [user, selectedConversation, queryClient]);
 
-  // Auto-scroll (MANTIDO)
+  // Auto-scroll
   useEffect(() => {
     if (messages && isAtBottom) {
       setTimeout(() => scrollToBottom(false), 100);
@@ -616,7 +625,7 @@ export default function Messages() {
     }
   }, [selectedConversation, scrollToBottom]);
 
-  // Handlers (MANTIDOS)
+  // Handlers
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversation || !user) return;
     
@@ -718,13 +727,13 @@ export default function Messages() {
     }
   };
 
-  // Filtro de busca (MANTIDO)
+  // Filtro de busca
   const filteredConversations = processedConversations.filter(c => 
     c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.conversation_participants.some((p: any) => p.profiles?.username?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Lógica de visualização (MANTIDA)
+  // Lógica de visualização
   const showSidebar = !isMobile || (isMobile && !selectedConversation);
   const showChat = !isMobile || (isMobile && selectedConversation);
 
@@ -978,7 +987,8 @@ export default function Messages() {
                                 <div key={i} className="max-w-full">
                                   <CustomAudioPlayer 
                                     audioUrl={url} 
-                                    isOwn={isOwn} // PROPRIEDADE isOwn PASSADA
+                                    // RESTAURADO o estilo do componente CustomAudioPlayer mais elegante
+                                    isOwn={isOwn} 
                                     className={cn(isOwn ? "max-w-[250px] w-full" : "max-w-[300px] w-full")} 
                                     onPlay={() => {
                                       if (!isOwn) {
@@ -1007,6 +1017,7 @@ export default function Messages() {
                           <div className="break-words overflow-hidden">
                             <MentionText text={timerState?.status === 'deleting' ? (timerState.currentText || '') : msg.content} />
                           </div>
+                          {/* REMOVIDO: Botão de tradução (evita ReferenceError: google is not defined) */}
                           <span className={cn("text-[10px] absolute bottom-1 right-3 opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
                             {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                           </span>
