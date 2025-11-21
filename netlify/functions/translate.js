@@ -1,5 +1,5 @@
 // netlify/functions/translate.js
-const fetch = require('node-fetch');
+// O `require('node-fetch')` foi REMOVIDO para usar o `fetch` nativo do Node.js, resolvendo o erro 502 (Bad Gateway).
 
 exports.handler = async (event) => {
   // Configuração CORS
@@ -44,7 +44,7 @@ exports.handler = async (event) => {
       };
     }
 
-    // Servidores LibreTranslate prioritários (Lista aumentada para maior confiabilidade)
+    // Servidores LibreTranslate prioritários (Lista mantida com 5 opções resilientes)
     const servers = [
       {
         url: 'https://libretranslate.com',
@@ -58,7 +58,7 @@ exports.handler = async (event) => {
         url: 'https://libretranslate.de',
         priority: 3
       },
-      { // Novo servidor adicionado
+      { 
         url: 'https://t.public.vern.cc', 
         priority: 4
       },
@@ -119,10 +119,19 @@ exports.handler = async (event) => {
             })
           };
         } else {
-          console.warn(`Server ${server.url} returned ${response.status}`);
+          // Tentar ler a resposta de erro do servidor de tradução
+          let errorDetails = `Server returned ${response.status}`;
+          try {
+            const errorJson = await response.json();
+            errorDetails += `: ${JSON.stringify(errorJson)}`;
+          } catch {
+            // Ignorar se a resposta não for JSON
+          }
+          console.warn(`Server ${server.url} returned ${response.status} - ${errorDetails}`);
           lastError = new Error(`Server returned ${response.status} at ${server.url}`);
         }
       } catch (error) {
+        // Capturar erro de conexão ou timeout
         console.warn(`Server ${server.url} failed:`, error.message);
         lastError = error;
         continue;

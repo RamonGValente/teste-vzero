@@ -19,7 +19,7 @@ import {
   Clock,
   Play,
   Pause,
-  Languages,
+  Languages, // Ícone de Idiomas para o botão de tradução
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -63,10 +63,10 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// NOVO: Tipo de Linguagem Suportada (Adicionado mais opções)
-type SupportedLang = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it';
+// Tipo de Linguagem Suportada (Adicionado mais opções)
+type SupportedLang = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ru' | 'zh';
 
-// NOVO: Lista de Linguagens para o Seletor
+// Lista de Linguagens para o Seletor
 const supportedLanguages: { code: SupportedLang, name: string }[] = [
     { code: 'pt', name: 'Português' },
     { code: 'en', name: 'Inglês' },
@@ -74,6 +74,8 @@ const supportedLanguages: { code: SupportedLang, name: string }[] = [
     { code: 'fr', name: 'Francês' },
     { code: 'de', name: 'Alemão' },
     { code: 'it', name: 'Italiano' },
+    { code: 'ru', name: 'Russo' },
+    { code: 'zh', name: 'Chinês' },
 ];
 
 // CustomAudioPlayer Component
@@ -232,7 +234,7 @@ export default function Messages() {
   const [sidebarTab, setSidebarTab] = useState<"chats" | "contacts">("chats");
   const [searchQuery, setSearchQuery] = useState("");
 
-  // NOVO: Estado para a linguagem de tradução alvo
+  // Estado para a linguagem de tradução alvo
   const [translationTargetLang, setTranslationTargetLang] = useState<SupportedLang>('pt');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -244,7 +246,7 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   const [translations, setTranslations] = useState<TranslationState[]>([]);
 
-  // Função melhorada para detectar idioma (Fallback local removido)
+  // Função para detectar idioma
   const detectLanguage = async (text: string): Promise<string> => {
     if (!text || text.trim().length === 0) return 'en';
     
@@ -268,22 +270,18 @@ export default function Messages() {
       const result = await response.json();
       
       if (result.success && result.data && result.data.length > 0) {
-        // LibreTranslate retorna um array de objetos, onde o primeiro tem a maior confiança.
-        // O código de idioma do LibreTranslate é uma string como 'pt', 'en', etc.
         return result.data[0].language;
       }
       
       throw new Error('No language detected in response');
     } catch (error) {
       console.error('Erro completo na detecção de idioma (API):', error);
-      // Em caso de falha da API, assume-se Inglês ou Português (um dos mais comuns).
-      // 'pt' é o padrão da UI, então 'en' é um bom fallback para tentar traduzir.
-      return 'en';
+      return 'en'; // Fallback em caso de falha da API
     }
   };
 
-  // Função principal de tradução usando apenas a API
-  const translateText = async (text: string, targetLang: string): Promise<string> => {
+  // Função principal de tradução usando a API
+  const translateText = async (text: string, targetLang: SupportedLang): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     
     try {
@@ -295,7 +293,7 @@ export default function Messages() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text.substring(0, 2000), // Aumentar limite para textos maiores
+          text: text.substring(0, 2000), 
           targetLang,
           type: 'translate'
         })
@@ -316,7 +314,7 @@ export default function Messages() {
       throw new Error(result.error || 'No translation in response');
     } catch (error) {
       console.error('Erro completo na tradução via API:', error);
-      throw error; // Propagar o erro para ser tratado no handleTranslate
+      throw error; 
     }
   };
 
@@ -369,17 +367,19 @@ export default function Messages() {
     });
 
     try {
-      // Primeiro detectar o idioma
       const detectedLang = await detectLanguage(text);
       console.log('Idioma detectado:', detectedLang);
       
       let finalTargetLang = translationTargetLang;
       let targetLangName = supportedLanguages.find(l => l.code === translationTargetLang)?.name || 'o alvo selecionado';
+      
+      // Lista de fallbacks: se o texto já estiver no idioma alvo, tentar traduzir para um alternativo.
+      const fallbackLangs = supportedLanguages.map(l => l.code).filter(c => c !== detectedLang);
+      let alternativeLang = fallbackLangs.find(c => c !== finalTargetLang) || (finalTargetLang === 'en' ? 'pt' : 'en'); // Último recurso
 
-      // Se o idioma detectado for o idioma alvo, traduzir para o inglês como alternativa,
-      // a menos que o alvo já seja inglês, caso em que traduz para português.
+      // Se o idioma detectado for o idioma alvo, usar o alternativo.
       if (detectedLang === translationTargetLang) {
-        finalTargetLang = translationTargetLang === 'en' ? 'pt' : 'en';
+        finalTargetLang = alternativeLang as SupportedLang;
         const fallbackName = supportedLanguages.find(l => l.code === finalTargetLang)?.name || 'um alternativo';
 
         toast({
@@ -394,14 +394,6 @@ export default function Messages() {
         });
       }
 
-      // Se por algum motivo o idioma detectado for o mesmo do alvo final (o que é improvável com a lógica acima), cancela.
-      if (detectedLang === finalTargetLang) {
-         setTranslations(prev => 
-           prev.filter(t => t.messageId !== messageId)
-         );
-         return;
-      }
-      
       // Traduzir usando a API
       console.log(`Solicitando tradução para ${finalTargetLang}...`);
       const translatedText = await translateText(text, finalTargetLang);
@@ -431,10 +423,8 @@ export default function Messages() {
       
       let errorMessage = "Não foi possível traduzir o texto. Tente novamente ou verifique a API.";
       
-      if (error instanceof Error && (error.message.includes('502') || error.message.includes('503'))) {
-        errorMessage = "Serviço de tradução temporariamente indisponível. Tente novamente em alguns instantes.";
-      } else if (error instanceof Error && error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
-        errorMessage = "A tradução demorou muito. Tente novamente.";
+      if (error instanceof Error && (error.message.includes('502') || error.message.includes('503') || error.message.includes('TIMEOUT'))) {
+        errorMessage = "Serviço de tradução temporariamente indisponível ou demorou muito. Tente novamente em alguns instantes.";
       }
       
       toast({
@@ -750,7 +740,7 @@ export default function Messages() {
           deleteMessages(messagesToDelete);
         }
 
-        return updatedTimers;
+        return updatedTimers.filter(t => t.status !== 'deleted'); // Não manter timers 'deleted'
       });
     }, 1000);
 
@@ -1100,7 +1090,7 @@ export default function Messages() {
                     return peerId ? <AttentionButton contactId={peerId} /> : null;
                  })()}
                  
-                 {/* NOVO: Seletor de Idioma Alvo */}
+                 {/* SELETOR DE IDIOMA ALVO CORRIGIDO */}
                  <select
                    value={translationTargetLang}
                    onChange={(e) => setTranslationTargetLang(e.target.value as SupportedLang)}
@@ -1246,7 +1236,8 @@ export default function Messages() {
                                 size="sm"
                                 className={cn(
                                   "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
-                                  translationState?.isLoading && "opacity-100"
+                                  translationState?.isLoading && "opacity-100",
+                                  !isOwn && "text-muted-foreground hover:bg-muted" 
                                 )}
                                 onClick={() => handleTranslate(msg.id, msg.content)}
                                 disabled={translationState?.isLoading}
