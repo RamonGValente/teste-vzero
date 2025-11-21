@@ -20,6 +20,7 @@ import {
   Play,
   Pause,
   Languages,
+  Globe, // Adicionado
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,7 +40,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// Interfaces
+// --- Interfaces ---
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
@@ -54,6 +55,7 @@ interface TranslationState {
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
+  detectedLang?: string; // Novo campo para mostrar o idioma detectado
 }
 
 interface CustomAudioPlayerProps { 
@@ -63,7 +65,7 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// CustomAudioPlayer Component
+// --- CustomAudioPlayer Component (MANTIDO ORIGINAL) ---
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
@@ -152,7 +154,6 @@ const CustomAudioPlayer = ({
 
   const buttonVariant = isOwn ? "secondary" : "primary"; 
   const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
-  const waveformBg = isOwn ? "bg-white/30" : "bg-muted/60";
   const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
   const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
   const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
@@ -209,6 +210,7 @@ const CustomAudioPlayer = ({
   );
 };
 
+// --- Componente Principal ---
 export default function Messages() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -228,9 +230,13 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   const [translations, setTranslations] = useState<TranslationState[]>([]);
 
-  // Função melhorada para detectar idioma
+  // ====================================================================
+  // FUNÇÕES DE TRADUÇÃO (USANDO 100% A API NO BACKEND)
+  // ====================================================================
+
+  // Função para detectar idioma
   const detectLanguage = async (text: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return 'en';
+    if (!text || text.trim().length === 0) return 'unknown';
     
     try {
       const response = await fetch('/.netlify/functions/translate', {
@@ -239,138 +245,70 @@ export default function Messages() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text.substring(0, 1000),
+          text: text.substring(0, 500), // Envia apenas o início para detecção rápida
           type: 'detect'
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
+        throw new Error(`Erro HTTP: ${response.status}`);
       }
 
       const result = await response.json();
       
-      if (result.success && result.data && result.data.length > 0) {
+      // A API LibreTranslate retorna array: [{ language: "en", confidence: 98 }, ...]
+      if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
         return result.data[0].language;
       }
       
-      throw new Error('No language detected in response');
+      return 'unknown';
     } catch (error) {
-      console.error('Erro completo na detecção de idioma:', error);
-      
-      // Fallback local aprimorado
-      return detectLanguageLocal(text);
+      console.warn('Erro na detecção de idioma (API), prosseguindo para tradução direta:', error);
+      return 'unknown';
     }
   };
 
-  // Detecção local aprimorada
-  const detectLanguageLocal = (text: string): string => {
-    const portugueseWords = [
-      'o', 'a', 'os', 'as', 'um', 'uma', 'de', 'do', 'da', 'em', 'no', 'na', 
-      'é', 'são', 'com', 'que', 'para', 'por', 'não', 'sim', 'olá', 'obrigado',
-      'então', 'como', 'está', 'estou', 'você', 'meu', 'minha', 'bem', 'mal',
-      'hoje', 'ontem', 'amanhã', 'agora', 'sempre', 'nunca', 'muito', 'pouco',
-      'grande', 'pequeno', 'bom', 'mau', 'feliz', 'triste', 'simples', 'complexo'
-    ];
-    
-    const englishWords = [
-      'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'with',
-      'and', 'but', 'or', 'hello', 'thank', 'you', 'yes', 'no', 'how', 'what',
-      'when', 'where', 'why', 'who', 'which', 'this', 'that', 'these', 'those',
-      'my', 'your', 'his', 'her', 'our', 'their', 'very', 'too', 'so', 'well',
-      'good', 'bad', 'happy', 'sad', 'simple', 'complex', 'big', 'small'
-    ];
-
-    const textLower = text.toLowerCase();
-    let ptCount = 0;
-    let enCount = 0;
-
-    // Contar palavras portuguesas
-    portugueseWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'gi');
-      const matches = textLower.match(regex);
-      if (matches) ptCount += matches.length;
-    });
-
-    // Contar palavras inglesas
-    englishWords.forEach(word => {
-      const regex = new RegExp(`\\b${word}\\b`, 'gi');
-      const matches = textLower.match(regex);
-      if (matches) enCount += matches.length;
-    });
-
-    // Verificar caracteres especiais do português
-    const ptChars = /[àáâãèéêìíîòóôõùúûçñ]/gi;
-    const ptCharMatches = textLower.match(ptChars);
-    
-    if (ptCharMatches && ptCharMatches.length > 0) {
-      ptCount += ptCharMatches.length * 2; // Dar peso extra para caracteres especiais
-    }
-
-    // Verificar padrões típicos do inglês
-    const englishPatterns = /\b(ing|ed|tion|ment|ness|able|ible)\b/gi;
-    const enPatternMatches = textLower.match(englishPatterns);
-    if (enPatternMatches) {
-      enCount += enPatternMatches.length;
-    }
-
-    console.log(`Detecção local: PT=${ptCount}, EN=${enCount}`);
-    
-    return ptCount >= enCount ? 'pt' : 'en';
-  };
-
-  // Função principal de tradução usando apenas a API
+  // Função para traduzir o texto
   const translateText = async (text: string, targetLang: string = 'pt'): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     
     try {
-      console.log('Iniciando tradução via API para texto:', text.substring(0, 50));
-      
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text.substring(0, 2000), // Aumentar limite para textos maiores
+          text: text.substring(0, 2000),
           targetLang,
           type: 'translate'
         })
       });
 
       if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
+        throw new Error(`Erro HTTP: ${response.status}`);
       }
 
       const result = await response.json();
       
       if (result.success && result.data && result.data.translatedText) {
-        console.log('Tradução bem-sucedida via API');
         return result.data.translatedText;
       }
       
-      throw new Error(result.error || 'No translation in response');
+      throw new Error(result.error || 'Resposta inválida da API');
     } catch (error) {
-      console.error('Erro completo na tradução via API:', error);
-      throw error; // Propagar o erro para ser tratado no handleTranslate
+      console.error('Erro na tradução:', error);
+      throw error;
     }
   };
 
-  // Função principal de tradução
+  // Handler principal do botão de tradução
   const handleTranslate = async (messageId: string, text: string) => {
-    if (!text || text.trim().length === 0) {
-      toast({
-        title: "Texto vazio",
-        description: "Não há texto para traduzir.",
-        variant: "destructive",
-      });
-      return;
-    }
+    if (!text || text.trim().length === 0) return;
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
     
+    // Se já está traduzido (e visível), esconde (volta para original)
     if (existingTranslation?.isTranslated) {
       setTranslations(prev => 
         prev.map(t => 
@@ -379,22 +317,26 @@ export default function Messages() {
             : t
         )
       );
-      toast({
-        title: "Mostrando original",
-        description: "Texto original restaurado.",
-      });
       return;
     }
 
-    // Marcar como carregando
+    // Se já temos a tradução em cache mas estava escondida, mostramos novamente sem chamar a API
+    if (existingTranslation?.translatedText && !existingTranslation.isTranslated) {
+        setTranslations(prev => 
+            prev.map(t => 
+              t.messageId === messageId 
+                ? { ...t, isTranslated: true }
+                : t
+            )
+        );
+        return;
+    }
+
+    // Adiciona estado de Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
-        return prev.map(t => 
-          t.messageId === messageId 
-            ? { ...t, isLoading: true }
-            : t
-        );
+        return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true } : t);
       }
       return [...prev, {
         messageId,
@@ -406,24 +348,20 @@ export default function Messages() {
     });
 
     try {
-      // Primeiro detectar o idioma
+      // 1. Detectar idioma
       const detectedLang = await detectLanguage(text);
-      console.log('Idioma detectado:', detectedLang);
       
       if (detectedLang === 'pt') {
         toast({
-          title: "Texto já está em português",
-          description: "O texto detectado já está no idioma português.",
+          title: "Idioma Original",
+          description: "O texto já parece estar em português.",
         });
         
-        setTranslations(prev => 
-          prev.filter(t => t.messageId !== messageId)
-        );
+        setTranslations(prev => prev.filter(t => t.messageId !== messageId));
         return;
       }
 
-      // Traduzir usando a API
-      console.log('Solicitando tradução para português...');
+      // 2. Traduzir
       const translatedText = await translateText(text, 'pt');
       
       setTranslations(prev => 
@@ -433,45 +371,31 @@ export default function Messages() {
                 ...t, 
                 translatedText, 
                 isTranslated: true, 
-                isLoading: false 
+                isLoading: false,
+                detectedLang: detectedLang !== 'unknown' ? detectedLang : undefined
               }
             : t
         )
       );
 
-      toast({
-        title: "Texto traduzido com sucesso!",
-        description: "Tradução realizada pela API.",
-      });
-
     } catch (error) {
-      console.error('Erro completo no processo de tradução:', error);
-      
-      let errorMessage = "Não foi possível traduzir o texto.";
-      
-      if (error.message.includes('502') || error.message.includes('503')) {
-        errorMessage = "Serviço de tradução temporariamente indisponível. Tente novamente em alguns instantes.";
-      } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
-        errorMessage = "A tradução demorou muito. Tente novamente.";
-      }
-      
       toast({
-        title: "Erro na tradução",
-        description: errorMessage,
+        title: "Serviço Indisponível",
+        description: "Não foi possível traduzir agora. Tente novamente mais tarde.",
         variant: "destructive",
       });
       
-      // Remover o estado de loading
-      setTranslations(prev => 
-        prev.filter(t => t.messageId !== messageId)
-      );
+      setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
 
-  // Obter estado da tradução para uma mensagem
   const getTranslationState = (messageId: string) => {
     return translations.find(t => t.messageId === messageId);
   };
+
+  // ====================================================================
+  // FIM DA LÓGICA DE TRADUÇÃO
+  // ====================================================================
 
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
@@ -778,12 +702,6 @@ export default function Messages() {
   // Função auxiliar
   const getMessageState = (messageId: string) => {
     return messageTimers.find(timer => timer.messageId === messageId);
-  };
-
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Realtime
@@ -1235,21 +1153,30 @@ export default function Messages() {
                             <MentionText text={displayText} />
                           </div>
                           
-                          {/* BOTÃO DE TRADUÇÃO */}
+                          {/* BOTÃO DE TRADUÇÃO (Apenas para mensagens recebidas) */}
                           {!isOwn && msg.content && (
-                            <div className="flex justify-between items-center mt-2">
-                              <span className={cn(
-                                "text-[10px] opacity-60", 
-                                isOwn ? "text-primary-foreground" : "text-muted-foreground"
-                              )}>
-                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                              </span>
+                            <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1">
+                              <div className="flex items-center gap-2">
+                                <span className={cn(
+                                  "text-[10px] opacity-60", 
+                                  isOwn ? "text-primary-foreground" : "text-muted-foreground"
+                                )}>
+                                  {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+
+                                {/* Indicador de qual idioma foi traduzido */}
+                                {translationState?.isTranslated && translationState.detectedLang && (
+                                   <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground">
+                                     <Globe className="h-2 w-2"/> {translationState.detectedLang.toUpperCase()}
+                                   </span>
+                                )}
+                              </div>
                               
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className={cn(
-                                  "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
+                                  "h-6 px-2 text-[10px] opacity-50 hover:opacity-100 transition-all",
                                   translationState?.isLoading && "opacity-100"
                                 )}
                                 onClick={() => handleTranslate(msg.id, msg.content)}
@@ -1274,6 +1201,14 @@ export default function Messages() {
                               </Button>
                             </div>
                           )}
+
+                          {/* Hora para mensagens próprias (sem botão traduzir) */}
+                          {isOwn && (
+                             <span className="text-[10px] opacity-60 block text-right mt-1">
+                               {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                             </span>
+                          )}
+
                         </div>
                       )}
                     </div>

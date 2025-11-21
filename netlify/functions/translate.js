@@ -2,14 +2,14 @@
 const fetch = require('node-fetch');
 
 exports.handler = async (event) => {
-  // Configuração CORS
+  // Configuração CORS para permitir chamadas do seu frontend
   const headers = {
-    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Origin': '*', // Em produção, substitua '*' pelo seu domínio
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // Handle preflight
+  // Responder imediatamente a solicitações OPTIONS (Preflight do navegador)
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -18,7 +18,6 @@ exports.handler = async (event) => {
     };
   }
 
-  // Only allow POST
   if (event.httpMethod !== 'POST') {
     return {
       statusCode: 405,
@@ -30,12 +29,6 @@ exports.handler = async (event) => {
   try {
     const { text, targetLang = 'pt', type = 'translate' } = JSON.parse(event.body);
     
-    console.log('Processing translation request:', { 
-      type, 
-      textLength: text?.length,
-      targetLang 
-    });
-
     if (!text || text.trim().length === 0) {
       return {
         statusCode: 400,
@@ -44,49 +37,40 @@ exports.handler = async (event) => {
       };
     }
 
-    // Servidores LibreTranslate prioritários
+    // Lista de instâncias públicas do LibreTranslate.
+    // Nota: Instâncias públicas podem sair do ar ou limitar requisições.
+    // A ordem define a prioridade de tentativa.
     const servers = [
-      {
-        url: 'https://libretranslate.com',
-        priority: 1
-      },
-      {
-        url: 'https://translate.argosopentech.com', 
-        priority: 2
-      },
-      {
-        url: 'https://libretranslate.de',
-        priority: 3
-      },
-      {
-        url: 'https://lt.vern.cc',
-        priority: 4
-      }
+      { url: 'https://translate.argosopentech.com', priority: 1 }, // Geralmente estável
+      { url: 'https://libretranslate.de', priority: 2 },           // Popular, às vezes lento
+      { url: 'https://lt.vern.cc', priority: 3 },                  // Alternativa comum
+      { url: 'https://translate.terraprint.co', priority: 4 }      // Alternativa
     ];
-
-    // Ordenar por prioridade
-    servers.sort((a, b) => a.priority - b.priority);
 
     let lastError = null;
 
+    // Loop para tentar cada servidor se o anterior falhar
     for (const server of servers) {
       try {
-        console.log(`Trying server: ${server.url}`);
-        
         const endpoint = type === 'detect' ? '/detect' : '/translate';
         const url = `${server.url}${endpoint}`;
 
+        console.log(`Attempting request to: ${url} [Type: ${type}]`);
+
+        // Configuração do corpo da requisição conforme doc do LibreTranslate
         const requestBody = type === 'detect' 
           ? { q: text }
           : {
               q: text,
-              source: 'auto',
+              source: 'auto', // Deixa a API descobrir o idioma de origem
               target: targetLang,
-              format: 'text'
+              format: 'text',
+              alternatives: 0
             };
 
+        // Timeout de 6 segundos para não travar se um servidor estiver "pendurado"
         const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 8000);
+        const timeout = setTimeout(() => controller.abort(), 6000);
 
         const response = await fetch(url, {
           method: 'POST',
@@ -102,7 +86,10 @@ exports.handler = async (event) => {
 
         if (response.ok) {
           const data = await response.json();
-          console.log(`Success from ${server.url}`);
+          
+          // Padronização da resposta para o frontend
+          // Se for detect: a API retorna array [{language: "en", confidence: ...}]
+          // Se for translate: a API retorna { translatedText: "..." }
           
           return {
             statusCode: 200,
@@ -110,34 +97,35 @@ exports.handler = async (event) => {
             body: JSON.stringify({
               success: true,
               data: data,
-              server: server.url
+              serverUsed: server.url
             })
           };
         } else {
-          console.warn(`Server ${server.url} returned ${response.status}`);
-          lastError = new Error(`Server returned ${response.status}`);
+          const errorText = await response.text();
+          console.warn(`Server ${server.url} error ${response.status}: ${errorText}`);
+          lastError = new Error(`Server ${server.url} returned ${response.status}`);
         }
       } catch (error) {
-        console.warn(`Server ${server.url} failed:`, error.message);
+        console.warn(`Server ${server.url} failed connection:`, error.message);
         lastError = error;
+        // Continua para o próximo servidor no loop
         continue;
       }
     }
 
-    // Se chegou aqui, todos os servidores falharam
+    // Se saiu do loop, todos falharam
     throw lastError || new Error('All translation servers failed');
 
   } catch (error) {
-    console.error('Error in translate function:', error);
+    console.error('Translation function fatal error:', error);
     
-    // Retornar erro específico para o frontend
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         success: false,
-        error: error.message,
-        code: 'TRANSLATION_SERVICE_UNAVAILABLE'
+        error: 'Service temporarily unavailable. Please try again later.',
+        details: error.message
       })
     };
   }
