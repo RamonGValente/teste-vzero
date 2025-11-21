@@ -1,132 +1,129 @@
-// netlify/functions/translate.js
-const fetch = require('node-fetch');
-
 exports.handler = async (event) => {
-  // Configuração CORS para permitir chamadas do seu frontend
   const headers = {
-    'Access-Control-Allow-Origin': '*', // Em produção, substitua '*' pelo seu domínio
+    'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // Responder imediatamente a solicitações OPTIONS (Preflight do navegador)
   if (event.httpMethod === 'OPTIONS') {
-    return {
-      statusCode: 200,
-      headers,
-      body: ''
-    };
+    return { statusCode: 200, headers, body: '' };
   }
 
   if (event.httpMethod !== 'POST') {
-    return {
-      statusCode: 405,
-      headers,
-      body: JSON.stringify({ error: 'Method not allowed' })
-    };
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
   }
 
   try {
     const { text, targetLang = 'pt', type = 'translate' } = JSON.parse(event.body);
-    
-    if (!text || text.trim().length === 0) {
-      return {
-        statusCode: 400,
-        headers,
-        body: JSON.stringify({ error: 'Text is required' })
-      };
+
+    if (!text || !text.trim()) {
+      return { statusCode: 400, headers, body: JSON.stringify({ error: 'Text required' }) };
     }
 
-    // Lista de instâncias públicas do LibreTranslate.
-    // Nota: Instâncias públicas podem sair do ar ou limitar requisições.
-    // A ordem define a prioridade de tentativa.
-    const servers = [
-      { url: 'https://translate.argosopentech.com', priority: 1 }, // Geralmente estável
-      { url: 'https://libretranslate.de', priority: 2 },           // Popular, às vezes lento
-      { url: 'https://lt.vern.cc', priority: 3 },                  // Alternativa comum
-      { url: 'https://translate.terraprint.co', priority: 4 }      // Alternativa
+    // ============================================================
+    // ESTRATÉGIA 1: LIBRETRANSLATE (Vários Servidores)
+    // ============================================================
+    const libreServers = [
+      'https://translate.argosopentech.com',
+      'https://libretranslate.de',
+      'https://lt.vern.cc'
     ];
 
-    let lastError = null;
+    // Função auxiliar de fetch com timeout
+    const fetchWithTimeout = async (url, options, timeout = 4000) => {
+      const controller = new AbortController();
+      const id = setTimeout(() => controller.abort(), timeout);
+      const response = await fetch(url, { ...options, signal: controller.signal });
+      clearTimeout(id);
+      return response;
+    };
 
-    // Loop para tentar cada servidor se o anterior falhar
-    for (const server of servers) {
+    // Tentar LibreTranslate primeiro (Detecção ou Tradução)
+    for (const server of libreServers) {
       try {
         const endpoint = type === 'detect' ? '/detect' : '/translate';
-        const url = `${server.url}${endpoint}`;
+        const body = type === 'detect' 
+          ? { q: text } 
+          : { q: text, source: 'auto', target: targetLang, format: 'text' };
 
-        console.log(`Attempting request to: ${url} [Type: ${type}]`);
-
-        // Configuração do corpo da requisição conforme doc do LibreTranslate
-        const requestBody = type === 'detect' 
-          ? { q: text }
-          : {
-              q: text,
-              source: 'auto', // Deixa a API descobrir o idioma de origem
-              target: targetLang,
-              format: 'text',
-              alternatives: 0
-            };
-
-        // Timeout de 6 segundos para não travar se um servidor estiver "pendurado"
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 6000);
-
-        const response = await fetch(url, {
+        const response = await fetchWithTimeout(`${server}${endpoint}`, {
           method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Accept': 'application/json',
-          },
-          body: JSON.stringify(requestBody),
-          signal: controller.signal
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body)
         });
-
-        clearTimeout(timeout);
 
         if (response.ok) {
           const data = await response.json();
-          
-          // Padronização da resposta para o frontend
-          // Se for detect: a API retorna array [{language: "en", confidence: ...}]
-          // Se for translate: a API retorna { translatedText: "..." }
-          
           return {
             statusCode: 200,
             headers,
-            body: JSON.stringify({
-              success: true,
-              data: data,
-              serverUsed: server.url
-            })
+            body: JSON.stringify({ success: true, data: data, source: 'LibreTranslate' })
           };
-        } else {
-          const errorText = await response.text();
-          console.warn(`Server ${server.url} error ${response.status}: ${errorText}`);
-          lastError = new Error(`Server ${server.url} returned ${response.status}`);
         }
-      } catch (error) {
-        console.warn(`Server ${server.url} failed connection:`, error.message);
-        lastError = error;
-        // Continua para o próximo servidor no loop
-        continue;
+      } catch (e) {
+        console.log(`LibreTranslate server ${server} failed, trying next...`);
       }
     }
 
-    // Se saiu do loop, todos falharam
-    throw lastError || new Error('All translation servers failed');
+    // ============================================================
+    // ESTRATÉGIA 2: MYMEMORY API (Backup Robusto)
+    // MyMemory é excelente, mas não tem endpoint de "detect". 
+    // Usaremos apenas para tradução.
+    // ============================================================
+    
+    if (type === 'translate') {
+      try {
+        console.log('Falling back to MyMemory API...');
+        // MyMemory usa GET. Ex: en|pt (inglês para portugues). 
+        // Como não sabemos a origem, usamos 'Autodetect' implícito tentando adivinhar ou fixo.
+        // Para garantir, tentamos 'en|pt' se falhar o auto.
+        
+        // Nota: MyMemory requer par de idiomas. O padrão "auto" deles funciona omitindo a origem.
+        const email = ""; // Se tiver email, aumenta o limite, mas funciona sem.
+        const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|${targetLang}${email ? `&de=${email}` : ''}`;
+
+        const response = await fetchWithTimeout(url, { method: 'GET' }, 6000);
+        
+        if (response.ok) {
+          const data = await response.json();
+          
+          if (data.responseStatus === 200) {
+             return {
+              statusCode: 200,
+              headers,
+              body: JSON.stringify({ 
+                success: true, 
+                data: { translatedText: data.responseData.translatedText },
+                source: 'MyMemory'
+              })
+            };
+          }
+        }
+      } catch (e) {
+        console.log('MyMemory failed:', e);
+      }
+    }
+
+    // ============================================================
+    // FALLBACK FINAL: Simulação de Detecção (se tudo falhar)
+    // ============================================================
+    if (type === 'detect') {
+        // Se as APIs falharam, não bloqueamos o fluxo. Retornamos unknown.
+        return {
+            statusCode: 200,
+            headers,
+            body: JSON.stringify({ success: true, data: [{ language: "unknown" }] })
+        };
+    }
+
+    throw new Error('All translation services unavailable');
 
   } catch (error) {
-    console.error('Translation function fatal error:', error);
-    
+    console.error('Fatal error:', error);
     return {
-      statusCode: 500,
+      statusCode: 500, // Retornamos 500 para o frontend saber que deu erro
       headers,
-      body: JSON.stringify({
-        success: false,
-        error: 'Service temporarily unavailable. Please try again later.',
-        details: error.message
-      })
+      body: JSON.stringify({ error: error.message })
     };
   }
 };

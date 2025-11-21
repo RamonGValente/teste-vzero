@@ -81,7 +81,6 @@ const CustomAudioPlayer = ({
 
   const handlePlayPause = async () => {
     if (!audioRef.current) return;
-
     try {
       if (isPlaying) {
         audioRef.current.pause();
@@ -89,7 +88,6 @@ const CustomAudioPlayer = ({
       } else {
         await audioRef.current.play();
         setIsPlaying(true);
-        
         if (!hasTriggeredOnPlay.current) {
           hasTriggeredOnPlay.current = true;
           onPlay();
@@ -125,7 +123,6 @@ const CustomAudioPlayer = ({
     }
   };
 
-  // Função auxiliar interna do player
   const formatTimePlayer = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
@@ -135,11 +132,9 @@ const CustomAudioPlayer = ({
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current || isNaN(duration) || duration === 0) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
-    
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(percent * 100);
@@ -147,9 +142,7 @@ const CustomAudioPlayer = ({
 
   const playerClasses = cn(
     "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 bg-background border",
-    isOwn
-      ? "bg-primary text-primary-foreground"
-      : "bg-card border text-foreground/80",
+    isOwn ? "bg-primary text-primary-foreground" : "bg-card border text-foreground/80",
     className
   );
 
@@ -173,9 +166,7 @@ const CustomAudioPlayer = ({
         <source src={audioUrl} type="audio/webm" />
         <source src={audioUrl} type="audio/mp3" />
         <source src={audioUrl} type="audio/wav" />
-        Seu navegador não suporta o elemento de áudio.
       </audio>
-      
       <Button
         variant={buttonVariant}
         size="icon"
@@ -184,24 +175,15 @@ const CustomAudioPlayer = ({
       >
         {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current translate-x-[1px]" />}
       </Button>
-
       <div className="flex-1 min-w-0 space-y-1 pr-2">
         <div 
           className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40"
           onClick={handleSeek}
           title="Clique para buscar"
         >
-          <div
-            className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)}
-            style={{ width: `${progress}%` }}
-          />
-          
-          <div
-            className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)}
-            style={{ left: `calc(${progress}% - 8px)` }} 
-          />
+          <div className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)} style={{ width: `${progress}%` }} />
+          <div className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)} style={{ left: `calc(${progress}% - 8px)` }} />
         </div>
-        
         <div className="flex justify-between text-xs font-medium opacity-80">
           <span className={timeColorPrimary}>{formatTimePlayer(currentTime)}</span> 
           <span className={timeColorSecondary}>{formatTimePlayer(duration)}</span> 
@@ -231,7 +213,7 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   const [translations, setTranslations] = useState<TranslationState[]>([]);
 
-  // CORREÇÃO: Adicionado formatTime aqui para ser usado pelo Messages
+  // Formatação de tempo para mensagens
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
@@ -240,7 +222,7 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO (API)
+  // FUNÇÕES DE TRADUÇÃO (FRONTEND)
   // ====================================================================
 
   const detectLanguage = async (text: string): Promise<string> => {
@@ -253,7 +235,8 @@ export default function Messages() {
         body: JSON.stringify({ text: text.substring(0, 500), type: 'detect' })
       });
 
-      if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+      // Se a detecção falhar (502 ou outro), não paramos, apenas retornamos unknown
+      if (!response.ok) return 'unknown';
 
       const result = await response.json();
       if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
@@ -261,7 +244,7 @@ export default function Messages() {
       }
       return 'unknown';
     } catch (error) {
-      console.warn('Erro na detecção de idioma (API):', error);
+      // Silenciosamente ignora erros de detecção para tentar traduzir direto
       return 'unknown';
     }
   };
@@ -280,22 +263,24 @@ export default function Messages() {
         })
       });
 
-      if (!response.ok) throw new Error(`Erro HTTP: ${response.status}`);
+      if (!response.ok) {
+        // Captura erros de servidor (500, 502)
+        throw new Error(`Servidor de tradução instável (Código: ${response.status})`);
+      }
 
       const result = await response.json();
       if (result.success && result.data && result.data.translatedText) {
         return result.data.translatedText;
       }
-      throw new Error(result.error || 'Resposta inválida da API');
-    } catch (error) {
+      
+      throw new Error('Falha na resposta da API');
+    } catch (error: any) {
       console.error('Erro na tradução:', error);
       throw error;
     }
   };
 
   const handleTranslate = async (messageId: string, text: string) => {
-    if (!text || text.trim().length === 0) return;
-
     const existingTranslation = translations.find(t => t.messageId === messageId);
     
     if (existingTranslation?.isTranslated) {
@@ -321,14 +306,16 @@ export default function Messages() {
     });
 
     try {
+      // 1. Detectar (Opcional, se falhar continua)
       const detectedLang = await detectLanguage(text);
       
       if (detectedLang === 'pt') {
-        toast({ title: "Idioma Original", description: "O texto já parece estar em português." });
+        toast({ title: "Aviso", description: "Texto já parece estar em português." });
         setTranslations(prev => prev.filter(t => t.messageId !== messageId));
         return;
       }
 
+      // 2. Traduzir (Obrigatório)
       const translatedText = await translateText(text, 'pt');
       
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
@@ -340,8 +327,12 @@ export default function Messages() {
         } : t
       ));
 
-    } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível traduzir.", variant: "destructive" });
+    } catch (error: any) {
+      toast({ 
+        title: "Erro na tradução", 
+        description: "Tente novamente. Os servidores gratuitos podem estar cheios.", 
+        variant: "destructive" 
+      });
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
@@ -835,6 +826,7 @@ export default function Messages() {
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
                                 {translationState?.isTranslated && translationState.detectedLang && <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground"><Globe className="h-2 w-2"/> {translationState.detectedLang.toUpperCase()}</span>}
+                                {translationState?.isTranslated && !translationState.detectedLang && <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground"><Globe className="h-2 w-2"/></span>}
                               </div>
                               
                               <Button variant="ghost" size="sm" className={cn("h-6 px-2 text-[10px] opacity-50 hover:opacity-100 transition-all", translationState?.isLoading && "opacity-100")} onClick={() => handleTranslate(msg.id, msg.content)} disabled={translationState?.isLoading}>
