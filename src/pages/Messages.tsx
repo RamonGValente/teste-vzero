@@ -24,7 +24,9 @@ import {
   Check,
   ChevronDown,
   X,
-  ArrowRight
+  ArrowRight,
+  Volume2,
+  VolumeX
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -70,20 +72,26 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
+interface SpeechState {
+  messageId: string;
+  isSpeaking: boolean;
+  isSupported: boolean;
+}
+
 // Lista de idiomas disponíveis expandida
 const AVAILABLE_LANGUAGES = [
-  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷', nativeName: 'Português' },
-  { code: 'en', name: 'Inglês', flag: '🇺🇸', nativeName: 'English' },
-  { code: 'es', name: 'Espanhol', flag: '🇪🇸', nativeName: 'Español' },
-  { code: 'fr', name: 'Francês', flag: '🇫🇷', nativeName: 'Français' },
-  { code: 'de', name: 'Alemão', flag: '🇩🇪', nativeName: 'Deutsch' },
-  { code: 'it', name: 'Italiano', flag: '🇮🇹', nativeName: 'Italiano' },
-  { code: 'ja', name: 'Japonês', flag: '🇯🇵', nativeName: '日本語' },
-  { code: 'ko', name: 'Coreano', flag: '🇰🇷', nativeName: '한국어' },
-  { code: 'zh', name: 'Chinês', flag: '🇨🇳', nativeName: '中文' },
-  { code: 'ru', name: 'Russo', flag: '🇷🇺', nativeName: 'Русский' },
-  { code: 'ar', name: 'Árabe', flag: '🇸🇦', nativeName: 'العربية' },
-  { code: 'hi', name: 'Hindi', flag: '🇮🇳', nativeName: 'हिन्दी' },
+  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷', nativeName: 'Português', speechLang: 'pt-BR' },
+  { code: 'en', name: 'Inglês', flag: '🇺🇸', nativeName: 'English', speechLang: 'en-US' },
+  { code: 'es', name: 'Espanhol', flag: '🇪🇸', nativeName: 'Español', speechLang: 'es-ES' },
+  { code: 'fr', name: 'Francês', flag: '🇫🇷', nativeName: 'Français', speechLang: 'fr-FR' },
+  { code: 'de', name: 'Alemão', flag: '🇩🇪', nativeName: 'Deutsch', speechLang: 'de-DE' },
+  { code: 'it', name: 'Italiano', flag: '🇮🇹', nativeName: 'Italiano', speechLang: 'it-IT' },
+  { code: 'ja', name: 'Japonês', flag: '🇯🇵', nativeName: '日本語', speechLang: 'ja-JP' },
+  { code: 'ko', name: 'Coreano', flag: '🇰🇷', nativeName: '한국어', speechLang: 'ko-KR' },
+  { code: 'zh', name: 'Chinês', flag: '🇨🇳', nativeName: '中文', speechLang: 'zh-CN' },
+  { code: 'ru', name: 'Russo', flag: '🇷🇺', nativeName: 'Русский', speechLang: 'ru-RU' },
+  { code: 'ar', name: 'Árabe', flag: '🇸🇦', nativeName: 'العربية', speechLang: 'ar-SA' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳', nativeName: 'हिन्दी', speechLang: 'hi-IN' },
 ];
 
 // Funções auxiliares para idiomas
@@ -95,6 +103,11 @@ const getLanguageName = (code: string): string => {
 const getLanguageNativeName = (code: string): string => {
   const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
   return lang ? lang.nativeName : code.toUpperCase();
+};
+
+const getSpeechLang = (code: string): string => {
+  const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
+  return lang ? lang.speechLang : 'pt-BR';
 };
 
 // --- Componente do Menu de Idiomas Centralizado ---
@@ -362,12 +375,95 @@ export default function Messages() {
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  const [speechStates, setSpeechStates] = useState<SpeechState[]>([]);
+  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
+
+  // Verificar se a Web Speech API é suportada
+  useEffect(() => {
+    setIsSpeechSupported('speechSynthesis' in window);
+  }, []);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // ====================================================================
+  // FUNÇÕES DE TEXT-TO-SPEECH (TEXTO PARA ÁUDIO)
+  // ====================================================================
+
+  const speakText = useCallback((text: string, messageId: string, targetLang: string = 'pt') => {
+    if (!isSpeechSupported) {
+      toast({
+        title: "Recurso não suportado",
+        description: "Seu navegador não suporta síntese de voz.",
+        variant: "destructive"
+      });
+      return;
+    }
+
+    // Para qualquer fala em andamento
+    window.speechSynthesis.cancel();
+
+    // Atualiza o estado para mostrar que esta mensagem está sendo falada
+    setSpeechStates(prev => {
+      const existing = prev.find(s => s.messageId === messageId);
+      if (existing) {
+        return prev.map(s => 
+          s.messageId === messageId ? { ...s, isSpeaking: true } : { ...s, isSpeaking: false }
+        );
+      }
+      return [...prev.map(s => ({ ...s, isSpeaking: false })), 
+        { messageId, isSpeaking: true, isSupported: true }];
+    });
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Configura o idioma baseado na tradução ou padrão
+    const speechLang = getSpeechLang(targetLang);
+    utterance.lang = speechLang;
+    utterance.rate = 0.9; // Velocidade um pouco mais lenta para melhor compreensão
+    utterance.pitch = 1;
+    utterance.volume = 1;
+
+    utterance.onend = () => {
+      setSpeechStates(prev => prev.map(s => 
+        s.messageId === messageId ? { ...s, isSpeaking: false } : s
+      ));
+    };
+
+    utterance.onerror = (event) => {
+      console.error('Erro na síntese de voz:', event);
+      setSpeechStates(prev => prev.map(s => 
+        s.messageId === messageId ? { ...s, isSpeaking: false } : s
+      ));
+      toast({
+        title: "Erro na reprodução",
+        description: "Não foi possível reproduzir o áudio.",
+        variant: "destructive"
+      });
+    };
+
+    window.speechSynthesis.speak(utterance);
+  }, [isSpeechSupported, toast]);
+
+  const stopSpeech = useCallback((messageId?: string) => {
+    if (messageId) {
+      // Para apenas a mensagem específica
+      setSpeechStates(prev => prev.map(s => 
+        s.messageId === messageId ? { ...s, isSpeaking: false } : s
+      ));
+    } else {
+      // Para todas as mensagens
+      setSpeechStates(prev => prev.map(s => ({ ...s, isSpeaking: false })));
+    }
+    window.speechSynthesis.cancel();
+  }, []);
+
+  const getSpeechState = (messageId: string) => {
+    return speechStates.find(s => s.messageId === messageId);
   };
 
   // ====================================================================
@@ -462,7 +558,7 @@ export default function Messages() {
           isTranslated: true, 
           isLoading: false,
           targetLang,
-          sourceLang: 'auto' // Podemos tentar detectar depois se necessário
+          sourceLang: 'auto'
         } : t
       ));
     } catch (error) {
@@ -927,6 +1023,7 @@ export default function Messages() {
                 const timerState = getMessageState(msg.id);
                 const messageType = getMessageType(msg);
                 const translationState = getTranslationState(msg.id);
+                const speechState = getSpeechState(msg.id);
 
                 if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) return null;
 
@@ -999,9 +1096,15 @@ export default function Messages() {
                                 <span>Traduzindo...</span>
                               </div>
                             )}
+                            {speechState?.isSpeaking && (
+                              <div className="flex items-center gap-1 mt-1 text-xs text-primary">
+                                <Volume2 className="h-3 w-3 animate-pulse" />
+                                <span>Reproduzindo áudio...</span>
+                              </div>
+                            )}
                           </div>
                           
-                          {/* BOTÃO DE TRADUÇÃO MELHORADO */}
+                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
@@ -1030,31 +1133,61 @@ export default function Messages() {
                                 )}
                               </div>
                               
-                              {/* Botão de tradução */}
-                              <Button 
-                                variant="ghost" 
-                                size="sm" 
-                                className={cn(
-                                  "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", 
-                                  translationState?.isLoading && "opacity-100",
-                                  translationState?.isTranslated && "text-primary opacity-100"
+                              <div className="flex items-center gap-1">
+                                {/* Botão de áudio (Text-to-Speech) */}
+                                {isSpeechSupported && (
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className={cn(
+                                      "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all",
+                                      speechState?.isSpeaking && "text-primary opacity-100"
+                                    )}
+                                    onClick={() => {
+                                      if (speechState?.isSpeaking) {
+                                        stopSpeech(msg.id);
+                                      } else {
+                                        const targetLang = translationState?.isTranslated 
+                                          ? translationState.targetLang 
+                                          : 'pt';
+                                        speakText(displayText, msg.id, targetLang);
+                                      }
+                                    }}
+                                  >
+                                    {speechState?.isSpeaking ? (
+                                      <VolumeX className="h-3 w-3" />
+                                    ) : (
+                                      <Volume2 className="h-3 w-3" />
+                                    )}
+                                  </Button>
                                 )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setOpenMenuId(msg.id);
-                                }}
-                                disabled={translationState?.isLoading}
-                              >
-                                {translationState?.isLoading ? (
-                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
-                                ) : (
-                                  <>
-                                    <Languages className="h-3 w-3 mr-1" /> 
-                                    {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
-                                    <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
-                                  </>
-                                )}
-                              </Button>
+
+                                {/* Botão de tradução */}
+                                <Button 
+                                  variant="ghost" 
+                                  size="sm" 
+                                  className={cn(
+                                    "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", 
+                                    translationState?.isLoading && "opacity-100",
+                                    translationState?.isTranslated && "text-primary opacity-100"
+                                  )}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenMenuId(msg.id);
+                                  }}
+                                  disabled={translationState?.isLoading}
+                                >
+                                  {translationState?.isLoading ? (
+                                    <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
+                                  ) : (
+                                    <>
+                                      <Languages className="h-3 w-3 mr-1" /> 
+                                      {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
+                                      <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
+                                    </>
+                                  )}
+                                </Button>
+                              </div>
                             </div>
                           )}
 
