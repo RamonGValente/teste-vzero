@@ -11,3 +11,7 @@
   from = "/*"
   to = "/index.html"
   status = 200
+
+# Configuração para functions
+[functions]
+  node_bundle = true

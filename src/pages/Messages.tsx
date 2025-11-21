@@ -10,7 +10,6 @@ import {
   MessageSquarePlus,
   Users,
   MessageCircle,
-  ArrowUp,
   ArrowDown,
   ChevronLeft,
   User,
@@ -20,7 +19,7 @@ import {
   Clock,
   Play,
   Pause,
-  // REMOVIDO: Globe (Ícone de tradução)
+  Languages,
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -49,7 +48,16 @@ interface MessageTimer {
   messageType: 'text' | 'audio' | 'media';
 }
 
-// Interface aprimorada para o player (MANTIDA)
+// Interface para controle de traduções
+interface TranslationState {
+  messageId: string;
+  originalText: string;
+  translatedText: string;
+  isTranslated: boolean;
+  isLoading: boolean;
+}
+
+// Interface aprimorada para o player
 interface CustomAudioPlayerProps { 
   audioUrl: string; 
   className?: string;
@@ -57,7 +65,7 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// Componente AudioPlayer customizado, aprimorado e com nova cor (MANTIDO)
+// Componente AudioPlayer customizado corrigido
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
@@ -71,8 +79,7 @@ const CustomAudioPlayer = ({
   const audioRef = useRef<HTMLAudioElement>(null);
   const hasTriggeredOnPlay = useRef(false);
 
-  // --- Lógica de Reprodução (MANTIDA) ---
-
+  // Lógica de Reprodução
   const handlePlayPause = async () => {
     if (!audioRef.current) return;
 
@@ -138,12 +145,12 @@ const CustomAudioPlayer = ({
     setProgress(percent * 100);
   };
 
-  // --- Classes Aprimoradas para Cores (RESTAURADO DE ACORDO COM A VERSÃO ANTERIOR MAIS ESTILIZADA) ---
+  // Classes Aprimoradas para Cores
   const playerClasses = cn(
-    "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200",
+    "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 bg-background border",
     isOwn
-      ? "bg-primary text-primary-foreground" // Usuário: Fundo Primary, Texto Branco
-      : "bg-card border text-foreground/80", // Outro: Fundo Card, Texto escuro
+      ? "bg-primary text-primary-foreground"
+      : "bg-card border text-foreground/80",
     className
   );
 
@@ -153,16 +160,12 @@ const CustomAudioPlayer = ({
   // Waveform e Progresso
   const waveformBg = isOwn ? "bg-white/30" : "bg-muted/60";
   const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
-  const waveformGradient = isOwn 
-    ? "bg-gradient-to-r from-transparent via-white/40 to-transparent"
-    : "bg-gradient-to-r from-transparent via-primary/40 to-transparent";
 
   const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
   const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
   const timeColorSecondary = isOwn ? "text-primary-foreground/60" : "text-muted-foreground";
 
-  // --- Renderização Aprimorada ---
-
+  // Renderização Aprimorada
   return (
     <div className={playerClasses}>
       <audio
@@ -190,29 +193,19 @@ const CustomAudioPlayer = ({
       </Button>
 
       <div className="flex-1 min-w-0 space-y-1 pr-2">
-        {/* Visualizador/Barra de Progresso (Waveform Simulado) */}
+        {/* Visualizador/Barra de Progresso */}
         <div 
-          className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer"
+          className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40"
           onClick={handleSeek}
           title="Clique para buscar"
         >
-          {/* Fundo da Waveform - Cor neutra ou sutilmente colorida */}
-          <div className={cn("absolute inset-0", waveformBg)} />
-          
-          {/* Progresso com efeito de Waveform vibrante */}
+          {/* Progresso */}
           <div
             className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)}
             style={{ width: `${progress}%` }}
-          >
-             {/* Efeito visual - Linhas de forma de onda (simulação) */}
-             <div className={cn(
-               "absolute inset-0",
-               waveformGradient,
-               isPlaying ? "animate-waveform" : "" 
-             )} style={{ backgroundSize: '40px 100%' }}/>
-          </div>
+          />
           
-          {/* Ponto de Arrasto/Thumb - Cor contrastante */}
+          {/* Ponto de Arrasto/Thumb */}
           <div
             className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)}
             style={{ left: `calc(${progress}% - 8px)` }} 
@@ -228,7 +221,6 @@ const CustomAudioPlayer = ({
     </div>
   );
 };
-
 
 export default function Messages() {
   const { user } = useAuth();
@@ -249,7 +241,230 @@ export default function Messages() {
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
 
-  // REMOVIDO: Lógica de tradução (TranslationState, translationMap, handleTranslate)
+  // Estado para controle de traduções
+  const [translations, setTranslations] = useState<TranslationState[]>([]);
+
+  // Função para detectar idioma usando Netlify Function
+  const detectLanguage = async (text: string): Promise<string> => {
+    try {
+      const response = await fetch('/.netlify/functions/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          type: 'detect'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success && result.data && result.data.length > 0) {
+        return result.data[0].language;
+      }
+      
+      throw new Error('No language detected');
+    } catch (error) {
+      console.error('Erro na detecção de idioma:', error);
+      
+      // Fallback: detecção básica por palavras-chave
+      const portugueseWords = ['o', 'a', 'os', 'as', 'um', 'uma', 'de', 'do', 'da', 'em', 'no', 'na', 'é', 'são', 'com', 'que', 'para'];
+      const englishWords = ['the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'with', 'and'];
+      
+      const textLower = text.toLowerCase();
+      let ptCount = 0;
+      let enCount = 0;
+
+      portugueseWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        const matches = textLower.match(regex);
+        if (matches) ptCount += matches.length;
+      });
+
+      englishWords.forEach(word => {
+        const regex = new RegExp(`\\b${word}\\b`, 'gi');
+        const matches = textLower.match(regex);
+        if (matches) enCount += matches.length;
+      });
+
+      return ptCount >= enCount ? 'pt' : 'en';
+    }
+  };
+
+  // Função para traduzir texto usando Netlify Function
+  const translateText = async (text: string, targetLang: string = 'pt'): Promise<string> => {
+    try {
+      const response = await fetch('/.netlify/functions/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text,
+          targetLang,
+          type: 'translate'
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      
+      if (result.success) {
+        return result.data.translatedText;
+      }
+      
+      throw new Error(result.error || 'Translation failed');
+    } catch (error) {
+      console.error('Erro na tradução:', error);
+      
+      // Fallback: tradução simulada para palavras comuns
+      return simulateTranslation(text);
+    }
+  };
+
+  // Função de fallback para tradução simulada
+  const simulateTranslation = (text: string): string => {
+    const translationMap: { [key: string]: string } = {
+      'hello': 'olá',
+      'hi': 'oi',
+      'good morning': 'bom dia',
+      'good afternoon': 'boa tarde',
+      'good evening': 'boa noite',
+      'good night': 'boa noite',
+      'how are you': 'como você está',
+      'thank you': 'obrigado',
+      'thanks': 'obrigado',
+      'please': 'por favor',
+      'sorry': 'desculpe',
+      'yes': 'sim',
+      'no': 'não',
+      'maybe': 'talvez',
+      'what': 'o que',
+      'when': 'quando',
+      'where': 'onde',
+      'why': 'por que',
+      'how': 'como',
+      'who': 'quem',
+      'i love you': 'eu te amo',
+      'goodbye': 'adeus',
+      'see you later': 'até mais tarde',
+      'what is your name': 'qual é o seu nome',
+      'my name is': 'meu nome é',
+      'where are you from': 'de onde você é',
+      'how old are you': 'quantos anos você tem'
+    };
+
+    const textLower = text.toLowerCase();
+    let translated = text;
+
+    for (const [english, portuguese] of Object.entries(translationMap)) {
+      if (textLower.includes(english)) {
+        translated = translated.replace(new RegExp(english, 'gi'), portuguese);
+      }
+    }
+
+    return translated !== text ? translated : text;
+  };
+
+  // Função principal de tradução
+  const handleTranslate = async (messageId: string, text: string) => {
+    const existingTranslation = translations.find(t => t.messageId === messageId);
+    
+    if (existingTranslation?.isTranslated) {
+      // Se já está traduzido, volta para o original
+      setTranslations(prev => 
+        prev.map(t => 
+          t.messageId === messageId 
+            ? { ...t, isTranslated: false }
+            : t
+        )
+      );
+      return;
+    }
+
+    // Marcar como carregando
+    setTranslations(prev => {
+      const existing = prev.find(t => t.messageId === messageId);
+      if (existing) {
+        return prev.map(t => 
+          t.messageId === messageId 
+            ? { ...t, isLoading: true }
+            : t
+        );
+      }
+      return [...prev, {
+        messageId,
+        originalText: text,
+        translatedText: '',
+        isTranslated: false,
+        isLoading: true
+      }];
+    });
+
+    try {
+      // Detectar idioma primeiro
+      const detectedLang = await detectLanguage(text);
+      
+      if (detectedLang === 'pt') {
+        // Se já está em português, não precisa traduzir
+        toast({
+          title: "Texto já está em português",
+          description: "O texto detectado já está no idioma português.",
+        });
+        
+        setTranslations(prev => 
+          prev.filter(t => t.messageId !== messageId)
+        );
+        return;
+      }
+
+      // Traduzir para português
+      const translatedText = await translateText(text, 'pt');
+      
+      setTranslations(prev => 
+        prev.map(t => 
+          t.messageId === messageId 
+            ? { 
+                ...t, 
+                translatedText, 
+                isTranslated: true, 
+                isLoading: false 
+              }
+            : t
+        )
+      );
+
+      toast({
+        title: "Texto traduzido",
+        description: "O texto foi traduzido para português com sucesso.",
+      });
+
+    } catch (error) {
+      console.error('Erro na tradução:', error);
+      toast({
+        title: "Erro na tradução",
+        description: "Não foi possível traduzir o texto. Tente novamente.",
+        variant: "destructive",
+      });
+      
+      setTranslations(prev => 
+        prev.filter(t => t.messageId !== messageId)
+      );
+    }
+  };
+
+  // Obter estado da tradução para uma mensagem
+  const getTranslationState = (messageId: string) => {
+    return translations.find(t => t.messageId === messageId);
+  };
 
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
@@ -371,24 +586,18 @@ export default function Messages() {
     return 'media';
   }, []);
 
-  // Função para iniciar timer de áudio - CORRIGIDA para não reiniciar
+  // Função para iniciar timer de áudio
   const startAudioTimer = useCallback((messageId: string) => {
-    console.log('🎵 VERIFICANDO TIMER PARA ÁUDIO:', messageId);
-    
     setMessageTimers(prev => {
-      // Verifica se já existe um timer para esta mensagem
       const existingTimer = prev.find(timer => timer.messageId === messageId);
       
       if (existingTimer) {
-        console.log('⏰ Timer já existe, mantendo:', messageId);
-        return prev; // Não faz nada se o timer já existe
+        return prev;
       }
       
-      console.log('✅ CRIANDO NOVO TIMER PARA ÁUDIO:', messageId);
-      // Adiciona novo timer apenas se não existir
       return [...prev, {
         messageId,
-        timeLeft: 120, // 2 minutos
+        timeLeft: 120,
         status: 'counting',
         messageType: 'audio'
       }];
@@ -400,15 +609,12 @@ export default function Messages() {
     if (!messages || !user) return;
 
     messages.forEach(message => {
-      // Se a mensagem não é do usuário atual e não foi deletada
       if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
         const messageType = getMessageType(message);
         const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
         
-        // Se já existe timer, não faz nada
         if (existingTimer) return;
 
-        // Para texto e mídia, inicia timer imediatamente
         if (messageType === 'text' || messageType === 'media') {
           setMessageTimers(prev => [...prev, {
             messageId: message.id,
@@ -417,7 +623,6 @@ export default function Messages() {
             messageType
           }]);
         }
-        // Para áudio, o timer será iniciado quando o áudio for reproduzido
       }
     });
   }, [messages, user, deletedMessages, messageTimers, getMessageType]);
@@ -493,11 +698,9 @@ export default function Messages() {
 
         prev.forEach(timer => {
           if (timer.timeLeft <= 1) {
-            // Próximo estágio
             switch (timer.status) {
               case 'counting':
                 if (timer.messageType === 'text') {
-                  // Texto: vai para deleção
                   updatedTimers.push({
                     ...timer,
                     status: 'deleting',
@@ -505,7 +708,6 @@ export default function Messages() {
                     timeLeft: 120
                   });
                 } else {
-                  // Áudio e mídia: vai direto para UnDoInG
                   updatedTimers.push({
                     ...timer,
                     status: 'showingUndoing',
@@ -515,7 +717,6 @@ export default function Messages() {
                 break;
               
               case 'deleting':
-                // Texto: terminou de deletar, vai para UnDoInG
                 updatedTimers.push({
                   ...timer,
                   status: 'showingUndoing',
@@ -525,7 +726,6 @@ export default function Messages() {
                 break;
               
               case 'showingUndoing':
-                // Marca para exclusão
                 messagesToDelete.push(timer.messageId);
                 updatedTimers.push({
                   ...timer,
@@ -537,9 +737,7 @@ export default function Messages() {
                 updatedTimers.push(timer);
             }
           } else {
-            // Apenas decrementa o tempo
             if (timer.status === 'deleting' && timer.currentText) {
-              // Para texto em deleção, remove letras proporcionalmente
               const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
               const elapsedTime = 120 - timer.timeLeft + 1;
               const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / 120))));
@@ -559,7 +757,6 @@ export default function Messages() {
           }
         });
 
-        // Exclui mensagens marcadas
         if (messagesToDelete.length > 0) {
           deleteMessages(messagesToDelete);
         }
@@ -929,9 +1126,18 @@ export default function Messages() {
                 const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
                 const timerState = getMessageState(msg.id);
                 const messageType = getMessageType(msg);
+                const translationState = getTranslationState(msg.id);
 
                 if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) {
                   return null;
+                }
+
+                // Determinar o texto a ser exibido
+                let displayText = msg.content;
+                if (timerState?.status === 'deleting' && timerState.currentText) {
+                  displayText = timerState.currentText;
+                } else if (translationState?.isTranslated) {
+                  displayText = translationState.translatedText;
                 }
 
                 return (
@@ -987,7 +1193,6 @@ export default function Messages() {
                                 <div key={i} className="max-w-full">
                                   <CustomAudioPlayer 
                                     audioUrl={url} 
-                                    // RESTAURADO o estilo do componente CustomAudioPlayer mais elegante
                                     isOwn={isOwn} 
                                     className={cn(isOwn ? "max-w-[250px] w-full" : "max-w-[300px] w-full")} 
                                     onPlay={() => {
@@ -1013,14 +1218,55 @@ export default function Messages() {
 
                       {/* TEXTO */}
                       {msg.content && timerState?.status !== 'showingUndoing' && (
-                        <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
+                        <div className={cn(
+                          "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", 
+                          isOwn 
+                            ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" 
+                            : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
+                        )}>
                           <div className="break-words overflow-hidden">
-                            <MentionText text={timerState?.status === 'deleting' ? (timerState.currentText || '') : msg.content} />
+                            <MentionText text={displayText} />
                           </div>
-                          {/* REMOVIDO: Botão de tradução (evita ReferenceError: google is not defined) */}
-                          <span className={cn("text-[10px] absolute bottom-1 right-3 opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
-                            {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                          </span>
+                          
+                          {/* BOTÃO DE TRADUÇÃO */}
+                          {!isOwn && msg.content && (
+                            <div className="flex justify-between items-center mt-2">
+                              <span className={cn(
+                                "text-[10px] opacity-60", 
+                                isOwn ? "text-primary-foreground" : "text-muted-foreground"
+                              )}>
+                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
+                              
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                className={cn(
+                                  "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
+                                  translationState?.isLoading && "opacity-100"
+                                )}
+                                onClick={() => handleTranslate(msg.id, msg.content)}
+                                disabled={translationState?.isLoading}
+                              >
+                                {translationState?.isLoading ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    Traduzindo...
+                                  </>
+                                ) : translationState?.isTranslated ? (
+                                  <>
+                                    <Languages className="h-3 w-3 mr-1" />
+                                    Original
+                                  </>
+                                ) : (
+                                  <>
+                                    <Languages className="h-3 w-3 mr-1" />
+                                    Traduzir
+                                  </>
+                                )}
+                              </Button>
+                            </div>
+                          )}
                         </div>
                       )}
                     </div>
