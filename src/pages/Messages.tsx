@@ -23,7 +23,8 @@ import {
   Globe,
   Check,
   ChevronDown,
-  X
+  X,
+  ArrowRight
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -52,13 +53,20 @@ interface MessageTimer {
   messageType: 'text' | 'audio' | 'media';
 }
 
+interface TranslationResult {
+  translatedText: string;
+  sourceLang?: string;
+  targetLang?: string;
+}
+
 interface TranslationState {
   messageId: string;
   originalText: string;
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
-  targetLang: string; // Armazena o idioma para o qual foi traduzido
+  targetLang: string;
+  sourceLang?: string;
 }
 
 interface CustomAudioPlayerProps { 
@@ -68,15 +76,144 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// Lista de idiomas disponíveis
+// Lista de idiomas disponíveis expandida
 const AVAILABLE_LANGUAGES = [
-  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷' },
-  { code: 'en', name: 'Inglês', flag: '🇺🇸' },
-  { code: 'es', name: 'Espanhol', flag: '🇪🇸' },
-  { code: 'fr', name: 'Francês', flag: '🇫🇷' },
-  { code: 'de', name: 'Alemão', flag: '🇩🇪' },
-  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷', nativeName: 'Português' },
+  { code: 'en', name: 'Inglês', flag: '🇺🇸', nativeName: 'English' },
+  { code: 'es', name: 'Espanhol', flag: '🇪🇸', nativeName: 'Español' },
+  { code: 'fr', name: 'Francês', flag: '🇫🇷', nativeName: 'Français' },
+  { code: 'de', name: 'Alemão', flag: '🇩🇪', nativeName: 'Deutsch' },
+  { code: 'it', name: 'Italiano', flag: '🇮🇹', nativeName: 'Italiano' },
+  { code: 'ja', name: 'Japonês', flag: '🇯🇵', nativeName: '日本語' },
+  { code: 'ko', name: 'Coreano', flag: '🇰🇷', nativeName: '한국어' },
+  { code: 'zh', name: 'Chinês', flag: '🇨🇳', nativeName: '中文' },
+  { code: 'ru', name: 'Russo', flag: '🇷🇺', nativeName: 'Русский' },
+  { code: 'ar', name: 'Árabe', flag: '🇸🇦', nativeName: 'العربية' },
+  { code: 'hi', name: 'Hindi', flag: '🇮🇳', nativeName: 'हिन्दी' },
 ];
+
+// Funções auxiliares para idiomas
+const getLanguageName = (code: string): string => {
+  const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
+  return lang ? lang.name : code.toUpperCase();
+};
+
+const getLanguageNativeName = (code: string): string => {
+  const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
+  return lang ? lang.nativeName : code.toUpperCase();
+};
+
+// --- Componente do Menu de Idiomas ---
+const LanguageMenu = ({ 
+  messageId, 
+  currentTranslation, 
+  onTranslate,
+  onClose 
+}: {
+  messageId: string;
+  currentTranslation?: TranslationState;
+  onTranslate: (messageId: string, text: string, targetLang: string) => void;
+  onClose: () => void;
+}) => {
+  const [selectedCategory, setSelectedCategory] = useState<'popular' | 'all'>('popular');
+  
+  const popularLanguages = AVAILABLE_LANGUAGES.filter(lang => 
+    ['pt', 'en', 'es', 'fr', 'de', 'it'].includes(lang.code)
+  );
+  
+  const otherLanguages = AVAILABLE_LANGUAGES.filter(lang => 
+    !['pt', 'en', 'es', 'fr', 'de', 'it'].includes(lang.code)
+  );
+
+  return (
+    <div 
+      className="absolute bottom-8 right-0 bg-popover border shadow-2xl rounded-lg z-50 w-80 animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Cabeçalho do Menu */}
+      <div className="p-3 border-b bg-muted/20">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <Languages className="h-4 w-4 text-primary" />
+            <span className="font-semibold text-sm">Traduzir para</span>
+          </div>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-6 w-6"
+            onClick={onClose}
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Abas de Categorias */}
+      <div className="px-3 pt-2">
+        <Tabs value={selectedCategory} onValueChange={(v: any) => setSelectedCategory(v)} className="w-full">
+          <TabsList className="w-full grid grid-cols-2 h-8">
+            <TabsTrigger value="popular" className="text-xs">Populares</TabsTrigger>
+            <TabsTrigger value="all" className="text-xs">Todos</TabsTrigger>
+          </TabsList>
+        </Tabs>
+      </div>
+
+      {/* Lista de Idiomas */}
+      <ScrollArea className="h-64 px-2 py-2">
+        <div className="space-y-1">
+          {/* Opção para ver original se já estiver traduzido */}
+          {currentTranslation?.isTranslated && (
+            <button
+              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 font-medium text-primary border border-primary/20 mb-2"
+              onClick={() => onTranslate(messageId, currentTranslation.originalText, 'original')}
+            >
+              <X className="h-4 w-4" />
+              <div className="flex-1">
+                <div>Ver Original</div>
+                <div className="text-xs text-muted-foreground">
+                  {getLanguageNativeName(currentTranslation.sourceLang || 'auto')}
+                </div>
+              </div>
+              <Check className="h-4 w-4 text-primary" />
+            </button>
+          )}
+
+          {/* Idiomas Populares */}
+          {(selectedCategory === 'popular' ? popularLanguages : AVAILABLE_LANGUAGES).map((lang) => (
+            <button
+              key={lang.code}
+              className={cn(
+                "w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 transition-colors",
+                currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && "bg-accent/50"
+              )}
+              onClick={() => {
+                const messageText = currentTranslation?.originalText || '';
+                onTranslate(messageId, messageText, lang.code);
+              }}
+            >
+              <span className="text-base">{lang.flag}</span>
+              <div className="flex-1 flex flex-col items-start">
+                <span className="font-medium">{lang.name}</span>
+                <span className="text-xs text-muted-foreground">{lang.nativeName}</span>
+              </div>
+              {currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && (
+                <Check className="h-4 w-4 text-primary flex-shrink-0" />
+              )}
+            </button>
+          ))}
+        </div>
+      </ScrollArea>
+
+      {/* Rodapé com informações */}
+      <div className="p-2 border-t bg-muted/10">
+        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+          <Globe className="h-3 w-3" />
+          <span>Tradução automática por LibreTranslate</span>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 // --- CustomAudioPlayer Component ---
 const CustomAudioPlayer = ({ 
@@ -226,7 +363,7 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
-  const [openMenuId, setOpenMenuId] = useState<string | null>(null); // Controla qual menu de tradução está aberto
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -236,11 +373,14 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO (COM SELETOR DE IDIOMA)
+  // FUNÇÕES DE TRADUÇÃO MELHORADAS
   // ====================================================================
 
-  const translateText = async (text: string, targetLang: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return text;
+  const translateText = async (text: string, targetLang: string): Promise<TranslationResult> => {
+    if (!text || text.trim().length === 0) {
+      return { translatedText: text };
+    }
+    
     try {
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
@@ -248,17 +388,25 @@ export default function Messages() {
         body: JSON.stringify({ 
           text: text.substring(0, 2000), 
           targetLang, 
-          type: 'translate' 
+          type: 'translate',
+          sourceLang: 'auto'
         })
       });
+      
       if (!response.ok) throw new Error(`Status: ${response.status}`);
+      
       const result = await response.json();
+      
       if (result.success && result.data && result.data.translatedText) {
-        return result.data.translatedText;
+        return {
+          translatedText: result.data.translatedText,
+          sourceLang: result.sourceLang,
+          targetLang: result.targetLang
+        };
       }
       throw new Error('Erro na resposta da API');
     } catch (error) {
-      console.error(error);
+      console.error('Translation error:', error);
       throw error;
     }
   };
@@ -269,25 +417,35 @@ export default function Messages() {
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
 
-    // Se o usuário clicou em "Ver Original" (passamos targetLang = 'original')
+    // Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
       if (existingTranslation) {
-        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
+        setTranslations(prev => prev.map(t => 
+          t.messageId === messageId ? { ...t, isTranslated: false } : t
+        ));
       }
       return;
     }
 
-    // Se já estiver traduzido para o mesmo idioma, apenas mostra
+    // Se já estiver traduzido para o mesmo idioma, apenas alterna
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
-       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
-       return;
+      setTranslations(prev => prev.map(t => 
+        t.messageId === messageId ? { ...t, isTranslated: !t.isTranslated } : t
+      ));
+      return;
     }
 
     // Inicia Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
-         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang } : t);
+        return prev.map(t => 
+          t.messageId === messageId ? { 
+            ...t, 
+            isLoading: true, 
+            targetLang 
+          } : t
+        );
       }
       return [...prev, { 
         messageId, 
@@ -300,18 +458,25 @@ export default function Messages() {
     });
 
     try {
-      const translatedText = await translateText(text, targetLang);
+      const { translatedText, sourceLang } = await translateText(text, targetLang);
       
-      setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
+      setTranslations(prev => prev.map(t => 
+        t.messageId === messageId ? { 
           ...t, 
           translatedText, 
           isTranslated: true, 
           isLoading: false,
-          targetLang
+          targetLang,
+          sourceLang
         } : t
       ));
     } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível traduzir no momento.", variant: "destructive" });
+      console.error('Translation failed:', error);
+      toast({ 
+        title: "Erro na tradução", 
+        description: "Não foi possível traduzir a mensagem no momento. Tente novamente.", 
+        variant: "destructive" 
+      });
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
@@ -800,27 +965,44 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO E MENU DE IDIOMAS */}
+                          {/* BOTÃO DE TRADUÇÃO MELHORADO COM MENU DE IDIOMAS */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
-                              {/* Informação de hora e idioma traduzido */}
+                              {/* Informação de hora e status da tradução */}
                               <div className="flex items-center gap-2">
-                                <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
+                                  {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                                </span>
+                                
+                                {/* Informações da tradução quando ativa */}
                                 {translationState?.isTranslated && (
-                                   <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground font-medium">
-                                     <Globe className="h-2 w-2"/> 
-                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'} 
-                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.name.split(' ')[0].toUpperCase()}
-                                   </span>
+                                  <div className="flex items-center gap-1 text-[9px] opacity-70 text-muted-foreground font-medium">
+                                    <Globe className="h-2 w-2" />
+                                    <span className="flex items-center gap-1">
+                                      {translationState.sourceLang && translationState.sourceLang !== 'auto' && (
+                                        <>
+                                          <span>{AVAILABLE_LANGUAGES.find(l => l.code === translationState.sourceLang)?.flag || '🌐'}</span>
+                                          <span className="text-[8px] opacity-60">{getLanguageName(translationState.sourceLang)}</span>
+                                          <ArrowRight className="h-2 w-2" />
+                                        </>
+                                      )}
+                                      <span>{AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'}</span>
+                                      <span className="text-[8px] opacity-60">{getLanguageName(translationState.targetLang)}</span>
+                                    </span>
+                                  </div>
                                 )}
                               </div>
                               
-                              {/* Botão que abre o menu */}
+                              {/* Botão de tradução */}
                               <Button 
                                 variant="ghost" 
                                 size="sm" 
-                                className={cn("h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", translationState?.isLoading && "opacity-100")}
+                                className={cn(
+                                  "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", 
+                                  translationState?.isLoading && "opacity-100",
+                                  translationState?.isTranslated && "text-primary opacity-100"
+                                )}
                                 onClick={(e) => {
                                   e.stopPropagation();
                                   setOpenMenuId(openMenuId === msg.id ? null : msg.id);
@@ -831,52 +1013,22 @@ export default function Messages() {
                                   <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
                                 ) : (
                                   <>
-                                    <Globe className="h-3 w-3 mr-1" /> 
+                                    <Languages className="h-3 w-3 mr-1" /> 
                                     {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
                                     <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
                                   </>
                                 )}
                               </Button>
 
-                              {/* MENU SUSPENSO DE IDIOMAS */}
+                              {/* Menu de Idiomas */}
                               {openMenuId === msg.id && (
-                                <div 
-                                  className="absolute bottom-8 right-0 bg-popover border shadow-xl rounded-md z-50 min-w-[160px] animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
-                                  onClick={(e) => e.stopPropagation()}
-                                >
-                                  <div className="p-1">
-                                    {translationState?.isTranslated && (
-                                      <button
-                                        className="w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center gap-2 font-semibold text-primary"
-                                        onClick={() => handleTranslate(msg.id, msg.content, 'original')}
-                                      >
-                                        <X className="h-3 w-3" /> Ver Original
-                                      </button>
-                                    )}
-                                    
-                                    <div className="h-[1px] bg-border my-1" />
-
-                                    {AVAILABLE_LANGUAGES.map((lang) => (
-                                      <button
-                                        key={lang.code}
-                                        className={cn(
-                                          "w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center justify-between",
-                                          translationState?.targetLang === lang.code && translationState.isTranslated && "bg-accent/50"
-                                        )}
-                                        onClick={() => handleTranslate(msg.id, msg.content, lang.code)}
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <span>{lang.flag}</span> {lang.name}
-                                        </span>
-                                        {translationState?.targetLang === lang.code && translationState.isTranslated && (
-                                          <Check className="h-3 w-3 text-primary" />
-                                        )}
-                                      </button>
-                                    ))}
-                                  </div>
-                                </div>
+                                <LanguageMenu
+                                  messageId={msg.id}
+                                  currentTranslation={translationState}
+                                  onTranslate={handleTranslate}
+                                  onClose={() => setOpenMenuId(null)}
+                                />
                               )}
-
                             </div>
                           )}
 

@@ -15,7 +15,7 @@ exports.handler = async (event) => {
   }
 
   try {
-    const { text, targetLang = 'pt', type = 'translate', sourceLang = 'auto' } = JSON.parse(event.body);
+    const { text, targetLang = 'pt', type = 'translate' } = JSON.parse(event.body);
 
     if (!text || !text.trim()) {
       return { statusCode: 400, headers, body: JSON.stringify({ error: 'Text required' }) };
@@ -48,20 +48,15 @@ exports.handler = async (event) => {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ q: text })
-          }, 3000);
+          }, 3000); // Timeout rápido para tentar o próximo
 
           if (response.ok) {
             const data = await response.json();
-            // Retorna informações completas de detecção
+            // LibreTranslate retorna: [{language: "en", confidence: 98}]
             return {
               statusCode: 200,
               headers,
-              body: JSON.stringify({ 
-                success: true, 
-                data: data,
-                detectedLanguage: data[0]?.language || 'unknown',
-                confidence: data[0]?.confidence || 0
-              })
+              body: JSON.stringify({ success: true, data: data })
             };
           }
         } catch (e) {
@@ -69,71 +64,34 @@ exports.handler = async (event) => {
         }
       }
       
-      // Fallback para detecção
+      // Se todos falharem na detecção, retornamos 'unknown' em vez de erro 500
+      // Isso permite que o frontend use a verificação local
       return {
         statusCode: 200,
         headers,
-        body: JSON.stringify({ 
-          success: false, 
-          data: [{ language: "unknown" }],
-          detectedLanguage: "unknown"
-        })
+        body: JSON.stringify({ success: false, data: [{ language: "unknown" }] })
       };
     }
 
     // --- ESTRATÉGIA PARA TRADUÇÃO (TYPE = TRANSLATE) ---
-    // Primeiro tenta detectar o idioma de origem
-    let detectedSourceLang = sourceLang;
-    
-    if (sourceLang === 'auto') {
-      try {
-        const detectResponse = await fetchWithTimeout('https://translate.argosopentech.com/detect', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ q: text })
-        }, 2000);
-
-        if (detectResponse.ok) {
-          const detectData = await detectResponse.json();
-          detectedSourceLang = detectData[0]?.language || 'auto';
-        }
-      } catch (e) {
-        console.log('Language detection failed, using auto');
-      }
-    }
-
-    // Tenta LibreTranslate primeiro
+    // MyMemory é o melhor backup gratuito
     try {
+      // Tenta LibreTranslate primeiro
       const response = await fetchWithTimeout('https://translate.argosopentech.com/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          q: text, 
-          source: detectedSourceLang, 
-          target: targetLang 
-        })
+        body: JSON.stringify({ q: text, source: 'auto', target: targetLang })
       }, 3000);
 
       if (response.ok) {
         const data = await response.json();
-        return { 
-          statusCode: 200, 
-          headers, 
-          body: JSON.stringify({ 
-            success: true, 
-            data,
-            sourceLang: detectedSourceLang,
-            targetLang 
-          }) 
-        };
+        return { statusCode: 200, headers, body: JSON.stringify({ success: true, data }) };
       }
-    } catch (e) {
-      console.log('LibreTranslate failed, trying MyMemory...');
-    }
+    } catch (e) {}
 
     // Fallback para MyMemory
     try {
-      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=${detectedSourceLang}|${targetLang}`;
+      const url = `https://api.mymemory.translated.net/get?q=${encodeURIComponent(text)}&langpair=autodetect|${targetLang}`;
       const response = await fetchWithTimeout(url, { method: 'GET' }, 6000);
       
       if (response.ok) {
@@ -144,16 +102,12 @@ exports.handler = async (event) => {
             headers,
             body: JSON.stringify({ 
               success: true, 
-              data: { translatedText: data.responseData.translatedText },
-              sourceLang: detectedSourceLang,
-              targetLang
+              data: { translatedText: data.responseData.translatedText } 
             })
           };
         }
       }
-    } catch (e) {
-      console.log('MyMemory translation failed');
-    }
+    } catch (e) {}
 
     throw new Error('Translation services unavailable');
 
