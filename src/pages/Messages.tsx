@@ -53,12 +53,6 @@ interface MessageTimer {
   messageType: 'text' | 'audio' | 'media';
 }
 
-interface TranslationResult {
-  translatedText: string;
-  sourceLang?: string;
-  targetLang?: string;
-}
-
 interface TranslationState {
   messageId: string;
   originalText: string;
@@ -377,25 +371,20 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO CORRIGIDAS
+  // FUNÇÕES DE TRADUÇÃO - VERSÃO FUNCIONAL ANTERIOR
   // ====================================================================
 
-  const translateText = async (text: string, targetLang: string): Promise<TranslationResult> => {
-    if (!text || text.trim().length === 0) {
-      return { translatedText: text };
-    }
+  const translateText = async (text: string, targetLang: string): Promise<string> => {
+    if (!text || text.trim().length === 0) return text;
     
     try {
-      console.log('Iniciando tradução:', { text: text.substring(0, 50), targetLang });
-      
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
           text: text, 
           targetLang, 
-          type: 'translate',
-          sourceLang: 'auto'
+          type: 'translate' 
         })
       });
       
@@ -404,28 +393,19 @@ export default function Messages() {
       }
       
       const result = await response.json();
-      console.log('Resposta da tradução:', result);
       
       if (result.success && result.data && result.data.translatedText) {
-        return {
-          translatedText: result.data.translatedText,
-          sourceLang: result.sourceLang,
-          targetLang: result.targetLang
-        };
-      } else if (result.error) {
-        throw new Error(result.error);
-      } else {
-        throw new Error('Resposta da API inválida');
+        return result.data.translatedText;
       }
+      
+      throw new Error('Erro na resposta da API');
     } catch (error) {
-      console.error('Erro completo na tradução:', error);
+      console.error('Erro na tradução:', error);
       throw error;
     }
   };
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
-    console.log('handleTranslate chamado:', { messageId, targetLang, textLength: text?.length });
-    
     // Fecha o menu imediatamente
     setOpenMenuId(null);
 
@@ -433,7 +413,6 @@ export default function Messages() {
 
     // Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
-      console.log('Revertendo para texto original');
       if (existingTranslation) {
         setTranslations(prev => prev.map(t => 
           t.messageId === messageId ? { ...t, isTranslated: false } : t
@@ -444,14 +423,11 @@ export default function Messages() {
 
     // Se já estiver traduzido para o mesmo idioma, apenas alterna
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
-      console.log('Alternando tradução existente');
       setTranslations(prev => prev.map(t => 
         t.messageId === messageId ? { ...t, isTranslated: !t.isTranslated } : t
       ));
       return;
     }
-
-    console.log('Iniciando nova tradução');
 
     // Inicia Loading
     setTranslations(prev => {
@@ -477,8 +453,7 @@ export default function Messages() {
     });
 
     try {
-      const { translatedText, sourceLang } = await translateText(text, targetLang);
-      console.log('Tradução concluída:', { translatedText: translatedText?.substring(0, 50), sourceLang });
+      const translatedText = await translateText(text, targetLang);
       
       setTranslations(prev => prev.map(t => 
         t.messageId === messageId ? { 
@@ -487,19 +462,17 @@ export default function Messages() {
           isTranslated: true, 
           isLoading: false,
           targetLang,
-          sourceLang
+          sourceLang: 'auto' // Podemos tentar detectar depois se necessário
         } : t
       ));
-      
-      console.log('Estado de traduções atualizado');
     } catch (error) {
-      console.error('Falha completa na tradução:', error);
+      console.error('Falha na tradução:', error);
       toast({ 
         title: "Erro na tradução", 
         description: "Não foi possível traduzir a mensagem no momento. Tente novamente.", 
         variant: "destructive" 
       });
-      // Remove o estado de loading mas mantém a entrada para tentar novamente
+      // Remove o estado de loading
       setTranslations(prev => prev.map(t => 
         t.messageId === messageId ? { 
           ...t, 
@@ -511,9 +484,7 @@ export default function Messages() {
   };
 
   const getTranslationState = (messageId: string) => {
-    const state = translations.find(t => t.messageId === messageId);
-    console.log('getTranslationState para', messageId, ':', state);
-    return state;
+    return translations.find(t => t.messageId === messageId);
   };
 
   // Função para obter o texto da mensagem selecionada para o modal
