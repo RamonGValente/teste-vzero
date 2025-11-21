@@ -221,47 +221,66 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO E DETECÇÃO
+  // LÓGICA INTELIGENTE DE DETECÇÃO E TRADUÇÃO
   // ====================================================================
 
-  // 1. Verificação rápida local (Instantânea - Para exibir/ocultar botão)
-  // Evita chamadas de API desnecessárias e resolve o problema visual imediatamente
-  const isLikelyPortuguese = (text: string) => {
-    if (!text) return false;
+  // Função para decidir se mostra o botão de traduzir
+  // Se retornar FALSE, o botão NÃO aparece.
+  const shouldShowTranslateButton = (text: string) => {
+    if (!text || text.trim().length < 2) return false; // Textos muito curtos: não traduz
+    
     const lower = text.toLowerCase();
+
+    // 1. PONTUAÇÃO DE PORTUGUÊS
+    // Palavras que, se existirem, indicam forte chance de ser PT
+    const ptIndicators = [
+      'não', 'nao', 'é', 'eh', 'que', 'q', 'você', 'voce', 'vc', 'o', 'a', 'os', 'as', 
+      'de', 'do', 'da', 'em', 'um', 'uma', 'para', 'pra', 'com', 'por', 'meu', 'minha', 
+      'tá', 'ta', 'está', 'sim', 'oi', 'olá', 'tudo', 'bem', 'bom', 'boa', 'obrigado', 
+      'obrigada', 'vlw', 'tbm', 'também', 'kkk', 'rs', 'gente', 'fala', 'aí', 'eai',
+      'quando', 'quem', 'onde', 'hoje', 'amanhã', 'agora', 'já', 'ja', 'foi', 'fui'
+    ];
     
-    // Palavras "Stop Words" muito comuns e exclusivas do PT
-    // Se a frase tiver alguma dessas, é 99% de chance de ser PT
-    const ptPatterns = /\b(não|nao|é|eh|que|o|a|os|as|de|do|da|em|um|uma|para|pra|com|por|meu|minha|você|voce|está|tá|obrigado|sim)\b/i;
+    // Caracteres exclusivos/comuns PT
+    const ptChars = /[çãõáéíóúâêôà]/;
     
-    // Caracteres especiais exclusivos ou comuns (ç, til, acentos agudos comuns)
-    const ptChars = /[áàâãéêíóôõúç]/i;
+    let ptScore = 0;
+    if (ptChars.test(lower)) ptScore += 5; // Acentos dão peso alto
     
-    // Verifica se tem padrões PT
-    if (ptPatterns.test(lower) || ptChars.test(lower)) return true;
+    ptIndicators.forEach(word => {
+       if (new RegExp(`\\b${word}\\b`, 'i').test(lower)) ptScore += 1;
+    });
     
-    return false; 
+    // Suffixos comuns PT (-ção, -dade, -mente, -inho)
+    if (/ção\b|dade\b|mente\b|inho\b|inha\b|ões\b|ão\b/.test(lower)) ptScore += 2;
+
+
+    // 2. PONTUAÇÃO DE INGLÊS (Estrangeiro)
+    const enIndicators = [
+      'the', 'is', 'are', 'you', 'your', 'we', 'they', 'what', 'where', 'when', 'why', 
+      'who', 'how', 'this', 'that', 'these', 'those', 'have', 'has', 'had', 'will', 
+      'can', 'not', 'but', 'and', 'or', 'if', 'so', 'because', 'hello', 'hi', 'hey',
+      'thanks', 'thank', 'good', 'morning', 'night', 'please', 'sorry', 'love', 'like'
+    ];
+    
+    let enScore = 0;
+    enIndicators.forEach(word => {
+       if (new RegExp(`\\b${word}\\b`, 'i').test(lower)) enScore += 1;
+    });
+    // Suffixos comuns EN (-ing, -tion, -ly)
+    if (/ing\b|tion\b|ly\b|ed\b/.test(lower)) enScore += 1;
+
+    // 3. DECISÃO
+    // Se tivermos mais evidências de EN do que PT, mostramos o botão.
+    // Se for empate ou zero a zero, assumimos PT (padrão) e escondemos o botão.
+    if (ptScore > 0 && ptScore >= enScore) return false; // É PT
+    if (enScore > ptScore) return true; // É EN
+    
+    // Caso neutro (ex: "Banana", "OK", "No"): Assume PT e esconde botão
+    return false;
   };
 
-  // 2. Detecção via API (Opcional, usado dentro do processo de tradução)
-  const detectLanguageApi = async (text: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return 'unknown';
-    try {
-      const response = await fetch('/.netlify/functions/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.substring(0, 300), type: 'detect' })
-      });
-      if (!response.ok) return 'unknown';
-      const result = await response.json();
-      if (result.success && result.data && Array.isArray(result.data) && result.data.length > 0) {
-        return result.data[0].language;
-      }
-      return 'unknown';
-    } catch { return 'unknown'; }
-  };
-
-  // 3. Tradução via API
+  // Tradução via API
   const translateText = async (text: string, targetLang: string = 'pt'): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     try {
@@ -285,7 +304,7 @@ export default function Messages() {
   const handleTranslate = async (messageId: string, text: string) => {
     const existingTranslation = translations.find(t => t.messageId === messageId);
     
-    // Toggle: mostrar/esconder se já existe
+    // Toggle
     if (existingTranslation?.isTranslated) {
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
       return;
@@ -295,7 +314,7 @@ export default function Messages() {
       return;
     }
 
-    // Inicia Loading
+    // Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true } : t);
@@ -303,28 +322,18 @@ export default function Messages() {
     });
 
     try {
-      // Tenta traduzir direto
       const translatedText = await translateText(text, 'pt');
       
-      // Tenta detectar idioma apenas para exibir label (opcional)
-      let detectedLang = 'estrangeiro';
-      // Não bloqueamos a tradução se a detecção falhar
-      detectLanguageApi(text).then(lang => {
-         if (lang !== 'unknown') {
-            setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, detectedLang: lang } : t));
-         }
-      });
-
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
           ...t, 
           translatedText, 
           isTranslated: true, 
           isLoading: false,
-          detectedLang
+          detectedLang: 'estrangeiro' 
         } : t
       ));
     } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível traduzir no momento.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível traduzir.", variant: "destructive" });
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
@@ -806,8 +815,8 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO (Apenas para mensagens de outros que NÃO sejam português) */}
-                          {!isOwn && msg.content && !isLikelyPortuguese(msg.content) && (
+                          {/* LOGICA DE EXIBIÇÃO DO BOTÃO ATUALIZADA */}
+                          {!isOwn && msg.content && shouldShowTranslateButton(msg.content) && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1">
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
@@ -820,8 +829,8 @@ export default function Messages() {
                             </div>
                           )}
 
-                          {/* Hora para mensagens próprias ou mensagens em PT de outros (sem botão) */}
-                          {(isOwn || (msg.content && isLikelyPortuguese(msg.content))) && (
+                          {/* Caso não tenha botão (PT ou Própria), mostra apenas hora */}
+                          {(isOwn || (msg.content && !shouldShowTranslateButton(msg.content))) && (
                              <span className={cn("text-[10px] opacity-60 block text-right mt-1", !isOwn && "text-left")}>
                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                              </span>
