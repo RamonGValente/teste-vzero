@@ -106,11 +106,13 @@ const getLanguageNativeName = (code: string): string => {
 // --- Componente do Menu de Idiomas Centralizado ---
 const LanguageMenuModal = ({ 
   messageId, 
+  originalText,
   currentTranslation, 
   onTranslate,
   onClose 
 }: {
   messageId: string;
+  originalText: string;
   currentTranslation?: TranslationState;
   onTranslate: (messageId: string, text: string, targetLang: string) => void;
   onClose: () => void;
@@ -122,8 +124,7 @@ const LanguageMenuModal = ({
   );
 
   const handleLanguageSelect = (targetLang: string) => {
-    const messageText = currentTranslation?.originalText || '';
-    onTranslate(messageId, messageText, targetLang);
+    onTranslate(messageId, originalText, targetLang);
   };
 
   return (
@@ -376,7 +377,7 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO MELHORADAS
+  // FUNÇÕES DE TRADUÇÃO CORRIGIDAS
   // ====================================================================
 
   const translateText = async (text: string, targetLang: string): Promise<TranslationResult> => {
@@ -385,20 +386,25 @@ export default function Messages() {
     }
     
     try {
+      console.log('Iniciando tradução:', { text: text.substring(0, 50), targetLang });
+      
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ 
-          text: text.substring(0, 2000), 
+          text: text, 
           targetLang, 
           type: 'translate',
           sourceLang: 'auto'
         })
       });
       
-      if (!response.ok) throw new Error(`Status: ${response.status}`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
       
       const result = await response.json();
+      console.log('Resposta da tradução:', result);
       
       if (result.success && result.data && result.data.translatedText) {
         return {
@@ -406,15 +412,20 @@ export default function Messages() {
           sourceLang: result.sourceLang,
           targetLang: result.targetLang
         };
+      } else if (result.error) {
+        throw new Error(result.error);
+      } else {
+        throw new Error('Resposta da API inválida');
       }
-      throw new Error('Erro na resposta da API');
     } catch (error) {
-      console.error('Translation error:', error);
+      console.error('Erro completo na tradução:', error);
       throw error;
     }
   };
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
+    console.log('handleTranslate chamado:', { messageId, targetLang, textLength: text?.length });
+    
     // Fecha o menu imediatamente
     setOpenMenuId(null);
 
@@ -422,6 +433,7 @@ export default function Messages() {
 
     // Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
+      console.log('Revertendo para texto original');
       if (existingTranslation) {
         setTranslations(prev => prev.map(t => 
           t.messageId === messageId ? { ...t, isTranslated: false } : t
@@ -432,11 +444,14 @@ export default function Messages() {
 
     // Se já estiver traduzido para o mesmo idioma, apenas alterna
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
+      console.log('Alternando tradução existente');
       setTranslations(prev => prev.map(t => 
         t.messageId === messageId ? { ...t, isTranslated: !t.isTranslated } : t
       ));
       return;
     }
+
+    console.log('Iniciando nova tradução');
 
     // Inicia Loading
     setTranslations(prev => {
@@ -446,7 +461,8 @@ export default function Messages() {
           t.messageId === messageId ? { 
             ...t, 
             isLoading: true, 
-            targetLang 
+            targetLang,
+            isTranslated: false
           } : t
         );
       }
@@ -462,6 +478,7 @@ export default function Messages() {
 
     try {
       const { translatedText, sourceLang } = await translateText(text, targetLang);
+      console.log('Tradução concluída:', { translatedText: translatedText?.substring(0, 50), sourceLang });
       
       setTranslations(prev => prev.map(t => 
         t.messageId === messageId ? { 
@@ -473,18 +490,38 @@ export default function Messages() {
           sourceLang
         } : t
       ));
+      
+      console.log('Estado de traduções atualizado');
     } catch (error) {
-      console.error('Translation failed:', error);
+      console.error('Falha completa na tradução:', error);
       toast({ 
         title: "Erro na tradução", 
         description: "Não foi possível traduzir a mensagem no momento. Tente novamente.", 
         variant: "destructive" 
       });
-      setTranslations(prev => prev.filter(t => t.messageId !== messageId));
+      // Remove o estado de loading mas mantém a entrada para tentar novamente
+      setTranslations(prev => prev.map(t => 
+        t.messageId === messageId ? { 
+          ...t, 
+          isLoading: false,
+          isTranslated: false
+        } : t
+      ));
     }
   };
 
-  const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
+  const getTranslationState = (messageId: string) => {
+    const state = translations.find(t => t.messageId === messageId);
+    console.log('getTranslationState para', messageId, ':', state);
+    return state;
+  };
+
+  // Função para obter o texto da mensagem selecionada para o modal
+  const getSelectedMessageText = () => {
+    if (!openMenuId || !messages) return '';
+    const message = messages.find(m => m.id === openMenuId);
+    return message?.content || '';
+  };
 
   // Fecha menus ao clicar fora
   useEffect(() => {
@@ -777,6 +814,7 @@ export default function Messages() {
       {openMenuId && (
         <LanguageMenuModal
           messageId={openMenuId}
+          originalText={getSelectedMessageText()}
           currentTranslation={translations.find(t => t.messageId === openMenuId)}
           onTranslate={handleTranslate}
           onClose={() => setOpenMenuId(null)}
@@ -918,7 +956,7 @@ export default function Messages() {
                 let displayText = msg.content;
                 if (timerState?.status === 'deleting' && timerState.currentText) {
                   displayText = timerState.currentText;
-                } else if (translationState?.isTranslated) {
+                } else if (translationState?.isTranslated && translationState.translatedText) {
                   displayText = translationState.translatedText;
                 }
 
@@ -976,7 +1014,15 @@ export default function Messages() {
 
                       {msg.content && timerState?.status !== 'showingUndoing' && (
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
-                          <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
+                          <div className="break-words overflow-hidden">
+                            <MentionText text={displayText} />
+                            {translationState?.isLoading && (
+                              <div className="flex items-center gap-1 mt-1 text-xs text-muted-foreground">
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                                <span>Traduzindo...</span>
+                              </div>
+                            )}
+                          </div>
                           
                           {/* BOTÃO DE TRADUÇÃO MELHORADO */}
                           {!isOwn && msg.content && (
