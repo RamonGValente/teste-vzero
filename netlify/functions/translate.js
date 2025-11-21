@@ -36,47 +36,73 @@ exports.handler = async (event) => {
       targetLang 
     });
 
-    // Para evitar problemas com servidores externos, vamos usar uma solução mista
-    if (type === 'detect') {
-      const detectedLang = detectLanguageFallback(text);
+    if (!text || text.trim().length === 0) {
       return {
-        statusCode: 200,
+        statusCode: 400,
         headers,
-        body: JSON.stringify({
-          success: true,
-          data: [{ language: detectedLang, confidence: 0.8 }],
-          fallback: true
-        })
+        body: JSON.stringify({ error: 'Text is required' })
       };
     }
 
-    // Para tradução, tentar servidores externos primeiro
+    // Servidores LibreTranslate prioritários
     const servers = [
-      'https://libretranslate.com',
-      'https://translate.argosopentech.com'
+      {
+        url: 'https://libretranslate.com',
+        priority: 1
+      },
+      {
+        url: 'https://translate.argosopentech.com', 
+        priority: 2
+      },
+      {
+        url: 'https://libretranslate.de',
+        priority: 3
+      },
+      {
+        url: 'https://lt.vern.cc',
+        priority: 4
+      }
     ];
+
+    // Ordenar por prioridade
+    servers.sort((a, b) => a.priority - b.priority);
+
+    let lastError = null;
 
     for (const server of servers) {
       try {
-        console.log(`Trying server: ${server}`);
+        console.log(`Trying server: ${server.url}`);
         
-        const response = await fetch(`${server}/translate`, {
+        const endpoint = type === 'detect' ? '/detect' : '/translate';
+        const url = `${server.url}${endpoint}`;
+
+        const requestBody = type === 'detect' 
+          ? { q: text }
+          : {
+              q: text,
+              source: 'auto',
+              target: targetLang,
+              format: 'text'
+            };
+
+        const controller = new AbortController();
+        const timeout = setTimeout(() => controller.abort(), 8000);
+
+        const response = await fetch(url, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
+            'Accept': 'application/json',
           },
-          body: JSON.stringify({
-            q: text,
-            source: 'auto',
-            target: targetLang,
-            format: 'text'
-          }),
-          timeout: 5000
+          body: JSON.stringify(requestBody),
+          signal: controller.signal
         });
+
+        clearTimeout(timeout);
 
         if (response.ok) {
           const data = await response.json();
-          console.log('Translation successful from:', server);
+          console.log(`Success from ${server.url}`);
           
           return {
             statusCode: 200,
@@ -84,153 +110,35 @@ exports.handler = async (event) => {
             body: JSON.stringify({
               success: true,
               data: data,
-              server: server
+              server: server.url
             })
           };
+        } else {
+          console.warn(`Server ${server.url} returned ${response.status}`);
+          lastError = new Error(`Server returned ${response.status}`);
         }
       } catch (error) {
-        console.log(`Server ${server} failed:`, error.message);
+        console.warn(`Server ${server.url} failed:`, error.message);
+        lastError = error;
         continue;
       }
     }
 
-    // Fallback para tradução local se todos os servidores falharem
-    console.log('Using fallback translation');
-    const translatedText = simulateTranslation(text);
-    
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        data: { translatedText },
-        fallback: true
-      })
-    };
+    // Se chegou aqui, todos os servidores falharam
+    throw lastError || new Error('All translation servers failed');
 
   } catch (error) {
     console.error('Error in translate function:', error);
     
+    // Retornar erro específico para o frontend
     return {
       statusCode: 500,
       headers,
       body: JSON.stringify({
         success: false,
         error: error.message,
-        fallback: true
+        code: 'TRANSLATION_SERVICE_UNAVAILABLE'
       })
     };
   }
 };
-
-// Função de fallback para detecção de idioma
-function detectLanguageFallback(text) {
-  if (!text || typeof text !== 'string') return 'en';
-  
-  const portugueseWords = [
-    'o', 'a', 'os', 'as', 'um', 'uma', 'de', 'do', 'da', 'em', 'no', 'na', 
-    'é', 'são', 'com', 'que', 'para', 'por', 'não', 'sim', 'olá', 'obrigado',
-    'então', 'como', 'está', 'estou', 'você', 'meu', 'minha', 'bem', 'mal',
-    'hoje', 'ontem', 'amanhã', 'agora', 'sempre', 'nunca', 'muito', 'pouco'
-  ];
-  
-  const englishWords = [
-    'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'with',
-    'and', 'but', 'or', 'hello', 'thank', 'you', 'yes', 'no', 'how', 'what',
-    'when', 'where', 'why', 'who', 'which', 'this', 'that', 'these', 'those',
-    'my', 'your', 'his', 'her', 'our', 'their', 'very', 'too', 'so', 'well'
-  ];
-
-  const textLower = text.toLowerCase();
-  let ptCount = 0;
-  let enCount = 0;
-
-  // Contar palavras portuguesas
-  portugueseWords.forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    const matches = textLower.match(regex);
-    if (matches) ptCount += matches.length;
-  });
-
-  // Contar palavras inglesas
-  englishWords.forEach(word => {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    const matches = textLower.match(regex);
-    if (matches) enCount += matches.length;
-  });
-
-  // Se não encontrou palavras de nenhum idioma, fazer análise de caracteres
-  if (ptCount === 0 && enCount === 0) {
-    // Verificar caracteres específicos do português
-    const ptChars = /[àáâãèéêìíîòóôõùúûçñ]/gi;
-    const ptCharMatches = textLower.match(ptChars);
-    
-    if (ptCharMatches && ptCharMatches.length > text.length * 0.1) {
-      return 'pt';
-    }
-    return 'en';
-  }
-
-  return ptCount >= enCount ? 'pt' : 'en';
-}
-
-// Função de fallback para tradução
-function simulateTranslation(text) {
-  if (!text) return '';
-  
-  const translationMap = {
-    'hello': 'olá',
-    'hi': 'oi',
-    'good morning': 'bom dia',
-    'good afternoon': 'boa tarde', 
-    'good evening': 'boa noite',
-    'good night': 'boa noite',
-    'how are you': 'como você está',
-    'thank you': 'obrigado',
-    'thanks': 'obrigado',
-    'please': 'por favor',
-    'sorry': 'desculpe',
-    'excuse me': 'com licença',
-    'yes': 'sim',
-    'no': 'não',
-    'maybe': 'talvez',
-    'what': 'o que',
-    'when': 'quando',
-    'where': 'onde',
-    'why': 'por que',
-    'how': 'como',
-    'who': 'quem',
-    'i love you': 'eu te amo',
-    'goodbye': 'adeus',
-    'see you later': 'até mais tarde',
-    'see you soon': 'até logo',
-    'what is your name': 'qual é o seu nome',
-    'my name is': 'meu nome é',
-    'where are you from': 'de onde você é',
-    'how old are you': 'quantos anos você tem',
-    'i dont understand': 'não entendo',
-    'can you help me': 'pode me ajudar',
-    'how much': 'quanto',
-    'where is': 'onde está',
-    'i need': 'eu preciso',
-    'i want': 'eu quero',
-    'i like': 'eu gosto',
-    'i dont like': 'eu não gosto'
-  };
-
-  let translated = text.toLowerCase();
-
-  // Substituir frases completas primeiro
-  for (const [english, portuguese] of Object.entries(translationMap)) {
-    if (translated.includes(english)) {
-      translated = translated.replace(new RegExp(english, 'gi'), portuguese);
-    }
-  }
-
-  // Se nada foi traduzido, adicionar prefixo
-  if (translated === text.toLowerCase()) {
-    return `[Traduzido] ${text}`;
-  }
-
-  return translated.charAt(0).toUpperCase() + translated.slice(1);
-}

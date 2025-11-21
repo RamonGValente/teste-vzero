@@ -39,7 +39,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// Interfaces (mantenha as mesmas interfaces do código anterior)
+// Interfaces
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
@@ -63,7 +63,7 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// CustomAudioPlayer (mantenha o mesmo componente do código anterior)
+// CustomAudioPlayer Component
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
@@ -228,7 +228,7 @@ export default function Messages() {
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
   const [translations, setTranslations] = useState<TranslationState[]>([]);
 
-  // Função de detecção de idioma com fallback robusto
+  // Função melhorada para detectar idioma
   const detectLanguage = async (text: string): Promise<string> => {
     if (!text || text.trim().length === 0) return 'en';
     
@@ -239,13 +239,14 @@ export default function Messages() {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text.substring(0, 500), // Limitar tamanho para evitar problemas
+          text: text.substring(0, 1000),
           type: 'detect'
         })
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
 
       const result = await response.json();
@@ -254,38 +255,45 @@ export default function Messages() {
         return result.data[0].language;
       }
       
-      throw new Error('No language detected');
+      throw new Error('No language detected in response');
     } catch (error) {
-      console.error('Erro na detecção de idioma, usando fallback:', error);
+      console.error('Erro completo na detecção de idioma:', error);
       
-      // Fallback local melhorado
+      // Fallback local aprimorado
       return detectLanguageLocal(text);
     }
   };
 
-  // Detecção local melhorada
+  // Detecção local aprimorada
   const detectLanguageLocal = (text: string): string => {
     const portugueseWords = [
       'o', 'a', 'os', 'as', 'um', 'uma', 'de', 'do', 'da', 'em', 'no', 'na', 
       'é', 'são', 'com', 'que', 'para', 'por', 'não', 'sim', 'olá', 'obrigado',
-      'então', 'como', 'está', 'estou', 'você', 'meu', 'minha', 'bem', 'mal'
+      'então', 'como', 'está', 'estou', 'você', 'meu', 'minha', 'bem', 'mal',
+      'hoje', 'ontem', 'amanhã', 'agora', 'sempre', 'nunca', 'muito', 'pouco',
+      'grande', 'pequeno', 'bom', 'mau', 'feliz', 'triste', 'simples', 'complexo'
     ];
     
     const englishWords = [
       'the', 'a', 'an', 'of', 'in', 'on', 'at', 'to', 'for', 'is', 'are', 'with',
-      'and', 'but', 'or', 'hello', 'thank', 'you', 'yes', 'no', 'how', 'what'
+      'and', 'but', 'or', 'hello', 'thank', 'you', 'yes', 'no', 'how', 'what',
+      'when', 'where', 'why', 'who', 'which', 'this', 'that', 'these', 'those',
+      'my', 'your', 'his', 'her', 'our', 'their', 'very', 'too', 'so', 'well',
+      'good', 'bad', 'happy', 'sad', 'simple', 'complex', 'big', 'small'
     ];
 
     const textLower = text.toLowerCase();
     let ptCount = 0;
     let enCount = 0;
 
+    // Contar palavras portuguesas
     portugueseWords.forEach(word => {
       const regex = new RegExp(`\\b${word}\\b`, 'gi');
       const matches = textLower.match(regex);
       if (matches) ptCount += matches.length;
     });
 
+    // Contar palavras inglesas
     englishWords.forEach(word => {
       const regex = new RegExp(`\\b${word}\\b`, 'gi');
       const matches = textLower.match(regex);
@@ -297,108 +305,69 @@ export default function Messages() {
     const ptCharMatches = textLower.match(ptChars);
     
     if (ptCharMatches && ptCharMatches.length > 0) {
-      ptCount += ptCharMatches.length;
+      ptCount += ptCharMatches.length * 2; // Dar peso extra para caracteres especiais
     }
 
+    // Verificar padrões típicos do inglês
+    const englishPatterns = /\b(ing|ed|tion|ment|ness|able|ible)\b/gi;
+    const enPatternMatches = textLower.match(englishPatterns);
+    if (enPatternMatches) {
+      enCount += enPatternMatches.length;
+    }
+
+    console.log(`Detecção local: PT=${ptCount}, EN=${enCount}`);
+    
     return ptCount >= enCount ? 'pt' : 'en';
   };
 
-  // Função de tradução com fallback
+  // Função principal de tradução usando apenas a API
   const translateText = async (text: string, targetLang: string = 'pt'): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     
     try {
+      console.log('Iniciando tradução via API para texto:', text.substring(0, 50));
+      
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          text: text.substring(0, 1000), // Limitar tamanho
+          text: text.substring(0, 2000), // Aumentar limite para textos maiores
           targetLang,
           type: 'translate'
         })
       });
 
       if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
 
       const result = await response.json();
       
-      if (result.success) {
-        return result.data.translatedText || text;
+      if (result.success && result.data && result.data.translatedText) {
+        console.log('Tradução bem-sucedida via API');
+        return result.data.translatedText;
       }
       
-      throw new Error(result.error || 'Translation failed');
+      throw new Error(result.error || 'No translation in response');
     } catch (error) {
-      console.error('Erro na tradução, usando fallback local:', error);
-      
-      // Fallback local
-      return translateTextLocal(text);
+      console.error('Erro completo na tradução via API:', error);
+      throw error; // Propagar o erro para ser tratado no handleTranslate
     }
-  };
-
-  // Tradução local melhorada
-  const translateTextLocal = (text: string): string => {
-    const translationMap: { [key: string]: string } = {
-      'hello': 'olá',
-      'hi': 'oi',
-      'good morning': 'bom dia',
-      'good afternoon': 'boa tarde',
-      'good evening': 'boa noite',
-      'good night': 'boa noite',
-      'how are you': 'como você está',
-      'thank you': 'obrigado',
-      'thanks': 'obrigado',
-      'please': 'por favor',
-      'sorry': 'desculpe',
-      'excuse me': 'com licença',
-      'yes': 'sim',
-      'no': 'não',
-      'maybe': 'talvez',
-      'what': 'o que',
-      'when': 'quando',
-      'where': 'onde',
-      'why': 'por que',
-      'how': 'como',
-      'who': 'quem',
-      'i love you': 'eu te amo',
-      'goodbye': 'adeus',
-      'see you later': 'até mais tarde',
-      'see you soon': 'até logo',
-      'what is your name': 'qual é o seu nome',
-      'my name is': 'meu nome é',
-      'where are you from': 'de onde você é',
-      'how old are you': 'quantos anos você tem',
-      'i dont understand': 'não entendo',
-      'can you help me': 'pode me ajudar',
-      'how much': 'quanto',
-      'where is': 'onde está',
-      'i need': 'eu preciso',
-      'i want': 'eu quero',
-      'i like': 'eu gosto',
-      'i dont like': 'eu não gosto'
-    };
-
-    const textLower = text.toLowerCase();
-    let translated = text;
-
-    // Ordenar por tamanho para substituir frases maiores primeiro
-    const sortedEntries = Object.entries(translationMap).sort((a, b) => b[0].length - a[0].length);
-
-    for (const [english, portuguese] of sortedEntries) {
-      if (textLower.includes(english)) {
-        translated = translated.replace(new RegExp(english, 'gi'), portuguese);
-      }
-    }
-
-    return translated !== text ? translated : `[Traduzido] ${text}`;
   };
 
   // Função principal de tradução
   const handleTranslate = async (messageId: string, text: string) => {
-    if (!text || text.trim().length === 0) return;
+    if (!text || text.trim().length === 0) {
+      toast({
+        title: "Texto vazio",
+        description: "Não há texto para traduzir.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
     
@@ -410,9 +379,14 @@ export default function Messages() {
             : t
         )
       );
+      toast({
+        title: "Mostrando original",
+        description: "Texto original restaurado.",
+      });
       return;
     }
 
+    // Marcar como carregando
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
@@ -432,7 +406,9 @@ export default function Messages() {
     });
 
     try {
+      // Primeiro detectar o idioma
       const detectedLang = await detectLanguage(text);
+      console.log('Idioma detectado:', detectedLang);
       
       if (detectedLang === 'pt') {
         toast({
@@ -446,6 +422,8 @@ export default function Messages() {
         return;
       }
 
+      // Traduzir usando a API
+      console.log('Solicitando tradução para português...');
       const translatedText = await translateText(text, 'pt');
       
       setTranslations(prev => 
@@ -462,36 +440,35 @@ export default function Messages() {
       );
 
       toast({
-        title: "Texto traduzido",
-        description: "O texto foi traduzido para português.",
+        title: "Texto traduzido com sucesso!",
+        description: "Tradução realizada pela API.",
       });
 
     } catch (error) {
-      console.error('Erro completo na tradução:', error);
+      console.error('Erro completo no processo de tradução:', error);
+      
+      let errorMessage = "Não foi possível traduzir o texto.";
+      
+      if (error.message.includes('502') || error.message.includes('503')) {
+        errorMessage = "Serviço de tradução temporariamente indisponível. Tente novamente em alguns instantes.";
+      } else if (error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        errorMessage = "A tradução demorou muito. Tente novamente.";
+      }
+      
       toast({
-        title: "Tradução usando fallback",
-        description: "Usando tradução básica local.",
-        variant: "default",
+        title: "Erro na tradução",
+        description: errorMessage,
+        variant: "destructive",
       });
       
-      // Ainda assim tenta usar o fallback local
-      const fallbackTranslation = translateTextLocal(text);
+      // Remover o estado de loading
       setTranslations(prev => 
-        prev.map(t => 
-          t.messageId === messageId 
-            ? { 
-                ...t, 
-                translatedText: fallbackTranslation, 
-                isTranslated: true, 
-                isLoading: false 
-              }
-            : t
-        )
+        prev.filter(t => t.messageId !== messageId)
       );
     }
   };
 
-  // Resto do código permanece igual...
+  // Obter estado da tradução para uma mensagem
   const getTranslationState = (messageId: string) => {
     return translations.find(t => t.messageId === messageId);
   };
@@ -521,7 +498,7 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // Query para perfil do usuário
+  // 1. Perfil do Usuário
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     enabled: !!user,
@@ -535,7 +512,7 @@ export default function Messages() {
     },
   });
 
-  // Query para conversas
+  // 2. Conversas
   const { data: rawConversations, refetch: refetchConversations, isLoading: isLoadingConversations } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
@@ -556,7 +533,7 @@ export default function Messages() {
     },
   });
 
-  // Processamento de conversas
+  // 3. Processamento de conversas
   const processedConversations = useMemo(() => {
     if (!rawConversations || !user) return [];
 
@@ -587,7 +564,7 @@ export default function Messages() {
     return Array.from(uniqueMap.values()).sort((a, b) => b.sortTime - a.sortTime);
   }, [rawConversations, user]);
 
-  // Query para mensagens
+  // 4. Mensagens da Conversa Atual
   const { data: messages, refetch: refetchMessages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
     enabled: !!selectedConversation,
@@ -634,7 +611,7 @@ export default function Messages() {
     });
   }, []);
 
-  // Efeito para inicializar timers
+  // Efeito para inicializar timers para mensagens não do usuário
   useEffect(() => {
     if (!messages || !user) return;
 
@@ -657,7 +634,7 @@ export default function Messages() {
     });
   }, [messages, user, deletedMessages, messageTimers, getMessageType]);
 
-  // Restante das funções (archiveMessage, deleteMessages, etc.) permanecem iguais
+  // Função para arquivar mensagem
   const archiveMessage = async (messageId: string) => {
     try {
       const { data: originalMessage, error: fetchError } = await supabase
@@ -689,6 +666,7 @@ export default function Messages() {
     }
   };
 
+  // Função para excluir mensagens
   const deleteMessages = async (messageIds: string[]) => {
     try {
       const archivePromises = messageIds.map(messageId => archiveMessage(messageId));
@@ -797,6 +775,7 @@ export default function Messages() {
     return () => clearInterval(interval);
   }, [messages]);
 
+  // Função auxiliar
   const getMessageState = (messageId: string) => {
     return messageTimers.find(timer => timer.messageId === messageId);
   };
@@ -807,7 +786,7 @@ export default function Messages() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Realtime subscription
+  // Realtime
   useEffect(() => {
     if (!user) return;
     
@@ -962,7 +941,6 @@ export default function Messages() {
   const showSidebar = !isMobile || (isMobile && !selectedConversation);
   const showChat = !isMobile || (isMobile && selectedConversation);
 
-  // Renderização do componente (mantenha igual ao código anterior)
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
       
