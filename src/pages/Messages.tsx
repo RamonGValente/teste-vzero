@@ -43,6 +43,9 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
+// --- Constante de tempo mínimo de carregamento ---
+const MIN_LOAD_TIME = 500; // 500ms para evitar o flicker
+
 // --- Interfaces ---
 interface MessageTimer {
   messageId: string;
@@ -262,7 +265,7 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO (COM SELETOR DE IDIOMA)
+  // FUNÇÕES DE TRADUÇÃO (COM TEMPO MÍNIMO DE CARREGAMENTO)
   // ====================================================================
 
   const translateText = async (text: string, targetLang: string): Promise<string> => {
@@ -329,8 +332,17 @@ export default function Messages() {
       }];
     });
 
+    const startTime = Date.now(); // NOVO: Inicia a contagem de tempo
+    let translatedText = '';
+
     try {
-      const translatedText = await translateText(text, targetLang);
+      translatedText = await translateText(text, targetLang);
+      
+      const elapsedTime = Date.now() - startTime;
+      // Garante o tempo mínimo de carregamento para evitar o flicker
+      if (elapsedTime < MIN_LOAD_TIME) {
+        await new Promise(resolve => setTimeout(resolve, MIN_LOAD_TIME - elapsedTime));
+      }
       
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
           ...t, 
@@ -340,15 +352,22 @@ export default function Messages() {
           targetLang
         } : t
       ));
+      
       // FECHA O MODAL APENAS AQUI, APÓS O SUCESSO.
       setModalToTranslate(null); 
     } catch (error) {
       toast({ title: "Erro de Tradução", description: "Não foi possível traduzir no momento. Tente novamente.", variant: "destructive" });
       
+      const elapsedTime = Date.now() - startTime;
+      // Garante o tempo mínimo de carregamento para evitar o flicker (mesmo em caso de erro)
+      if (elapsedTime < MIN_LOAD_TIME) {
+         await new Promise(resolve => setTimeout(resolve, MIN_LOAD_TIME - elapsedTime));
+      }
+
       // Remove o estado de tradução e loading
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
       
-      // FECHA O MODAL TAMBÉM NO ERRO
+      // FECHA O MODAL APÓS O TEMPO MÍNIMO
       setModalToTranslate(null); 
     }
   };
@@ -414,7 +433,6 @@ export default function Messages() {
           )}
           
           {/* BARRA DE ROLAGEM CUSTOMIZADA APLICADA AQUI */}
-          {/* A lista de idiomas é a rolagem no dropdown que o usuário mencionou */}
           <div className="grid grid-cols-2 gap-2 max-h-[300px] overflow-y-auto pr-2 custom-scrollbar-primary">
             {AVAILABLE_LANGUAGES.map((lang) => (
               <button
