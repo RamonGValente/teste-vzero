@@ -21,6 +21,9 @@ import {
   Pause,
   Languages,
   Globe,
+  Check,
+  ChevronDown,
+  X
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -55,7 +58,7 @@ interface TranslationState {
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
-  detectedLang?: string;
+  targetLang: string; // Armazena o idioma para o qual foi traduzido
 }
 
 interface CustomAudioPlayerProps { 
@@ -64,6 +67,16 @@ interface CustomAudioPlayerProps {
   onPlay: () => void;
   isOwn: boolean; 
 }
+
+// Lista de idiomas disponíveis
+const AVAILABLE_LANGUAGES = [
+  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷' },
+  { code: 'en', name: 'Inglês', flag: '🇺🇸' },
+  { code: 'es', name: 'Espanhol', flag: '🇪🇸' },
+  { code: 'fr', name: 'Francês', flag: '🇫🇷' },
+  { code: 'de', name: 'Alemão', flag: '🇩🇪' },
+  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
+];
 
 // --- CustomAudioPlayer Component ---
 const CustomAudioPlayer = ({ 
@@ -211,7 +224,9 @@ export default function Messages() {
 
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
+  
   const [translations, setTranslations] = useState<TranslationState[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null); // Controla qual menu de tradução está aberto
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -221,73 +236,20 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // LÓGICA INTELIGENTE DE DETECÇÃO E TRADUÇÃO
+  // FUNÇÕES DE TRADUÇÃO (COM SELETOR DE IDIOMA)
   // ====================================================================
 
-  // Função para decidir se mostra o botão de traduzir
-  // Se retornar FALSE, o botão NÃO aparece.
-  const shouldShowTranslateButton = (text: string) => {
-    if (!text || text.trim().length < 2) return false; // Textos muito curtos: não traduz
-    
-    const lower = text.toLowerCase();
-
-    // 1. PONTUAÇÃO DE PORTUGUÊS
-    // Palavras que, se existirem, indicam forte chance de ser PT
-    const ptIndicators = [
-      'não', 'nao', 'é', 'eh', 'que', 'q', 'você', 'voce', 'vc', 'o', 'a', 'os', 'as', 
-      'de', 'do', 'da', 'em', 'um', 'uma', 'para', 'pra', 'com', 'por', 'meu', 'minha', 
-      'tá', 'ta', 'está', 'sim', 'oi', 'olá', 'tudo', 'bem', 'bom', 'boa', 'obrigado', 
-      'obrigada', 'vlw', 'tbm', 'também', 'kkk', 'rs', 'gente', 'fala', 'aí', 'eai',
-      'quando', 'quem', 'onde', 'hoje', 'amanhã', 'agora', 'já', 'ja', 'foi', 'fui'
-    ];
-    
-    // Caracteres exclusivos/comuns PT
-    const ptChars = /[çãõáéíóúâêôà]/;
-    
-    let ptScore = 0;
-    if (ptChars.test(lower)) ptScore += 5; // Acentos dão peso alto
-    
-    ptIndicators.forEach(word => {
-       if (new RegExp(`\\b${word}\\b`, 'i').test(lower)) ptScore += 1;
-    });
-    
-    // Suffixos comuns PT (-ção, -dade, -mente, -inho)
-    if (/ção\b|dade\b|mente\b|inho\b|inha\b|ões\b|ão\b/.test(lower)) ptScore += 2;
-
-
-    // 2. PONTUAÇÃO DE INGLÊS (Estrangeiro)
-    const enIndicators = [
-      'the', 'is', 'are', 'you', 'your', 'we', 'they', 'what', 'where', 'when', 'why', 
-      'who', 'how', 'this', 'that', 'these', 'those', 'have', 'has', 'had', 'will', 
-      'can', 'not', 'but', 'and', 'or', 'if', 'so', 'because', 'hello', 'hi', 'hey',
-      'thanks', 'thank', 'good', 'morning', 'night', 'please', 'sorry', 'love', 'like'
-    ];
-    
-    let enScore = 0;
-    enIndicators.forEach(word => {
-       if (new RegExp(`\\b${word}\\b`, 'i').test(lower)) enScore += 1;
-    });
-    // Suffixos comuns EN (-ing, -tion, -ly)
-    if (/ing\b|tion\b|ly\b|ed\b/.test(lower)) enScore += 1;
-
-    // 3. DECISÃO
-    // Se tivermos mais evidências de EN do que PT, mostramos o botão.
-    // Se for empate ou zero a zero, assumimos PT (padrão) e escondemos o botão.
-    if (ptScore > 0 && ptScore >= enScore) return false; // É PT
-    if (enScore > ptScore) return true; // É EN
-    
-    // Caso neutro (ex: "Banana", "OK", "No"): Assume PT e esconde botão
-    return false;
-  };
-
-  // Tradução via API
-  const translateText = async (text: string, targetLang: string = 'pt'): Promise<string> => {
+  const translateText = async (text: string, targetLang: string): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
     try {
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text: text.substring(0, 2000), targetLang, type: 'translate' })
+        body: JSON.stringify({ 
+          text: text.substring(0, 2000), 
+          targetLang, 
+          type: 'translate' 
+        })
       });
       if (!response.ok) throw new Error(`Status: ${response.status}`);
       const result = await response.json();
@@ -301,44 +263,67 @@ export default function Messages() {
     }
   };
 
-  const handleTranslate = async (messageId: string, text: string) => {
+  const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
+    // Fecha o menu
+    setOpenMenuId(null);
+
     const existingTranslation = translations.find(t => t.messageId === messageId);
-    
-    // Toggle
-    if (existingTranslation?.isTranslated) {
-      setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
-      return;
-    }
-    if (existingTranslation?.translatedText && !existingTranslation.isTranslated) {
-      setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
+
+    // Se o usuário clicou em "Ver Original" (passamos targetLang = 'original')
+    if (targetLang === 'original') {
+      if (existingTranslation) {
+        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
+      }
       return;
     }
 
-    // Loading
+    // Se já estiver traduzido para o mesmo idioma, apenas mostra
+    if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
+       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
+       return;
+    }
+
+    // Inicia Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
-      if (existing) return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true } : t);
-      return [...prev, { messageId, originalText: text, translatedText: '', isTranslated: false, isLoading: true }];
+      if (existing) {
+         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang } : t);
+      }
+      return [...prev, { 
+        messageId, 
+        originalText: text, 
+        translatedText: '', 
+        isTranslated: false, 
+        isLoading: true, 
+        targetLang 
+      }];
     });
 
     try {
-      const translatedText = await translateText(text, 'pt');
+      const translatedText = await translateText(text, targetLang);
       
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
           ...t, 
           translatedText, 
           isTranslated: true, 
           isLoading: false,
-          detectedLang: 'estrangeiro' 
+          targetLang
         } : t
       ));
     } catch (error) {
-      toast({ title: "Erro", description: "Não foi possível traduzir.", variant: "destructive" });
+      toast({ title: "Erro", description: "Não foi possível traduzir no momento.", variant: "destructive" });
       setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
 
   const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
+
+  // Fecha menus ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenuId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
 
   // ====================================================================
 
@@ -815,27 +800,87 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* LOGICA DE EXIBIÇÃO DO BOTÃO ATUALIZADA */}
-                          {!isOwn && msg.content && shouldShowTranslateButton(msg.content) && (
-                            <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1">
+                          {/* BOTÃO DE TRADUÇÃO E MENU DE IDIOMAS */}
+                          {!isOwn && msg.content && (
+                            <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
+                              
+                              {/* Informação de hora e idioma traduzido */}
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                {translationState?.isTranslated && translationState.detectedLang && <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground"><Globe className="h-2 w-2"/> {translationState.detectedLang.toUpperCase()}</span>}
+                                {translationState?.isTranslated && (
+                                   <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground font-medium">
+                                     <Globe className="h-2 w-2"/> 
+                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'} 
+                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.name.split(' ')[0].toUpperCase()}
+                                   </span>
+                                )}
                               </div>
                               
-                              <Button variant="ghost" size="sm" className={cn("h-6 px-2 text-[10px] opacity-50 hover:opacity-100 transition-all", translationState?.isLoading && "opacity-100")} onClick={() => handleTranslate(msg.id, msg.content)} disabled={translationState?.isLoading}>
-                                {translationState?.isLoading ? <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</> : translationState?.isTranslated ? <><Languages className="h-3 w-3 mr-1" />Original</> : <><Languages className="h-3 w-3 mr-1" />Traduzir</>}
+                              {/* Botão que abre o menu */}
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className={cn("h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", translationState?.isLoading && "opacity-100")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(openMenuId === msg.id ? null : msg.id);
+                                }}
+                                disabled={translationState?.isLoading}
+                              >
+                                {translationState?.isLoading ? (
+                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
+                                ) : (
+                                  <>
+                                    <Globe className="h-3 w-3 mr-1" /> 
+                                    {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
+                                    <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
+                                  </>
+                                )}
                               </Button>
+
+                              {/* MENU SUSPENSO DE IDIOMAS */}
+                              {openMenuId === msg.id && (
+                                <div 
+                                  className="absolute bottom-8 right-0 bg-popover border shadow-xl rounded-md z-50 min-w-[160px] animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="p-1">
+                                    {translationState?.isTranslated && (
+                                      <button
+                                        className="w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center gap-2 font-semibold text-primary"
+                                        onClick={() => handleTranslate(msg.id, msg.content, 'original')}
+                                      >
+                                        <X className="h-3 w-3" /> Ver Original
+                                      </button>
+                                    )}
+                                    
+                                    <div className="h-[1px] bg-border my-1" />
+
+                                    {AVAILABLE_LANGUAGES.map((lang) => (
+                                      <button
+                                        key={lang.code}
+                                        className={cn(
+                                          "w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center justify-between",
+                                          translationState?.targetLang === lang.code && translationState.isTranslated && "bg-accent/50"
+                                        )}
+                                        onClick={() => handleTranslate(msg.id, msg.content, lang.code)}
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <span>{lang.flag}</span> {lang.name}
+                                        </span>
+                                        {translationState?.targetLang === lang.code && translationState.isTranslated && (
+                                          <Check className="h-3 w-3 text-primary" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
                             </div>
                           )}
 
-                          {/* Caso não tenha botão (PT ou Própria), mostra apenas hora */}
-                          {(isOwn || (msg.content && !shouldShowTranslateButton(msg.content))) && (
-                             <span className={cn("text-[10px] opacity-60 block text-right mt-1", !isOwn && "text-left")}>
-                               {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                             </span>
-                          )}
-
+                          {isOwn && <span className="text-[10px] opacity-60 block text-right mt-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
                         </div>
                       )}
                     </div>
