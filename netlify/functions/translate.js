@@ -1,7 +1,7 @@
 // netlify/functions/translate.js
-import fetch from 'node-fetch';
+const fetch = require('node-fetch');
 
-export const handler = async (event, context) => {
+exports.handler = async (event, context) => {
   // Habilitar CORS
   const headers = {
     'Access-Control-Allow-Origin': '*',
