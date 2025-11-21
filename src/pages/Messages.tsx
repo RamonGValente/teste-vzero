@@ -19,7 +19,11 @@ import {
   Clock,
   Play,
   Pause,
-  Languages, // Ícone de Idiomas para o botão de tradução
+  Languages,
+  Globe,
+  Check,
+  ChevronDown,
+  X
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -39,7 +43,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// Interfaces
+// --- Interfaces ---
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
@@ -54,6 +58,7 @@ interface TranslationState {
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
+  targetLang: string; // Armazena o idioma para o qual foi traduzido
 }
 
 interface CustomAudioPlayerProps { 
@@ -63,22 +68,17 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// Tipo de Linguagem Suportada (Adicionado mais opções)
-type SupportedLang = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it' | 'ru' | 'zh';
-
-// Lista de Linguagens para o Seletor
-const supportedLanguages: { code: SupportedLang, name: string }[] = [
-    { code: 'pt', name: 'Português' },
-    { code: 'en', name: 'Inglês' },
-    { code: 'es', name: 'Espanhol' },
-    { code: 'fr', name: 'Francês' },
-    { code: 'de', name: 'Alemão' },
-    { code: 'it', name: 'Italiano' },
-    { code: 'ru', name: 'Russo' },
-    { code: 'zh', name: 'Chinês' },
+// Lista de idiomas disponíveis
+const AVAILABLE_LANGUAGES = [
+  { code: 'pt', name: 'Português (BR)', flag: '🇧🇷' },
+  { code: 'en', name: 'Inglês', flag: '🇺🇸' },
+  { code: 'es', name: 'Espanhol', flag: '🇪🇸' },
+  { code: 'fr', name: 'Francês', flag: '🇫🇷' },
+  { code: 'de', name: 'Alemão', flag: '🇩🇪' },
+  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
 ];
 
-// CustomAudioPlayer Component
+// --- CustomAudioPlayer Component ---
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
@@ -94,7 +94,6 @@ const CustomAudioPlayer = ({
 
   const handlePlayPause = async () => {
     if (!audioRef.current) return;
-
     try {
       if (isPlaying) {
         audioRef.current.pause();
@@ -102,7 +101,6 @@ const CustomAudioPlayer = ({
       } else {
         await audioRef.current.play();
         setIsPlaying(true);
-        
         if (!hasTriggeredOnPlay.current) {
           hasTriggeredOnPlay.current = true;
           onPlay();
@@ -138,7 +136,7 @@ const CustomAudioPlayer = ({
     }
   };
 
-  const formatTime = (seconds: number) => {
+  const formatTimePlayer = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -147,11 +145,9 @@ const CustomAudioPlayer = ({
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current || isNaN(duration) || duration === 0) return;
-    
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
-    
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(percent * 100);
@@ -159,15 +155,12 @@ const CustomAudioPlayer = ({
 
   const playerClasses = cn(
     "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 bg-background border",
-    isOwn
-      ? "bg-primary text-primary-foreground"
-      : "bg-card border text-foreground/80",
+    isOwn ? "bg-primary text-primary-foreground" : "bg-card border text-foreground/80",
     className
   );
 
   const buttonVariant = isOwn ? "secondary" : "primary"; 
   const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
-  const waveformBg = isOwn ? "bg-white/30" : "bg-muted/60";
   const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
   const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
   const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
@@ -186,9 +179,7 @@ const CustomAudioPlayer = ({
         <source src={audioUrl} type="audio/webm" />
         <source src={audioUrl} type="audio/mp3" />
         <source src={audioUrl} type="audio/wav" />
-        Seu navegador não suporta o elemento de áudio.
       </audio>
-      
       <Button
         variant={buttonVariant}
         size="icon"
@@ -197,33 +188,25 @@ const CustomAudioPlayer = ({
       >
         {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current translate-x-[1px]" />}
       </Button>
-
       <div className="flex-1 min-w-0 space-y-1 pr-2">
         <div 
           className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40"
           onClick={handleSeek}
           title="Clique para buscar"
         >
-          <div
-            className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)}
-            style={{ width: `${progress}%` }}
-          />
-          
-          <div
-            className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)}
-            style={{ left: `calc(${progress}% - 8px)` }} 
-          />
+          <div className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)} style={{ width: `${progress}%` }} />
+          <div className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)} style={{ left: `calc(${progress}% - 8px)` }} />
         </div>
-        
         <div className="flex justify-between text-xs font-medium opacity-80">
-          <span className={timeColorPrimary}>{formatTime(currentTime)}</span> 
-          <span className={timeColorSecondary}>{formatTime(duration)}</span> 
+          <span className={timeColorPrimary}>{formatTimePlayer(currentTime)}</span> 
+          <span className={timeColorSecondary}>{formatTimePlayer(duration)}</span> 
         </div>
       </div>
     </div>
   );
 };
 
+// --- Componente Principal Messages ---
 export default function Messages() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -233,9 +216,6 @@ export default function Messages() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"chats" | "contacts">("chats");
   const [searchQuery, setSearchQuery] = useState("");
-
-  // Estado para a linguagem de tradução alvo
-  const [translationTargetLang, setTranslationTargetLang] = useState<SupportedLang>('pt');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -244,206 +224,108 @@ export default function Messages() {
 
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
+  
   const [translations, setTranslations] = useState<TranslationState[]>([]);
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null); // Controla qual menu de tradução está aberto
 
-  // Função para detectar idioma
-  const detectLanguage = async (text: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return 'en';
-    
-    try {
-      const response = await fetch('/.netlify/functions/translate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          text: text.substring(0, 1000),
-          type: 'detect'
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
-      }
-
-      const result = await response.json();
-      
-      if (result.success && result.data && result.data.length > 0) {
-        return result.data[0].language;
-      }
-      
-      throw new Error('No language detected in response');
-    } catch (error) {
-      console.error('Erro completo na detecção de idioma (API):', error);
-      return 'en'; // Fallback em caso de falha da API
-    }
+  const formatTime = (seconds: number) => {
+    if (isNaN(seconds)) return "0:00";
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // Função principal de tradução usando a API
-  const translateText = async (text: string, targetLang: SupportedLang): Promise<string> => {
+  // ====================================================================
+  // FUNÇÕES DE TRADUÇÃO (COM SELETOR DE IDIOMA)
+  // ====================================================================
+
+  const translateText = async (text: string, targetLang: string): Promise<string> => {
     if (!text || text.trim().length === 0) return text;
-    
     try {
-      console.log('Iniciando tradução via API para texto:', text.substring(0, 50));
-      
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ 
           text: text.substring(0, 2000), 
-          targetLang,
-          type: 'translate'
+          targetLang, 
+          type: 'translate' 
         })
       });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
-      }
-
+      if (!response.ok) throw new Error(`Status: ${response.status}`);
       const result = await response.json();
-      
       if (result.success && result.data && result.data.translatedText) {
-        console.log('Tradução bem-sucedida via API');
         return result.data.translatedText;
       }
-      
-      throw new Error(result.error || 'No translation in response');
+      throw new Error('Erro na resposta da API');
     } catch (error) {
-      console.error('Erro completo na tradução via API:', error);
-      throw error; 
+      console.error(error);
+      throw error;
     }
   };
 
-  // Função principal de tradução (Lógica melhorada)
-  const handleTranslate = async (messageId: string, text: string) => {
-    if (!text || text.trim().length === 0) {
-      toast({
-        title: "Texto vazio",
-        description: "Não há texto para traduzir.",
-        variant: "destructive",
-      });
-      return;
-    }
+  const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
+    // Fecha o menu
+    setOpenMenuId(null);
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
-    
-    // Lógica para reverter para o texto original
-    if (existingTranslation?.isTranslated) {
-      setTranslations(prev => 
-        prev.map(t => 
-          t.messageId === messageId 
-            ? { ...t, isTranslated: false }
-            : t
-        )
-      );
-      toast({
-        title: "Mostrando original",
-        description: "Texto original restaurado.",
-      });
+
+    // Se o usuário clicou em "Ver Original" (passamos targetLang = 'original')
+    if (targetLang === 'original') {
+      if (existingTranslation) {
+        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
+      }
       return;
     }
 
-    // Marcar como carregando
+    // Se já estiver traduzido para o mesmo idioma, apenas mostra
+    if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
+       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true } : t));
+       return;
+    }
+
+    // Inicia Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
-        return prev.map(t => 
-          t.messageId === messageId 
-            ? { ...t, isLoading: true }
-            : t
-        );
+         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang } : t);
       }
-      return [...prev, {
-        messageId,
-        originalText: text,
-        translatedText: '',
-        isTranslated: false,
-        isLoading: true
+      return [...prev, { 
+        messageId, 
+        originalText: text, 
+        translatedText: '', 
+        isTranslated: false, 
+        isLoading: true, 
+        targetLang 
       }];
     });
 
     try {
-      const detectedLang = await detectLanguage(text);
-      console.log('Idioma detectado:', detectedLang);
+      const translatedText = await translateText(text, targetLang);
       
-      let finalTargetLang = translationTargetLang;
-      let targetLangName = supportedLanguages.find(l => l.code === translationTargetLang)?.name || 'o alvo selecionado';
-      
-      // Lista de fallbacks: se o texto já estiver no idioma alvo, tentar traduzir para um alternativo.
-      const fallbackLangs = supportedLanguages.map(l => l.code).filter(c => c !== detectedLang);
-      let alternativeLang = fallbackLangs.find(c => c !== finalTargetLang) || (finalTargetLang === 'en' ? 'pt' : 'en'); // Último recurso
-
-      // Se o idioma detectado for o idioma alvo, usar o alternativo.
-      if (detectedLang === translationTargetLang) {
-        finalTargetLang = alternativeLang as SupportedLang;
-        const fallbackName = supportedLanguages.find(l => l.code === finalTargetLang)?.name || 'um alternativo';
-
-        toast({
-          title: `Texto já está em ${targetLangName}`,
-          description: `Traduzindo para ${fallbackName} (Alternativa).`,
-        });
-
-      } else {
-        toast({
-          title: "Tradução Solicitada",
-          description: `Traduzindo de ${detectedLang.toUpperCase()} para ${targetLangName}...`,
-        });
-      }
-
-      // Traduzir usando a API
-      console.log(`Solicitando tradução para ${finalTargetLang}...`);
-      const translatedText = await translateText(text, finalTargetLang);
-      
-      setTranslations(prev => 
-        prev.map(t => 
-          t.messageId === messageId 
-            ? { 
-                ...t, 
-                translatedText, 
-                isTranslated: true, 
-                isLoading: false 
-              }
-            : t
-        )
-      );
-
-      const finalTranslatedName = supportedLanguages.find(l => l.code === finalTargetLang)?.name || 'o alvo selecionado';
-
-      toast({
-        title: "Texto traduzido com sucesso!",
-        description: `Tradução realizada para ${finalTranslatedName}.`,
-      });
-
+      setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
+          ...t, 
+          translatedText, 
+          isTranslated: true, 
+          isLoading: false,
+          targetLang
+        } : t
+      ));
     } catch (error) {
-      console.error('Erro completo no processo de tradução:', error);
-      
-      let errorMessage = "Não foi possível traduzir o texto. Tente novamente ou verifique a API.";
-      
-      if (error instanceof Error && (error.message.includes('502') || error.message.includes('503') || error.message.includes('TIMEOUT'))) {
-        errorMessage = "Serviço de tradução temporariamente indisponível ou demorou muito. Tente novamente em alguns instantes.";
-      }
-      
-      toast({
-        title: "Erro na tradução",
-        description: errorMessage,
-        variant: "destructive",
-      });
-      
-      // Remover o estado de loading
-      setTranslations(prev => 
-        prev.filter(t => t.messageId !== messageId)
-      );
+      toast({ title: "Erro", description: "Não foi possível traduzir no momento.", variant: "destructive" });
+      setTranslations(prev => prev.filter(t => t.messageId !== messageId));
     }
   };
 
-  // Obter estado da tradução para uma mensagem
-  const getTranslationState = (messageId: string) => {
-    return translations.find(t => t.messageId === messageId);
-  };
+  const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
+
+  // Fecha menus ao clicar fora
+  useEffect(() => {
+    const handleClickOutside = () => setOpenMenuId(null);
+    window.addEventListener('click', handleClickOutside);
+    return () => window.removeEventListener('click', handleClickOutside);
+  }, []);
+
+  // ====================================================================
 
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
@@ -458,9 +340,8 @@ export default function Messages() {
     const el = messagesContainerRef.current;
     if (!el) return;
     const { scrollTop, scrollHeight, clientHeight } = el;
-    const atBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 50;
-    setIsAtBottom(atBottom);
-    setShowScrollButton(!atBottom);
+    setIsAtBottom(Math.abs(scrollHeight - scrollTop - clientHeight) <= 50);
+    setShowScrollButton(Math.abs(scrollHeight - scrollTop - clientHeight) > 50);
   }, []);
 
   useEffect(() => {
@@ -470,93 +351,63 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // 1. Perfil do Usuário
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     enabled: !!user,
     queryFn: async () => {
-      const { data } = await supabase
-        .from("profiles")
-        .select("friend_code")
-        .eq("id", user!.id)
-        .single();
+      const { data } = await supabase.from("profiles").select("friend_code").eq("id", user!.id).single();
       return data;
     },
   });
 
-  // 2. Conversas
   const { data: rawConversations, refetch: refetchConversations, isLoading: isLoadingConversations } = useQuery({
     queryKey: ["conversations"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("conversations")
-        .select(`
-          *,
-          conversation_participants!inner (
-            user_id,
-            profiles (username, avatar_url)
-          ),
-          messages (id, content, created_at, media_urls, user_id)
-        `)
+      const { data, error } = await supabase.from("conversations")
+        .select(`*, conversation_participants!inner(user_id, profiles(username, avatar_url)), messages(id, content, created_at, media_urls, user_id)`)
         .order("created_at", { ascending: false });
-
       if (error) throw error;
       return data;
     },
   });
 
-  // 3. Processamento de conversas
   const processedConversations = useMemo(() => {
     if (!rawConversations || !user) return [];
-
     const uniqueMap = new Map();
-
     rawConversations.forEach((conv) => {
       const lastMsgDate = conv.messages?.[0]?.created_at 
         ? new Date(conv.messages[0].created_at).getTime() 
         : new Date(conv.created_at).getTime();
-      
       const convWithDate = { ...conv, sortTime: lastMsgDate };
-
       if (conv.is_group) {
         uniqueMap.set(conv.id, convWithDate);
       } else {
         const otherParticipant = conv.conversation_participants.find((p: any) => p.user_id !== user.id);
-        const partnerId = otherParticipant?.user_id;
-
-        if (partnerId) {
-          const existing = uniqueMap.get(partnerId);
+        if (otherParticipant?.user_id) {
+          const existing = uniqueMap.get(otherParticipant.user_id);
           if (!existing || lastMsgDate > existing.sortTime) {
-            uniqueMap.set(partnerId, convWithDate);
+            uniqueMap.set(otherParticipant.user_id, convWithDate);
           }
         }
       }
     });
-
     return Array.from(uniqueMap.values()).sort((a, b) => b.sortTime - a.sortTime);
   }, [rawConversations, user]);
 
-  // 4. Mensagens da Conversa Atual
   const { data: messages, refetch: refetchMessages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
     enabled: !!selectedConversation,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("messages")
-        .select(`
-          *,
-          profiles:user_id (username, avatar_url)
-        `)
+      const { data, error } = await supabase.from("messages")
+        .select(`*, profiles:user_id(username, avatar_url)`)
         .eq("conversation_id", selectedConversation)
         .is("deleted_at", null)
         .order("created_at", { ascending: true });
-
       if (error) throw error;
       return data;
     },
   });
 
-  // Função para detectar tipo de mensagem
   const getMessageType = useCallback((msg: any): 'text' | 'audio' | 'media' => {
     if (msg.content) return 'text';
     if (msg.media_urls && msg.media_urls.some((url: string) => 
@@ -565,102 +416,35 @@ export default function Messages() {
     return 'media';
   }, []);
 
-  // Função para iniciar timer de áudio
   const startAudioTimer = useCallback((messageId: string) => {
     setMessageTimers(prev => {
-      const existingTimer = prev.find(timer => timer.messageId === messageId);
-      
-      if (existingTimer) {
-        return prev;
-      }
-      
-      return [...prev, {
-        messageId,
-        timeLeft: 120,
-        status: 'counting',
-        messageType: 'audio'
-      }];
+      if (prev.find(timer => timer.messageId === messageId)) return prev;
+      return [...prev, { messageId, timeLeft: 120, status: 'counting', messageType: 'audio' }];
     });
   }, []);
 
-  // Efeito para inicializar timers para mensagens não do usuário
   useEffect(() => {
     if (!messages || !user) return;
-
     messages.forEach(message => {
       if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
         const messageType = getMessageType(message);
         const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
-        
         if (existingTimer) return;
-
         if (messageType === 'text' || messageType === 'media') {
-          setMessageTimers(prev => [...prev, {
-            messageId: message.id,
-            timeLeft: 120,
-            status: 'counting',
-            messageType
-          }]);
+          setMessageTimers(prev => [...prev, { messageId: message.id, timeLeft: 120, status: 'counting', messageType }]);
         }
       }
     });
   }, [messages, user, deletedMessages, messageTimers, getMessageType]);
 
-  // Função para arquivar mensagem
-  const archiveMessage = async (messageId: string) => {
-    try {
-      const { data: originalMessage, error: fetchError } = await supabase
-        .from('messages')
-        .select('*')
-        .eq('id', messageId)
-        .single();
-
-      if (fetchError) throw fetchError;
-
-      const { error: archiveError } = await supabase
-        .from('temporary_messages_archive')
-        .insert({
-          original_message_id: messageId,
-          conversation_id: originalMessage.conversation_id,
-          user_id: originalMessage.user_id,
-          content: originalMessage.content,
-          media_urls: originalMessage.media_urls,
-          message_type: originalMessage.content ? 'text' : 'media',
-          original_created_at: originalMessage.created_at,
-          deletion_reason: 'timer_expired'
-        });
-
-      if (archiveError) throw archiveError;
-      return true;
-    } catch (error) {
-      console.error('Erro ao arquivar mensagem:', error);
-      return false;
-    }
-  };
-
-  // Função para excluir mensagens
   const deleteMessages = async (messageIds: string[]) => {
     try {
-      const archivePromises = messageIds.map(messageId => archiveMessage(messageId));
-      await Promise.all(archivePromises);
-
-      const { error } = await supabase
-        .from('messages')
-        .update({ 
-          deleted_at: new Date().toISOString(),
-          content: null,
-          media_urls: null
-        })
-        .in('id', messageIds);
-
-      if (error) throw error;
-
+      await supabase.from('messages').update({ deleted_at: new Date().toISOString(), content: null, media_urls: null }).in('id', messageIds);
       setDeletedMessages(prev => {
         const newSet = new Set(prev);
         messageIds.forEach(id => newSet.add(id));
         return newSet;
       });
-
       refetchMessages();
       refetchConversations();
     } catch (error) {
@@ -668,13 +452,11 @@ export default function Messages() {
     }
   };
 
-  // Efeito principal do timer
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageTimers(prev => {
         const updatedTimers: MessageTimer[] = [];
         const messagesToDelete: string[] = [];
-
         prev.forEach(timer => {
           if (timer.timeLeft <= 1) {
             switch (timer.status) {
@@ -687,31 +469,16 @@ export default function Messages() {
                     timeLeft: 120
                   });
                 } else {
-                  updatedTimers.push({
-                    ...timer,
-                    status: 'showingUndoing',
-                    timeLeft: 5
-                  });
+                  updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5 });
                 }
                 break;
-              
               case 'deleting':
-                updatedTimers.push({
-                    ...timer,
-                    status: 'showingUndoing',
-                    timeLeft: 5,
-                    currentText: undefined
-                });
+                updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5, currentText: undefined });
                 break;
-              
               case 'showingUndoing':
                 messagesToDelete.push(timer.messageId);
-                updatedTimers.push({
-                  ...timer,
-                  status: 'deleted'
-                });
+                updatedTimers.push({ ...timer, status: 'deleted' });
                 break;
-              
               default:
                 updatedTimers.push(timer);
             }
@@ -720,97 +487,45 @@ export default function Messages() {
               const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
               const elapsedTime = 120 - timer.timeLeft + 1;
               const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / 120))));
-              const currentText = originalText.slice(0, lettersToKeep);
-              
-              updatedTimers.push({
-                ...timer,
-                timeLeft: timer.timeLeft - 1,
-                currentText
-              });
+              updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1, currentText: originalText.slice(0, lettersToKeep) });
             } else {
-              updatedTimers.push({
-                ...timer,
-                timeLeft: timer.timeLeft - 1
-              });
+              updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1 });
             }
           }
         });
-
-        if (messagesToDelete.length > 0) {
-          deleteMessages(messagesToDelete);
-        }
-
-        return updatedTimers.filter(t => t.status !== 'deleted'); // Não manter timers 'deleted'
+        if (messagesToDelete.length > 0) deleteMessages(messagesToDelete);
+        return updatedTimers;
       });
     }, 1000);
-
     return () => clearInterval(interval);
   }, [messages]);
 
-  // Função auxiliar
-  const getMessageState = (messageId: string) => {
-    return messageTimers.find(timer => timer.messageId === messageId);
-  };
+  const getMessageState = (messageId: string) => messageTimers.find(timer => timer.messageId === messageId);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // Realtime
   useEffect(() => {
     if (!user) return;
-    
-    const channel = supabase
-      .channel("global-messages")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        refetchMessages();
-        refetchConversations();
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
-        refetchConversations();
-      })
+    const channel = supabase.channel("global-messages")
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => { refetchMessages(); refetchConversations(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => { refetchConversations(); })
       .subscribe();
-
     return () => { supabase.removeChannel(channel); };
   }, [refetchMessages, refetchConversations, user]);
 
-  // Marcar como visto
   useEffect(() => {
     if (user && selectedConversation) {
       supabase.from("last_viewed").upsert(
         { user_id: user.id, section: "messages", viewed_at: new Date().toISOString() },
         { onConflict: "user_id,section" }
-      ).then(() => {
-        queryClient.invalidateQueries({ queryKey: ["unread-messages"] });
-      });
+      ).then(() => queryClient.invalidateQueries({ queryKey: ["unread-messages"] }));
     }
   }, [user, selectedConversation, queryClient]);
 
-  // Auto-scroll
-  useEffect(() => {
-    if (messages && isAtBottom) {
-      setTimeout(() => scrollToBottom(false), 100);
-    }
-  }, [messages, isAtBottom, scrollToBottom]);
+  useEffect(() => { if (messages && isAtBottom) setTimeout(() => scrollToBottom(false), 100); }, [messages, isAtBottom, scrollToBottom]);
+  useEffect(() => { if (selectedConversation) setTimeout(() => scrollToBottom(true), 100); }, [selectedConversation, scrollToBottom]);
 
-  useEffect(() => {
-    if (selectedConversation) {
-      setTimeout(() => scrollToBottom(true), 100);
-    }
-  }, [selectedConversation, scrollToBottom]);
-
-  // Handlers
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversation || !user) return;
-    
-    const { data: msg } = await supabase.from("messages").insert({
-      conversation_id: selectedConversation,
-      user_id: user.id,
-      content: text
-    }).select().single();
-
+    const { data: msg } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, content: text }).select().single();
     if (msg) {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(msg.id, "message", text, user.id);
@@ -826,23 +541,13 @@ export default function Messages() {
         const fileExt = file.name.split(".").pop();
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(filePath, file);
-        
+        const { error: uploadError } = await supabase.storage.from("media").upload(filePath, file);
         if (uploadError) throw uploadError;
-        
         const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
         return publicUrl;
       });
-
       const urls = await Promise.all(uploadPromises);
-      await supabase.from("messages").insert({
-        conversation_id: selectedConversation,
-        user_id: user.id,
-        media_urls: urls
-      });
+      await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: urls });
       refetchMessages();
       scrollToBottom(true);
     } catch (e) {
@@ -855,37 +560,25 @@ export default function Messages() {
     try {
       const fileName = `audio_${Date.now()}.webm`;
       const filePath = `${user.id}/${fileName}`;
-
       const { error } = await supabase.storage.from("media").upload(filePath, blob);
       if (error) throw error;
-
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
-      
-      await supabase.from("messages").insert({
-        conversation_id: selectedConversation,
-        user_id: user.id,
-        media_urls: [publicUrl]
-      });
+      await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: [publicUrl] });
       refetchMessages();
       scrollToBottom(true);
     } catch (e) {
-      toast({ title: "Erro ao enviar áudio", variant: "destructive" });
+      toast({ title: "Erro", variant: "destructive" });
     }
   };
 
   const startChatWithFriend = async (friendId: string) => {
     if (!user) return;
-    
-    const existingLocal = processedConversations.find(c => 
-      !c.is_group && c.conversation_participants.some((p: any) => p.user_id === friendId)
-    );
-
+    const existingLocal = processedConversations.find(c => !c.is_group && c.conversation_participants.some((p: any) => p.user_id === friendId));
     if (existingLocal) {
       setSelectedConversation(existingLocal.id);
       setSidebarTab("chats");
       return;
     }
-
     try {
       const { data: newConv } = await supabase.from("conversations").insert({ is_group: false }).select().single();
       if (newConv) {
@@ -898,24 +591,20 @@ export default function Messages() {
         setSidebarTab("chats");
       }
     } catch (error) {
-      console.error("Erro ao criar chat:", error);
-      toast({ title: "Erro ao iniciar conversa", variant: "destructive" });
+      toast({ title: "Erro", variant: "destructive" });
     }
   };
 
-  // Filtro de busca
   const filteredConversations = processedConversations.filter(c => 
     c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.conversation_participants.some((p: any) => p.profiles?.username?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
-  // Lógica de visualização
   const showSidebar = !isMobile || (isMobile && !selectedConversation);
   const showChat = !isMobile || (isMobile && selectedConversation);
 
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
-      
       {/* SIDEBAR */}
       <div className={cn("flex flex-col bg-card border-r transition-all duration-300", showSidebar ? "w-full lg:w-[380px]" : "hidden lg:flex lg:w-[380px]")}>
         <div className="p-4 border-b space-y-4 bg-gradient-to-r from-background to-muted/20">
@@ -924,26 +613,17 @@ export default function Messages() {
               <MessageCircle className="h-6 w-6 text-primary" />
               Mensagens
             </h2>
-            <div className="absolute right-0">
-              <CreatePrivateRoom />
-            </div>
+            <div className="absolute right-0"><CreatePrivateRoom /></div>
           </div>
-
           <Tabs value={sidebarTab} onValueChange={(v) => setSidebarTab(v as any)} className="w-full">
             <TabsList className="w-full grid grid-cols-2">
               <TabsTrigger value="chats">Conversas</TabsTrigger>
               <TabsTrigger value="contacts">Contatos</TabsTrigger>
             </TabsList>
           </Tabs>
-
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input 
-              placeholder={sidebarTab === "chats" ? "Buscar conversas..." : "Buscar contatos..."}
-              className="pl-9 bg-background/50"
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-            />
+            <Input placeholder={sidebarTab === "chats" ? "Buscar conversas..." : "Buscar contatos..."} className="pl-9 bg-background/50" value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)}/>
           </div>
         </div>
 
@@ -951,52 +631,27 @@ export default function Messages() {
           {sidebarTab === "chats" ? (
             <ScrollArea className="h-full">
               {isLoadingConversations ? (
-                 <div className="flex items-center justify-center h-40 text-muted-foreground">
-                   <Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando...
-                 </div>
+                 <div className="flex items-center justify-center h-40 text-muted-foreground"><Loader2 className="h-6 w-6 animate-spin mr-2" /> Carregando...</div>
               ) : filteredConversations && filteredConversations.length > 0 ? (
                 <div className="flex flex-col">
                   {filteredConversations.map((conv) => {
                     const otherParticipant = conv.conversation_participants.find((p:any) => p.user_id !== user?.id);
                     const lastMessage = conv.messages?.[0];
                     const isActive = selectedConversation === conv.id;
-
                     return (
-                      <button
-                        key={conv.id}
-                        onClick={() => setSelectedConversation(conv.id)}
-                        className={cn(
-                          "flex items-center gap-3 p-4 border-b border-muted/40 hover:bg-accent/40 transition-all text-left w-full",
-                          isActive && "bg-accent/60 border-l-4 border-l-primary pl-[13px]"
-                        )}
-                      >
+                      <button key={conv.id} onClick={() => setSelectedConversation(conv.id)} className={cn("flex items-center gap-3 p-4 border-b border-muted/40 hover:bg-accent/40 transition-all text-left w-full", isActive && "bg-accent/60 border-l-4 border-l-primary pl-[13px]")}>
                         <div className="relative">
                           <Avatar className="h-12 w-12 border-2 border-background">
                             <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
-                            <AvatarFallback className="bg-muted font-semibold">
-                              {conv.is_group ? <Users className="h-4 w-4" /> : otherParticipant?.profiles?.username?.[0]?.toUpperCase()}
-                            </AvatarFallback>
+                            <AvatarFallback className="bg-muted font-semibold">{conv.is_group ? <Users className="h-4 w-4" /> : otherParticipant?.profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
                           </Avatar>
                         </div>
-                        
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-baseline mb-1">
-                            <span className="font-semibold truncate text-sm">
-                              {conv.name || otherParticipant?.profiles?.username || "Sala Privada"}
-                            </span>
-                            {lastMessage && (
-                              <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
-                                {new Date(lastMessage.created_at).toLocaleDateString() === new Date().toLocaleDateString() 
-                                  ? new Date(lastMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
-                                  : new Date(lastMessage.created_at).toLocaleDateString()}
-                              </span>
-                            )}
+                            <span className="font-semibold truncate text-sm">{conv.name || otherParticipant?.profiles?.username || "Sala Privada"}</span>
+                            {lastMessage && <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">{new Date(lastMessage.created_at).toLocaleDateString() === new Date().toLocaleDateString() ? new Date(lastMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(lastMessage.created_at).toLocaleDateString()}</span>}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">
-                            {lastMessage?.content 
-                              ? (lastMessage.user_id === user?.id ? "Você: " : "") + lastMessage.content 
-                              : (lastMessage?.media_urls ? "📷 Mídia enviada" : "Toque para conversar")}
-                          </p>
+                          <p className="text-xs text-muted-foreground truncate">{lastMessage?.content ? (lastMessage.user_id === user?.id ? "Você: " : "") + lastMessage.content : (lastMessage?.media_urls ? "📷 Mídia enviada" : "Toque para conversar")}</p>
                         </div>
                       </button>
                     );
@@ -1006,9 +661,7 @@ export default function Messages() {
                 <div className="flex flex-col items-center justify-center h-full p-8 text-center text-muted-foreground opacity-70">
                   <Inbox className="h-12 w-12 mb-2 opacity-20" />
                   <p>Nenhuma conversa encontrada.</p>
-                  <Button variant="link" onClick={() => setSidebarTab("contacts")}>
-                    Iniciar nova conversa
-                  </Button>
+                  <Button variant="link" onClick={() => setSidebarTab("contacts")}>Iniciar nova conversa</Button>
                 </div>
               )}
             </ScrollArea>
@@ -1021,20 +674,12 @@ export default function Messages() {
                     <TabsTrigger value="add" className="text-xs flex-1">Adicionar</TabsTrigger>
                  </TabsList>
                </div>
-               
                <ScrollArea className="flex-1 bg-muted/10">
-                 <TabsContent value="list" className="m-0 p-0">
-                   <ContactsList onStartChat={startChatWithFriend} />
-                 </TabsContent>
-                 <TabsContent value="requests" className="m-0 p-4">
-                   <FriendRequests />
-                 </TabsContent>
+                 <TabsContent value="list" className="m-0 p-0"><ContactsList onStartChat={startChatWithFriend} /></TabsContent>
+                 <TabsContent value="requests" className="m-0 p-4"><FriendRequests /></TabsContent>
                  <TabsContent value="add" className="m-0 p-4">
                     <div className="bg-card p-4 rounded-lg border shadow-sm">
-                       <div className="flex items-center gap-2 mb-4 text-primary">
-                          <UserPlus className="h-5 w-5" />
-                          <h3 className="font-semibold">Adicionar novo amigo</h3>
-                       </div>
+                       <div className="flex items-center gap-2 mb-4 text-primary"><UserPlus className="h-5 w-5" /><h3 className="font-semibold">Adicionar novo amigo</h3></div>
                        <AddFriend userCode={profile?.friend_code} />
                     </div>
                  </TabsContent>
@@ -1044,66 +689,36 @@ export default function Messages() {
         </div>
       </div>
 
-      {/* ÁREA PRINCIPAL (CHAT) */}
+      {/* CHAT */}
       <div className={cn("flex-1 flex flex-col bg-gradient-to-br from-background via-background to-muted/20 relative", showChat ? "flex" : "hidden")}>
         {selectedConversation ? (
           <>
             <div className="h-16 border-b flex items-center justify-between px-4 bg-card/80 backdrop-blur-md z-10 shadow-sm">
               <div className="flex items-center gap-3">
-                {isMobile && (
-                  <Button variant="ghost" size="icon" className="-ml-2" onClick={() => setSelectedConversation(null)}>
-                    <ChevronLeft className="h-6 w-6" />
-                  </Button>
-                )}
-                
+                {isMobile && <Button variant="ghost" size="icon" className="-ml-2" onClick={() => setSelectedConversation(null)}><ChevronLeft className="h-6 w-6" /></Button>}
                 {(() => {
                    const conv = processedConversations.find(c => c.id === selectedConversation) || rawConversations?.find(c => c.id === selectedConversation);
                    const peer = conv?.conversation_participants.find((p:any) => p.user_id !== user?.id);
-                   
                    return (
                      <>
                       <Avatar className="h-10 w-10 border">
                         <AvatarImage src={peer?.profiles?.avatar_url} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white">
-                          {peer?.profiles?.username?.[0]?.toUpperCase() || <User />}
-                        </AvatarFallback>
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white">{peer?.profiles?.username?.[0]?.toUpperCase() || <User />}</AvatarFallback>
                       </Avatar>
                       <div className="leading-tight">
-                        <h3 className="font-semibold flex items-center gap-2">
-                          {conv?.name || peer?.profiles?.username || "Chat"}
-                          {peer?.user_id && <UserLink userId={peer.user_id} username={peer.profiles?.username || ""} className="opacity-0 w-0 h-0 overflow-hidden" />}
-                        </h3>
-                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
-                          <span className="block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
-                          Online
-                        </p>
+                        <h3 className="font-semibold flex items-center gap-2">{conv?.name || peer?.profiles?.username || "Chat"}{peer?.user_id && <UserLink userId={peer.user_id} username={peer.profiles?.username || ""} className="opacity-0 w-0 h-0 overflow-hidden" />}</h3>
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1"><span className="block w-2 h-2 bg-green-500 rounded-full animate-pulse" />Online</p>
                       </div>
                      </>
                    );
                 })()}
               </div>
-
               <div className="flex items-center gap-1">
                  {(() => {
                     const conv = rawConversations?.find(c => c.id === selectedConversation);
                     const peerId = conv?.conversation_participants.find((p:any) => p.user_id !== user?.id)?.user_id;
                     return peerId ? <AttentionButton contactId={peerId} /> : null;
                  })()}
-                 
-                 {/* SELETOR DE IDIOMA ALVO CORRIGIDO */}
-                 <select
-                   value={translationTargetLang}
-                   onChange={(e) => setTranslationTargetLang(e.target.value as SupportedLang)}
-                   title="Selecionar Idioma de Tradução Alvo"
-                   className="bg-background/80 border rounded-md px-2 py-1 text-sm mr-2 focus:ring-primary focus:border-primary"
-                 >
-                   {supportedLanguages.map(lang => (
-                     <option key={lang.code} value={lang.code}>
-                       {lang.name}
-                     </option>
-                   ))}
-                 </select>
-
                 <div className="hidden sm:flex">
                    <Button variant="ghost" size="icon" title="Chamada de Voz"><Phone className="h-4 w-4" /></Button>
                    <Button variant="ghost" size="icon" title="Chamada de Vídeo"><Video className="h-4 w-4" /></Button>
@@ -1112,7 +727,6 @@ export default function Messages() {
               </div>
             </div>
 
-            {/* LISTA DE MENSAGENS */}
             <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden">
               {!isLoadingMessages && messages?.map((msg, idx) => {
                 const isOwn = msg.user_id === user?.id;
@@ -1121,11 +735,8 @@ export default function Messages() {
                 const messageType = getMessageType(msg);
                 const translationState = getTranslationState(msg.id);
 
-                if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) {
-                  return null;
-                }
+                if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) return null;
 
-                // Determinar o texto a ser exibido
                 let displayText = msg.content;
                 if (timerState?.status === 'deleting' && timerState.currentText) {
                   displayText = timerState.currentText;
@@ -1137,18 +748,12 @@ export default function Messages() {
                   <div key={msg.id} className={cn("flex w-full gap-2", isOwn ? "justify-end" : "justify-start")}>
                     {!isOwn && (
                       <div className="w-8 flex-shrink-0 flex flex-col justify-end">
-                        {showAvatar ? (
-                           <Avatar className="h-8 w-8">
-                              <AvatarImage src={msg.profiles?.avatar_url} />
-                              <AvatarFallback className="text-[10px]">{msg.profiles?.username?.[0]}</AvatarFallback>
-                           </Avatar>
-                        ) : <div className="w-8" />}
+                        {showAvatar ? <Avatar className="h-8 w-8"><AvatarImage src={msg.profiles?.avatar_url} /><AvatarFallback className="text-[10px]">{msg.profiles?.username?.[0]}</AvatarFallback></Avatar> : <div className="w-8" />}
                       </div>
                     )}
 
                     <div className={cn("flex flex-col max-w-[85%] sm:max-w-[70%] min-w-0", isOwn ? "items-end" : "items-start")}>
                       
-                      {/* INDICADOR DE TEMPORIZADOR */}
                       {timerState && timerState.status !== 'deleted' && (
                         <div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
@@ -1160,7 +765,6 @@ export default function Messages() {
                         </div>
                       )}
 
-                      {/* INDICADOR PARA ÁUDIO NÃO OUVIDO */}
                       {!isOwn && messageType === 'audio' && !timerState && (
                         <div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
@@ -1168,16 +772,10 @@ export default function Messages() {
                         </div>
                       )}
 
-                      {/* CONTEÚDO "UnDoInG" */}
                       {timerState?.status === 'showingUndoing' && (
-                        <div className="px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg mb-2 animate-pulse">
-                          <span className="text-destructive font-mono font-bold tracking-wider">
-                            UnDoInG
-                          </span>
-                        </div>
+                        <div className="px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg mb-2 animate-pulse"><span className="text-destructive font-mono font-bold tracking-wider">UnDoInG</span></div>
                       )}
 
-                      {/* MÍDIA - O PLAYER SEMPRE APARECE AGORA */}
                       {msg.media_urls && msg.media_urls.length > 0 && timerState?.status !== 'showingUndoing' && (
                         <div className="mb-1 space-y-1 max-w-full">
                           {msg.media_urls.map((url: string, i: number) => {
@@ -1188,79 +786,101 @@ export default function Messages() {
                                     audioUrl={url} 
                                     isOwn={isOwn} 
                                     className={cn(isOwn ? "max-w-[250px] w-full" : "max-w-[300px] w-full")} 
-                                    onPlay={() => {
-                                      if (!isOwn) {
-                                        startAudioTimer(msg.id);
-                                      }
-                                    }}
+                                    onPlay={() => { if (!isOwn) startAudioTimer(msg.id); }}
                                   />
                                 </div>
                               );
                             }
-                            return (
-                              <img 
-                                key={i} 
-                                src={url} 
-                                alt="midia" 
-                                className="rounded-lg max-h-[300px] max-w-full border shadow-sm w-auto object-cover bg-black/10" 
-                              />
-                            );
+                            return <img key={i} src={url} alt="midia" className="rounded-lg max-h-[300px] max-w-full border shadow-sm w-auto object-cover bg-black/10" />;
                           })}
                         </div>
                       )}
 
-                      {/* TEXTO */}
                       {msg.content && timerState?.status !== 'showingUndoing' && (
-                        <div className={cn(
-                          "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", 
-                          isOwn 
-                            ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" 
-                            : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
-                        )}>
-                          <div className="break-words overflow-hidden">
-                            <MentionText text={displayText} />
-                          </div>
+                        <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
+                          <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO */}
+                          {/* BOTÃO DE TRADUÇÃO E MENU DE IDIOMAS */}
                           {!isOwn && msg.content && (
-                            <div className="flex justify-between items-center mt-2">
-                              <span className={cn(
-                                "text-[10px] opacity-60", 
-                                isOwn ? "text-primary-foreground" : "text-muted-foreground"
-                              )}>
-                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
-                              </span>
+                            <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className={cn(
-                                  "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
-                                  translationState?.isLoading && "opacity-100",
-                                  !isOwn && "text-muted-foreground hover:bg-muted" 
+                              {/* Informação de hora e idioma traduzido */}
+                              <div className="flex items-center gap-2">
+                                <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
+                                {translationState?.isTranslated && (
+                                   <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground font-medium">
+                                     <Globe className="h-2 w-2"/> 
+                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'} 
+                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.name.split(' ')[0].toUpperCase()}
+                                   </span>
                                 )}
-                                onClick={() => handleTranslate(msg.id, msg.content)}
+                              </div>
+                              
+                              {/* Botão que abre o menu */}
+                              <Button 
+                                variant="ghost" 
+                                size="sm" 
+                                className={cn("h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", translationState?.isLoading && "opacity-100")}
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setOpenMenuId(openMenuId === msg.id ? null : msg.id);
+                                }}
                                 disabled={translationState?.isLoading}
                               >
                                 {translationState?.isLoading ? (
-                                  <>
-                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
-                                    Traduzindo...
-                                  </>
-                                ) : translationState?.isTranslated ? (
-                                  <>
-                                    <Languages className="h-3 w-3 mr-1" />
-                                    Original
-                                  </>
+                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
                                 ) : (
                                   <>
-                                    <Languages className="h-3 w-3 mr-1" />
-                                    Traduzir
+                                    <Globe className="h-3 w-3 mr-1" /> 
+                                    {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
+                                    <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
                                   </>
                                 )}
                               </Button>
+
+                              {/* MENU SUSPENSO DE IDIOMAS */}
+                              {openMenuId === msg.id && (
+                                <div 
+                                  className="absolute bottom-8 right-0 bg-popover border shadow-xl rounded-md z-50 min-w-[160px] animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
+                                  onClick={(e) => e.stopPropagation()}
+                                >
+                                  <div className="p-1">
+                                    {translationState?.isTranslated && (
+                                      <button
+                                        className="w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center gap-2 font-semibold text-primary"
+                                        onClick={() => handleTranslate(msg.id, msg.content, 'original')}
+                                      >
+                                        <X className="h-3 w-3" /> Ver Original
+                                      </button>
+                                    )}
+                                    
+                                    <div className="h-[1px] bg-border my-1" />
+
+                                    {AVAILABLE_LANGUAGES.map((lang) => (
+                                      <button
+                                        key={lang.code}
+                                        className={cn(
+                                          "w-full text-left px-3 py-2 text-xs hover:bg-accent hover:text-accent-foreground rounded-sm flex items-center justify-between",
+                                          translationState?.targetLang === lang.code && translationState.isTranslated && "bg-accent/50"
+                                        )}
+                                        onClick={() => handleTranslate(msg.id, msg.content, lang.code)}
+                                      >
+                                        <span className="flex items-center gap-2">
+                                          <span>{lang.flag}</span> {lang.name}
+                                        </span>
+                                        {translationState?.targetLang === lang.code && translationState.isTranslated && (
+                                          <Check className="h-3 w-3 text-primary" />
+                                        )}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
                             </div>
                           )}
+
+                          {isOwn && <span className="text-[10px] opacity-60 block text-right mt-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
                         </div>
                       )}
                     </div>
@@ -1270,39 +890,20 @@ export default function Messages() {
               <div ref={messagesEndRef} className="h-1" />
             </div>
 
-            {showScrollButton && (
-               <Button size="icon" className="absolute bottom-24 right-6 rounded-full shadow-xl z-20 animate-in fade-in zoom-in duration-300" onClick={() => scrollToBottom(false)}>
-                 <ArrowDown className="h-5 w-5" />
-               </Button>
-            )}
+            {showScrollButton && <Button size="icon" className="absolute bottom-24 right-6 rounded-full shadow-xl z-20 animate-in fade-in zoom-in duration-300" onClick={() => scrollToBottom(false)}><ArrowDown className="h-5 w-5" /></Button>}
 
             <div className="p-4 bg-background border-t">
                <div className="max-w-4xl mx-auto w-full">
-                 <MessageInput
-                   onSendMessage={handleSendMessage}
-                   onAudioReady={handleAudioUpload}
-                   onMediaReady={handleMediaUpload}
-                   disabled={!selectedConversation}
-                 />
+                 <MessageInput onSendMessage={handleSendMessage} onAudioReady={handleAudioUpload} onMediaReady={handleMediaUpload} disabled={!selectedConversation} />
                </div>
             </div>
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in duration-500">
-             <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
-                <MessageSquarePlus className="h-16 w-16 text-primary" />
-             </div>
-             <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-               Suas Mensagens
-             </h1>
-             <p className="text-muted-foreground max-w-md mb-8 text-lg">
-               Selecione uma conversa na barra lateral ou inicie um novo chat com seus amigos.
-             </p>
-             {!isMobile && (
-               <div className="flex gap-4 text-sm text-muted-foreground/60">
-                  <span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Criptografado de ponta a ponta</span>
-               </div>
-             )}
+             <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse"><MessageSquarePlus className="h-16 w-16 text-primary" /></div>
+             <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Suas Mensagens</h1>
+             <p className="text-muted-foreground max-w-md mb-8 text-lg">Selecione uma conversa na barra lateral ou inicie um novo chat com seus amigos.</p>
+             {!isMobile && <div className="flex gap-4 text-sm text-muted-foreground/60"><span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Criptografado de ponta a ponta</span></div>}
           </div>
         )}
       </div>
