@@ -20,11 +20,6 @@ import {
   Play,
   Pause,
   Languages,
-  // Novos ícones para o seletor de idiomas
-  Globe,
-  Check,
-  ChevronDown,
-  X 
 } from "lucide-react";
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -44,10 +39,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 
-// --- Constante de tempo mínimo de carregamento (CORREÇÃO DO FLICKER) ---
-const MIN_LOAD_TIME = 500; // 500ms para evitar o flicker
-
-// --- Interfaces ---
+// Interfaces
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
@@ -62,7 +54,6 @@ interface TranslationState {
   translatedText: string;
   isTranslated: boolean;
   isLoading: boolean;
-  targetLang: string; // Adicionado para rastrear o idioma de destino
 }
 
 interface CustomAudioPlayerProps { 
@@ -72,18 +63,20 @@ interface CustomAudioPlayerProps {
   isOwn: boolean; 
 }
 
-// Lista de idiomas disponíveis
-const AVAILABLE_LANGUAGES = [
-  { code: 'pt', name: 'Português', flag: '🇧🇷' },
-  { code: 'en', name: 'Inglês', flag: '🇺🇸' },
-  { code: 'es', name: 'Espanhol', flag: '🇪🇸' },
-  { code: 'fr', name: 'Francês', flag: '🇫🇷' },
-  { code: 'de', name: 'Alemão', flag: '🇩🇪' },
-  { code: 'it', name: 'Italiano', flag: '🇮🇹' },
-  // Adicione mais idiomas conforme necessário
+// NOVO: Tipo de Linguagem Suportada (Adicionado mais opções)
+type SupportedLang = 'pt' | 'en' | 'es' | 'fr' | 'de' | 'it';
+
+// NOVO: Lista de Linguagens para o Seletor
+const supportedLanguages: { code: SupportedLang, name: string }[] = [
+    { code: 'pt', name: 'Português' },
+    { code: 'en', name: 'Inglês' },
+    { code: 'es', name: 'Espanhol' },
+    { code: 'fr', name: 'Francês' },
+    { code: 'de', name: 'Alemão' },
+    { code: 'it', name: 'Italiano' },
 ];
 
-// --- CustomAudioPlayer Component (Mantido inalterado) ---
+// CustomAudioPlayer Component
 const CustomAudioPlayer = ({ 
   audioUrl, 
   className,
@@ -99,6 +92,7 @@ const CustomAudioPlayer = ({
 
   const handlePlayPause = async () => {
     if (!audioRef.current) return;
+
     try {
       if (isPlaying) {
         audioRef.current.pause();
@@ -106,6 +100,7 @@ const CustomAudioPlayer = ({
       } else {
         await audioRef.current.play();
         setIsPlaying(true);
+        
         if (!hasTriggeredOnPlay.current) {
           hasTriggeredOnPlay.current = true;
           onPlay();
@@ -141,7 +136,7 @@ const CustomAudioPlayer = ({
     }
   };
 
-  const formatTimePlayer = (seconds: number) => {
+  const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
     const mins = Math.floor(seconds / 60);
     const secs = Math.floor(seconds % 60);
@@ -150,9 +145,11 @@ const CustomAudioPlayer = ({
 
   const handleSeek = (e: React.MouseEvent<HTMLDivElement>) => {
     if (!audioRef.current || isNaN(duration) || duration === 0) return;
+    
     const rect = e.currentTarget.getBoundingClientRect();
     const percent = (e.clientX - rect.left) / rect.width;
     const newTime = percent * duration;
+    
     audioRef.current.currentTime = newTime;
     setCurrentTime(newTime);
     setProgress(percent * 100);
@@ -160,12 +157,15 @@ const CustomAudioPlayer = ({
 
   const playerClasses = cn(
     "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 bg-background border",
-    isOwn ? "bg-primary text-primary-foreground" : "bg-card border text-foreground/80",
+    isOwn
+      ? "bg-primary text-primary-foreground"
+      : "bg-card border text-foreground/80",
     className
   );
 
   const buttonVariant = isOwn ? "secondary" : "primary"; 
   const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
+  const waveformBg = isOwn ? "bg-white/30" : "bg-muted/60";
   const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
   const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
   const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
@@ -184,7 +184,9 @@ const CustomAudioPlayer = ({
         <source src={audioUrl} type="audio/webm" />
         <source src={audioUrl} type="audio/mp3" />
         <source src={audioUrl} type="audio/wav" />
+        Seu navegador não suporta o elemento de áudio.
       </audio>
+      
       <Button
         variant={buttonVariant}
         size="icon"
@@ -193,25 +195,33 @@ const CustomAudioPlayer = ({
       >
         {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current translate-x-[1px]" />}
       </Button>
+
       <div className="flex-1 min-w-0 space-y-1 pr-2">
         <div 
           className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40"
           onClick={handleSeek}
           title="Clique para buscar"
         >
-          <div className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)} style={{ width: `${progress}%` }} />
-          <div className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)} style={{ left: `calc(${progress}% - 8px)` }} />
+          <div
+            className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)}
+            style={{ width: `${progress}%` }}
+          />
+          
+          <div
+            className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)}
+            style={{ left: `calc(${progress}% - 8px)` }} 
+          />
         </div>
+        
         <div className="flex justify-between text-xs font-medium opacity-80">
-          <span className={timeColorPrimary}>{formatTimePlayer(currentTime)}</span> 
-          <span className={timeColorSecondary}>{formatTimePlayer(duration)}</span> 
+          <span className={timeColorPrimary}>{formatTime(currentTime)}</span> 
+          <span className={timeColorSecondary}>{formatTime(duration)}</span> 
         </div>
       </div>
     </div>
   );
 };
 
-// --- Componente Principal Messages ---
 export default function Messages() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -221,6 +231,9 @@ export default function Messages() {
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"chats" | "contacts">("chats");
   const [searchQuery, setSearchQuery] = useState("");
+
+  // NOVO: Estado para a linguagem de tradução alvo
+  const [translationTargetLang, setTranslationTargetLang] = useState<SupportedLang>('pt');
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
@@ -229,146 +242,219 @@ export default function Messages() {
 
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
-  
   const [translations, setTranslations] = useState<TranslationState[]>([]);
-  
-  // NOVO ESTADO: Controla qual seletor de idioma de qual mensagem está aberto
-  const [showLangSelector, setShowLangSelector] = useState<string | null>(null);
 
-  const formatTime = (seconds: number) => {
-    const mins = Math.floor(seconds / 60);
-    const secs = seconds % 60;
-    return `${mins}:${secs.toString().padStart(2, '0')}`;
-  };
-
-  // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO (COM TEMPO MÍNIMO DE CARREGAMENTO)
-  // ====================================================================
-
-  const translateText = async (text: string, targetLang: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return text;
+  // Função melhorada para detectar idioma (Fallback local removido)
+  const detectLanguage = async (text: string): Promise<string> => {
+    if (!text || text.trim().length === 0) return 'en';
+    
     try {
-      // NOTE: Este é o endpoint Netlify Function que você tem configurado
-      const response = await fetch('/.netlify/functions/translate', { 
+      const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: text.substring(0, 2000), 
-          targetLang, 
-          type: 'translate' 
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text.substring(0, 1000),
+          type: 'detect'
         })
       });
-      if (!response.ok) throw new Error(`Status: ${response.status}`);
-      const result = await response.json();
-      if (result.success && result.data && result.data.translatedText) {
-        return result.data.translatedText;
+
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
       }
-      throw new Error('Erro na resposta da API');
+
+      const result = await response.json();
+      
+      if (result.success && result.data && result.data.length > 0) {
+        // LibreTranslate retorna um array de objetos, onde o primeiro tem a maior confiança.
+        // O código de idioma do LibreTranslate é uma string como 'pt', 'en', etc.
+        return result.data[0].language;
+      }
+      
+      throw new Error('No language detected in response');
     } catch (error) {
-      console.error(error);
-      throw error;
+      console.error('Erro completo na detecção de idioma (API):', error);
+      // Em caso de falha da API, assume-se Inglês ou Português (um dos mais comuns).
+      // 'pt' é o padrão da UI, então 'en' é um bom fallback para tentar traduzir.
+      return 'en';
     }
   };
 
-  const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
+  // Função principal de tradução usando apenas a API
+  const translateText = async (text: string, targetLang: string): Promise<string> => {
+    if (!text || text.trim().length === 0) return text;
     
-    // Fechar o seletor imediatamente
-    setShowLangSelector(null); 
+    try {
+      console.log('Iniciando tradução via API para texto:', text.substring(0, 50));
+      
+      const response = await fetch('/.netlify/functions/translate', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          text: text.substring(0, 2000), // Aumentar limite para textos maiores
+          targetLang,
+          type: 'translate'
+        })
+      });
 
-    const existingTranslation = translations.find(t => t.messageId === messageId);
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP error! status: ${response.status}, details: ${errorText}`);
+      }
 
-    // 1. Se o usuário clicou em "Ver Original"
-    if (targetLang === 'original') {
-      if (existingTranslation) {
-        // Apenas oculta a tradução, mantendo o cache
-        setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false, targetLang: 'original' } : t));
-      } 
-      toast({ title: "Original", description: "Texto original restaurado." });
+      const result = await response.json();
+      
+      if (result.success && result.data && result.data.translatedText) {
+        console.log('Tradução bem-sucedida via API');
+        return result.data.translatedText;
+      }
+      
+      throw new Error(result.error || 'No translation in response');
+    } catch (error) {
+      console.error('Erro completo na tradução via API:', error);
+      throw error; // Propagar o erro para ser tratado no handleTranslate
+    }
+  };
+
+  // Função principal de tradução (Lógica melhorada)
+  const handleTranslate = async (messageId: string, text: string) => {
+    if (!text || text.trim().length === 0) {
+      toast({
+        title: "Texto vazio",
+        description: "Não há texto para traduzir.",
+        variant: "destructive",
+      });
       return;
     }
 
-    // 2. Se já estiver traduzido para o mesmo idioma, apenas alterna para mostrar
-    if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
-       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: true, isLoading: false } : t));
-       toast({ title: "Traduzido", description: `Mostrando tradução para ${AVAILABLE_LANGUAGES.find(l => l.code === targetLang)?.name}.` });
-       return;
-    }
+    const existingTranslation = translations.find(t => t.messageId === messageId);
     
-    // 3. Inicia Loading 
+    // Lógica para reverter para o texto original
+    if (existingTranslation?.isTranslated) {
+      setTranslations(prev => 
+        prev.map(t => 
+          t.messageId === messageId 
+            ? { ...t, isTranslated: false }
+            : t
+        )
+      );
+      toast({
+        title: "Mostrando original",
+        description: "Texto original restaurado.",
+      });
+      return;
+    }
+
+    // Marcar como carregando
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
       if (existing) {
-         return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang, isTranslated: false } : t);
+        return prev.map(t => 
+          t.messageId === messageId 
+            ? { ...t, isLoading: true }
+            : t
+        );
       }
-      return [...prev, { 
-        messageId, 
-        originalText: text, 
-        translatedText: '', 
-        isTranslated: false, 
-        isLoading: true, 
-        targetLang 
+      return [...prev, {
+        messageId,
+        originalText: text,
+        translatedText: '',
+        isTranslated: false,
+        isLoading: true
       }];
     });
 
-    const startTime = Date.now(); // Inicia a contagem de tempo
-    let translatedText = '';
-
     try {
-      translatedText = await translateText(text, targetLang);
+      // Primeiro detectar o idioma
+      const detectedLang = await detectLanguage(text);
+      console.log('Idioma detectado:', detectedLang);
       
-      const elapsedTime = Date.now() - startTime;
-      // Garante o tempo mínimo de carregamento para evitar o flicker
-      if (elapsedTime < MIN_LOAD_TIME) {
-        await new Promise(resolve => setTimeout(resolve, MIN_LOAD_TIME - elapsedTime));
-      }
-      
-      setTranslations(prev => prev.map(t => t.messageId === messageId ? { 
-          ...t, 
-          translatedText, 
-          isTranslated: true, 
-          isLoading: false,
-          targetLang
-        } : t
-      ));
-      
-      toast({ title: "Sucesso", description: `Traduzido para ${AVAILABLE_LANGUAGES.find(l => l.code === targetLang)?.name}.` });
-    } catch (error) {
-      toast({ title: "Erro de Tradução", description: "Não foi possível traduzir no momento. Tente novamente.", variant: "destructive" });
-      
-      const elapsedTime = Date.now() - startTime;
-      // Garante o tempo mínimo de carregamento (mesmo em caso de erro)
-      if (elapsedTime < MIN_LOAD_TIME) {
-         await new Promise(resolve => setTimeout(resolve, MIN_LOAD_TIME - elapsedTime));
+      let finalTargetLang = translationTargetLang;
+      let targetLangName = supportedLanguages.find(l => l.code === translationTargetLang)?.name || 'o alvo selecionado';
+
+      // Se o idioma detectado for o idioma alvo, traduzir para o inglês como alternativa,
+      // a menos que o alvo já seja inglês, caso em que traduz para português.
+      if (detectedLang === translationTargetLang) {
+        finalTargetLang = translationTargetLang === 'en' ? 'pt' : 'en';
+        const fallbackName = supportedLanguages.find(l => l.code === finalTargetLang)?.name || 'um alternativo';
+
+        toast({
+          title: `Texto já está em ${targetLangName}`,
+          description: `Traduzindo para ${fallbackName} (Alternativa).`,
+        });
+
+      } else {
+        toast({
+          title: "Tradução Solicitada",
+          description: `Traduzindo de ${detectedLang.toUpperCase()} para ${targetLangName}...`,
+        });
       }
 
-      // Remove o estado de tradução e loading
-      setTranslations(prev => prev.filter(t => t.messageId !== messageId));
+      // Se por algum motivo o idioma detectado for o mesmo do alvo final (o que é improvável com a lógica acima), cancela.
+      if (detectedLang === finalTargetLang) {
+         setTranslations(prev => 
+           prev.filter(t => t.messageId !== messageId)
+         );
+         return;
+      }
+      
+      // Traduzir usando a API
+      console.log(`Solicitando tradução para ${finalTargetLang}...`);
+      const translatedText = await translateText(text, finalTargetLang);
+      
+      setTranslations(prev => 
+        prev.map(t => 
+          t.messageId === messageId 
+            ? { 
+                ...t, 
+                translatedText, 
+                isTranslated: true, 
+                isLoading: false 
+              }
+            : t
+        )
+      );
+
+      const finalTranslatedName = supportedLanguages.find(l => l.code === finalTargetLang)?.name || 'o alvo selecionado';
+
+      toast({
+        title: "Texto traduzido com sucesso!",
+        description: `Tradução realizada para ${finalTranslatedName}.`,
+      });
+
+    } catch (error) {
+      console.error('Erro completo no processo de tradução:', error);
+      
+      let errorMessage = "Não foi possível traduzir o texto. Tente novamente ou verifique a API.";
+      
+      if (error instanceof Error && (error.message.includes('502') || error.message.includes('503'))) {
+        errorMessage = "Serviço de tradução temporariamente indisponível. Tente novamente em alguns instantes.";
+      } else if (error instanceof Error && error.message.includes('timeout') || error.message.includes('TIMEOUT')) {
+        errorMessage = "A tradução demorou muito. Tente novamente.";
+      }
+      
+      toast({
+        title: "Erro na tradução",
+        description: errorMessage,
+        variant: "destructive",
+      });
+      
+      // Remover o estado de loading
+      setTranslations(prev => 
+        prev.filter(t => t.messageId !== messageId)
+      );
     }
   };
 
-  const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
-
-  // Função simplificada de detecção de idioma (mantida para fallback/lógica inicial)
-  const detectLanguage = async (text: string): Promise<string> => {
-     try {
-       const response = await fetch('/.netlify/functions/translate', {
-         method: 'POST',
-         headers: { 'Content-Type': 'application/json' },
-         body: JSON.stringify({ text: text.substring(0, 1000), type: 'detect' })
-       });
-       const result = await response.json();
-       return result.success && result.data && result.data.length > 0 ? result.data[0].language : 'en';
-     } catch {
-       // Fallback simples se a API falhar
-       return text.toLowerCase().includes('o', 'a', 'de', 'que') ? 'pt' : 'en';
-     }
+  // Obter estado da tradução para uma mensagem
+  const getTranslationState = (messageId: string) => {
+    return translations.find(t => t.messageId === messageId);
   };
 
-
-  // ====================================================================
-  // FIM DAS FUNÇÕES DE TRADUÇÃO
-  // ====================================================================
-  
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
@@ -382,8 +468,9 @@ export default function Messages() {
     const el = messagesContainerRef.current;
     if (!el) return;
     const { scrollTop, scrollHeight, clientHeight } = el;
-    setIsAtBottom(Math.abs(scrollHeight - scrollTop - clientHeight) <= 50);
-    setShowScrollButton(Math.abs(scrollHeight - scrollTop - clientHeight) > 50);
+    const atBottom = Math.abs(scrollHeight - scrollTop - clientHeight) <= 50;
+    setIsAtBottom(atBottom);
+    setShowScrollButton(!atBottom);
   }, []);
 
   useEffect(() => {
@@ -393,7 +480,6 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
-  // ... (funções de fetch e realtime mantidas inalteradas) ...
   // 1. Perfil do Usuário
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
@@ -493,21 +579,38 @@ export default function Messages() {
   const startAudioTimer = useCallback((messageId: string) => {
     setMessageTimers(prev => {
       const existingTimer = prev.find(timer => timer.messageId === messageId);
-      if (existingTimer) return prev;
-      return [...prev, { messageId, timeLeft: 120, status: 'counting', messageType: 'audio' }];
+      
+      if (existingTimer) {
+        return prev;
+      }
+      
+      return [...prev, {
+        messageId,
+        timeLeft: 120,
+        status: 'counting',
+        messageType: 'audio'
+      }];
     });
   }, []);
 
   // Efeito para inicializar timers para mensagens não do usuário
   useEffect(() => {
     if (!messages || !user) return;
+
     messages.forEach(message => {
       if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
         const messageType = getMessageType(message);
         const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
+        
         if (existingTimer) return;
+
         if (messageType === 'text' || messageType === 'media') {
-          setMessageTimers(prev => [...prev, { messageId: message.id, timeLeft: 120, status: 'counting', messageType }]);
+          setMessageTimers(prev => [...prev, {
+            messageId: message.id,
+            timeLeft: 120,
+            status: 'counting',
+            messageType
+          }]);
         }
       }
     });
@@ -604,10 +707,10 @@ export default function Messages() {
               
               case 'deleting':
                 updatedTimers.push({
-                  ...timer,
-                  status: 'showingUndoing',
-                  timeLeft: 5,
-                  currentText: undefined
+                    ...timer,
+                    status: 'showingUndoing',
+                    timeLeft: 5,
+                    currentText: undefined
                 });
                 break;
               
@@ -657,6 +760,12 @@ export default function Messages() {
   // Função auxiliar
   const getMessageState = (messageId: string) => {
     return messageTimers.find(timer => timer.messageId === messageId);
+  };
+
+  const formatTime = (seconds: number) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
   // Realtime
@@ -991,6 +1100,20 @@ export default function Messages() {
                     return peerId ? <AttentionButton contactId={peerId} /> : null;
                  })()}
                  
+                 {/* NOVO: Seletor de Idioma Alvo */}
+                 <select
+                   value={translationTargetLang}
+                   onChange={(e) => setTranslationTargetLang(e.target.value as SupportedLang)}
+                   title="Selecionar Idioma de Tradução Alvo"
+                   className="bg-background/80 border rounded-md px-2 py-1 text-sm mr-2 focus:ring-primary focus:border-primary"
+                 >
+                   {supportedLanguages.map(lang => (
+                     <option key={lang.code} value={lang.code}>
+                       {lang.name}
+                     </option>
+                   ))}
+                 </select>
+
                 <div className="hidden sm:flex">
                    <Button variant="ghost" size="icon" title="Chamada de Voz"><Phone className="h-4 w-4" /></Button>
                    <Button variant="ghost" size="icon" title="Chamada de Vídeo"><Video className="h-4 w-4" /></Button>
@@ -1007,7 +1130,6 @@ export default function Messages() {
                 const timerState = getMessageState(msg.id);
                 const messageType = getMessageType(msg);
                 const translationState = getTranslationState(msg.id);
-                const isLangSelectorOpen = showLangSelector === msg.id;
 
                 if (timerState?.status === 'deleted' || deletedMessages.has(msg.id)) {
                   return null;
@@ -1017,7 +1139,7 @@ export default function Messages() {
                 let displayText = msg.content;
                 if (timerState?.status === 'deleting' && timerState.currentText) {
                   displayText = timerState.currentText;
-                } else if (translationState?.isTranslated && translationState.targetLang !== 'original') {
+                } else if (translationState?.isTranslated) {
                   displayText = translationState.translatedText;
                 }
 
@@ -1065,7 +1187,7 @@ export default function Messages() {
                         </div>
                       )}
 
-                      {/* MÍDIA */}
+                      {/* MÍDIA - O PLAYER SEMPRE APARECE AGORA */}
                       {msg.media_urls && msg.media_urls.length > 0 && timerState?.status !== 'showingUndoing' && (
                         <div className="mb-1 space-y-1 max-w-full">
                           {msg.media_urls.map((url: string, i: number) => {
@@ -1099,59 +1221,42 @@ export default function Messages() {
 
                       {/* TEXTO */}
                       {msg.content && timerState?.status !== 'showingUndoing' && (
-                        <div 
-                          className={cn(
+                        <div className={cn(
                           "px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", 
                           isOwn 
                             ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" 
                             : "bg-card border text-foreground rounded-2xl rounded-tl-sm"
-                          )}
-                          // Fecha o seletor ao clicar em qualquer lugar da bolha
-                          onMouseDown={() => { if(isLangSelectorOpen) setShowLangSelector(null) }}
-                        >
+                        )}>
                           <div className="break-words overflow-hidden">
                             <MentionText text={displayText} />
                           </div>
                           
-                          {/* ÁREA DE CONTROLES E TRADUÇÃO */}
+                          {/* BOTÃO DE TRADUÇÃO */}
                           {!isOwn && msg.content && (
-                            <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
+                            <div className="flex justify-between items-center mt-2">
+                              <span className={cn(
+                                "text-[10px] opacity-60", 
+                                isOwn ? "text-primary-foreground" : "text-muted-foreground"
+                              )}>
+                                {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
+                              </span>
                               
-                              {/* Informação de hora e idioma traduzido */}
-                              <div className="flex items-center gap-2">
-                                <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>
-                                {translationState?.isTranslated && translationState.targetLang !== 'original' && (
-                                   <span className="text-[9px] italic opacity-70 flex items-center gap-1 text-muted-foreground font-medium">
-                                     <Globe className="h-2 w-2"/> 
-                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'} 
-                                     {AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.name.split(' ')[0].toUpperCase()}
-                                   </span>
-                                )}
-                              </div>
-                              
-                              {/* BOTÃO QUE ABRE O SELETOR/TRADUZ */}
                               <Button
                                 variant="ghost"
                                 size="sm"
                                 className={cn(
-                                  "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1",
-                                  (translationState?.isLoading || isLangSelectorOpen) && "opacity-100"
+                                  "h-6 px-2 text-xs opacity-0 group-hover:opacity-100 transition-opacity",
+                                  translationState?.isLoading && "opacity-100"
                                 )}
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  if (translationState?.isLoading) return; // Não faz nada se estiver carregando
-                                  
-                                  if (translationState?.isTranslated && translationState.targetLang !== 'original') {
-                                    handleTranslate(msg.id, msg.content, 'original'); // Se já traduzido, volta para o original
-                                  } else {
-                                    setShowLangSelector(isLangSelectorOpen ? null : msg.id); // Abre ou fecha o seletor
-                                  }
-                                }}
+                                onClick={() => handleTranslate(msg.id, msg.content)}
                                 disabled={translationState?.isLoading}
                               >
                                 {translationState?.isLoading ? (
-                                  <><Loader2 className="h-3 w-3 animate-spin mr-1" />Aguarde...</>
-                                ) : translationState?.isTranslated && translationState.targetLang !== 'original' ? (
+                                  <>
+                                    <Loader2 className="h-3 w-3 animate-spin mr-1" />
+                                    Traduzindo...
+                                  </>
+                                ) : translationState?.isTranslated ? (
                                   <>
                                     <Languages className="h-3 w-3 mr-1" />
                                     Original
@@ -1160,43 +1265,11 @@ export default function Messages() {
                                   <>
                                     <Languages className="h-3 w-3 mr-1" />
                                     Traduzir
-                                    <ChevronDown className={cn("h-3 w-3 ml-1 opacity-50 transition-transform duration-200", isLangSelectorOpen && "rotate-180")} />
                                   </>
                                 )}
                               </Button>
-
-                              {/* SIMPLIFIED LANGUAGE SELECTOR POPUP (SUBSTITUIÇÃO DO MODAL) */}
-                              {isLangSelectorOpen && (
-                                <div 
-                                  className="absolute bottom-full right-0 mb-2 w-48 bg-card border rounded-lg shadow-xl z-20 overflow-hidden animate-in fade-in-0 zoom-in-95 duration-200"
-                                  onClick={(e) => e.stopPropagation()} // Impede o fechamento ao clicar na lista
-                                >
-                                  <ScrollArea className="h-auto max-h-40 p-1">
-                                    {AVAILABLE_LANGUAGES.map((lang) => (
-                                      <button
-                                        key={lang.code}
-                                        className={cn(
-                                          "w-full text-left px-3 py-2 text-sm hover:bg-accent/70 transition-colors flex items-center justify-between rounded-md",
-                                          translationState?.targetLang === lang.code && translationState.isTranslated 
-                                            ? "bg-primary/10 text-primary font-semibold"
-                                            : "text-foreground"
-                                        )}
-                                        onClick={() => handleTranslate(msg.id, msg.content, lang.code)}
-                                      >
-                                        <span className="flex items-center gap-2">
-                                          <span className="text-base">{lang.flag}</span> {lang.name}
-                                        </span>
-                                        {translationState?.targetLang === lang.code && translationState.isTranslated && (
-                                          <Check className="h-4 w-4 text-primary" />
-                                        )}
-                                      </button>
-                                    ))}
-                                  </ScrollArea>
-                                </div>
-                              )}
                             </div>
                           )}
-                           {isOwn && <span className="text-[10px] opacity-60 block text-right mt-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
                         </div>
                       )}
                     </div>
