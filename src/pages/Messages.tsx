@@ -662,8 +662,14 @@ export default function Messages() {
             if (timer.status === 'deleting' && timer.currentText) {
               const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
               const elapsedTime = 120 - timer.timeLeft + 1;
-              const lettersToKeep = Math.max(0, Math.floor(originalText.length * (1 - (elapsedTime / 120))));
-              updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1, currentText: originalText.slice(0, lettersToKeep) });
+              // ALTERAÇÃO: Agora apaga do início para o final (de cima para baixo)
+              const lettersToRemove = Math.floor(originalText.length * (elapsedTime / 120));
+              const lettersToKeep = Math.max(0, originalText.length - lettersToRemove);
+              updatedTimers.push({ 
+                ...timer, 
+                timeLeft: timer.timeLeft - 1, 
+                currentText: originalText.slice(lettersToRemove) 
+              });
             } else {
               updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1 });
             }
