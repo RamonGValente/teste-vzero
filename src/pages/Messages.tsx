@@ -103,8 +103,8 @@ const getLanguageNativeName = (code: string): string => {
   return lang ? lang.nativeName : code.toUpperCase();
 };
 
-// --- Componente do Menu de Idiomas ---
-const LanguageMenu = ({ 
+// --- Componente do Menu de Idiomas Centralizado ---
+const LanguageMenuModal = ({ 
   messageId, 
   currentTranslation, 
   onTranslate,
@@ -120,95 +120,98 @@ const LanguageMenu = ({
   const popularLanguages = AVAILABLE_LANGUAGES.filter(lang => 
     ['pt', 'en', 'es', 'fr', 'de', 'it'].includes(lang.code)
   );
-  
-  const otherLanguages = AVAILABLE_LANGUAGES.filter(lang => 
-    !['pt', 'en', 'es', 'fr', 'de', 'it'].includes(lang.code)
-  );
+
+  const handleLanguageSelect = (targetLang: string) => {
+    const messageText = currentTranslation?.originalText || '';
+    onTranslate(messageId, messageText, targetLang);
+  };
 
   return (
     <div 
-      className="absolute bottom-8 right-0 bg-popover border shadow-2xl rounded-lg z-50 w-80 animate-in fade-in zoom-in-95 duration-200 overflow-hidden"
-      onClick={(e) => e.stopPropagation()}
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 animate-in fade-in duration-200"
+      onClick={onClose}
     >
-      {/* Cabeçalho do Menu */}
-      <div className="p-3 border-b bg-muted/20">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Languages className="h-4 w-4 text-primary" />
-            <span className="font-semibold text-sm">Traduzir para</span>
-          </div>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-6 w-6"
-            onClick={onClose}
-          >
-            <X className="h-3 w-3" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Abas de Categorias */}
-      <div className="px-3 pt-2">
-        <Tabs value={selectedCategory} onValueChange={(v: any) => setSelectedCategory(v)} className="w-full">
-          <TabsList className="w-full grid grid-cols-2 h-8">
-            <TabsTrigger value="popular" className="text-xs">Populares</TabsTrigger>
-            <TabsTrigger value="all" className="text-xs">Todos</TabsTrigger>
-          </TabsList>
-        </Tabs>
-      </div>
-
-      {/* Lista de Idiomas */}
-      <ScrollArea className="h-64 px-2 py-2">
-        <div className="space-y-1">
-          {/* Opção para ver original se já estiver traduzido */}
-          {currentTranslation?.isTranslated && (
-            <button
-              className="w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 font-medium text-primary border border-primary/20 mb-2"
-              onClick={() => onTranslate(messageId, currentTranslation.originalText, 'original')}
+      <div 
+        className="bg-popover border shadow-2xl rounded-lg w-full max-w-md mx-4 max-h-[80vh] flex flex-col animate-in zoom-in-95 duration-200"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Cabeçalho do Menu */}
+        <div className="p-4 border-b bg-muted/20 flex-shrink-0">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <Languages className="h-5 w-5 text-primary" />
+              <span className="font-semibold text-lg">Traduzir mensagem</span>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={onClose}
             >
               <X className="h-4 w-4" />
-              <div className="flex-1">
-                <div>Ver Original</div>
-                <div className="text-xs text-muted-foreground">
-                  {getLanguageNativeName(currentTranslation.sourceLang || 'auto')}
-                </div>
-              </div>
-              <Check className="h-4 w-4 text-primary" />
-            </button>
-          )}
-
-          {/* Idiomas Populares */}
-          {(selectedCategory === 'popular' ? popularLanguages : AVAILABLE_LANGUAGES).map((lang) => (
-            <button
-              key={lang.code}
-              className={cn(
-                "w-full text-left px-3 py-2 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 transition-colors",
-                currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && "bg-accent/50"
-              )}
-              onClick={() => {
-                const messageText = currentTranslation?.originalText || '';
-                onTranslate(messageId, messageText, lang.code);
-              }}
-            >
-              <span className="text-base">{lang.flag}</span>
-              <div className="flex-1 flex flex-col items-start">
-                <span className="font-medium">{lang.name}</span>
-                <span className="text-xs text-muted-foreground">{lang.nativeName}</span>
-              </div>
-              {currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && (
-                <Check className="h-4 w-4 text-primary flex-shrink-0" />
-              )}
-            </button>
-          ))}
+            </Button>
+          </div>
         </div>
-      </ScrollArea>
 
-      {/* Rodapé com informações */}
-      <div className="p-2 border-t bg-muted/10">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
-          <Globe className="h-3 w-3" />
-          <span>Tradução automática por LibreTranslate</span>
+        {/* Abas de Categorias */}
+        <div className="px-4 pt-3 flex-shrink-0">
+          <Tabs value={selectedCategory} onValueChange={(v: any) => setSelectedCategory(v)} className="w-full">
+            <TabsList className="w-full grid grid-cols-2 h-9">
+              <TabsTrigger value="popular" className="text-sm">Populares</TabsTrigger>
+              <TabsTrigger value="all" className="text-sm">Todos</TabsTrigger>
+            </TabsList>
+          </Tabs>
+        </div>
+
+        {/* Lista de Idiomas */}
+        <ScrollArea className="flex-1 px-2 py-2">
+          <div className="space-y-1 pb-2">
+            {/* Opção para ver original se já estiver traduzido */}
+            {currentTranslation?.isTranslated && (
+              <button
+                className="w-full text-left px-3 py-3 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 font-medium text-primary border border-primary/20 mb-2"
+                onClick={() => handleLanguageSelect('original')}
+              >
+                <X className="h-4 w-4" />
+                <div className="flex-1">
+                  <div>Ver Original</div>
+                  <div className="text-xs text-muted-foreground">
+                    {getLanguageNativeName(currentTranslation.sourceLang || 'auto')}
+                  </div>
+                </div>
+                <Check className="h-4 w-4 text-primary" />
+              </button>
+            )}
+
+            {/* Idiomas */}
+            {(selectedCategory === 'popular' ? popularLanguages : AVAILABLE_LANGUAGES).map((lang) => (
+              <button
+                key={lang.code}
+                className={cn(
+                  "w-full text-left px-3 py-3 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 transition-colors",
+                  currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && "bg-accent/50"
+                )}
+                onClick={() => handleLanguageSelect(lang.code)}
+              >
+                <span className="text-base">{lang.flag}</span>
+                <div className="flex-1 flex flex-col items-start">
+                  <span className="font-medium">{lang.name}</span>
+                  <span className="text-xs text-muted-foreground">{lang.nativeName}</span>
+                </div>
+                {currentTranslation?.targetLang === lang.code && currentTranslation.isTranslated && (
+                  <Check className="h-4 w-4 text-primary flex-shrink-0" />
+                )}
+              </button>
+            ))}
+          </div>
+        </ScrollArea>
+
+        {/* Rodapé com informações */}
+        <div className="p-3 border-t bg-muted/10 flex-shrink-0">
+          <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
+            <Globe className="h-3 w-3" />
+            <span>Tradução automática por LibreTranslate</span>
+          </div>
         </div>
       </div>
     </div>
@@ -412,7 +415,7 @@ export default function Messages() {
   };
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
-    // Fecha o menu
+    // Fecha o menu imediatamente
     setOpenMenuId(null);
 
     const existingTranslation = translations.find(t => t.messageId === messageId);
@@ -770,6 +773,16 @@ export default function Messages() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
+      {/* Modal de Idioma Centralizado */}
+      {openMenuId && (
+        <LanguageMenuModal
+          messageId={openMenuId}
+          currentTranslation={translations.find(t => t.messageId === openMenuId)}
+          onTranslate={handleTranslate}
+          onClose={() => setOpenMenuId(null)}
+        />
+      )}
+
       {/* SIDEBAR */}
       <div className={cn("flex flex-col bg-card border-r transition-all duration-300", showSidebar ? "w-full lg:w-[380px]" : "hidden lg:flex lg:w-[380px]")}>
         <div className="p-4 border-b space-y-4 bg-gradient-to-r from-background to-muted/20">
@@ -965,7 +978,7 @@ export default function Messages() {
                         <div className={cn("px-4 py-2 shadow-md text-sm relative group break-words min-w-[60px] max-w-full", isOwn ? "bg-gradient-to-br from-primary to-primary/90 text-primary-foreground rounded-2xl rounded-tr-sm" : "bg-card border text-foreground rounded-2xl rounded-tl-sm")}>
                           <div className="break-words overflow-hidden"><MentionText text={displayText} /></div>
                           
-                          {/* BOTÃO DE TRADUÇÃO MELHORADO COM MENU DE IDIOMAS */}
+                          {/* BOTÃO DE TRADUÇÃO MELHORADO */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
@@ -1005,7 +1018,7 @@ export default function Messages() {
                                 )}
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  setOpenMenuId(openMenuId === msg.id ? null : msg.id);
+                                  setOpenMenuId(msg.id);
                                 }}
                                 disabled={translationState?.isLoading}
                               >
@@ -1019,16 +1032,6 @@ export default function Messages() {
                                   </>
                                 )}
                               </Button>
-
-                              {/* Menu de Idiomas */}
-                              {openMenuId === msg.id && (
-                                <LanguageMenu
-                                  messageId={msg.id}
-                                  currentTranslation={translationState}
-                                  onTranslate={handleTranslate}
-                                  onClose={() => setOpenMenuId(null)}
-                                />
-                              )}
                             </div>
                           )}
 
