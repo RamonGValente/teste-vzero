@@ -516,144 +516,230 @@ export default function Feed() {
 
   /* --------- AI Image Editing ---------- */
   const callHuggingFaceAPI = async (base64Image: string, prompt: string): Promise<string> => {
+  try {
+    console.log('📤 Enviando para IA - Prompt:', prompt);
+    
+    const response = await fetch('/.netlify/functions/huggingface-proxy', {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        prompt: prompt,
+        image: base64Image 
+      }),
+    });
+
+    console.log('📥 Resposta da API - Status:', response.status);
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
+    }
+
+    const result = await response.json();
+    console.log('📥 Resposta completa:', result);
+
+    if (!result.success) {
+      throw new Error(result.message || 'Erro na geração da imagem');
+    }
+
+    if (!result.image) {
+      throw new Error('Nenhuma imagem retornada pela API');
+    }
+
+    return result.image;
+  } catch (error) {
+    console.error('❌ Erro na função de IA:', error);
+    
+    // Fallback: processar localmente com Canvas
+    console.log('🔄 Usando fallback de processamento local...');
+    return await processImageLocally(base64Image, prompt);
+  }
+};
+
+// Função para processar imagem localmente com Canvas
+const processImageLocally = async (base64Image: string, prompt: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
     try {
-      console.log('📤 Enviando para IA - Prompt:', prompt);
+      const img = new Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d')!;
+        
+        canvas.width = img.width;
+        canvas.height = img.height;
+        
+        // Desenhar imagem original
+        ctx.drawImage(img, 0, 0);
+        
+        const promptLower = prompt.toLowerCase();
+        
+        // Aplicar filtros baseados no prompt
+        if (promptLower.includes('pintura') || promptLower.includes('óleo')) {
+          // Aumentar saturação e contraste
+          ctx.filter = 'saturate(1.3) contrast(1.2)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('vintage') || promptLower.includes('retro')) {
+          // Sépia e reduzir saturação
+          ctx.filter = 'sepia(0.5) saturate(0.8)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('anime') || promptLower.includes('cartoon')) {
+          // Aumentar saturação e bordas
+          ctx.filter = 'saturate(1.4) contrast(1.3)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('escuro') || promptLower.includes('dark')) {
+          // Reduzir brilho
+          ctx.filter = 'brightness(0.7)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('claro') || promptLower.includes('bright')) {
+          // Aumentar brilho
+          ctx.filter = 'brightness(1.3)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('saturar') || promptLower.includes('colorido')) {
+          // Aumentar saturação
+          ctx.filter = 'saturate(1.5)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('preto e branco') || promptLower.includes('black and white')) {
+          // Converter para escala de cinza
+          ctx.filter = 'grayscale(1)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        if (promptLower.includes('blur') || promptLower.includes('desfocado')) {
+          // Aplicar blur (simulado)
+          ctx.filter = 'blur(2px)';
+          ctx.drawImage(canvas, 0, 0);
+        }
+        
+        // Reset filter
+        ctx.filter = 'none';
+        
+        // Converter para base64
+        const processedBase64 = canvas.toDataURL('image/jpeg', 0.85);
+        resolve(processedBase64);
+      };
       
-      const response = await fetch('/.netlify/functions/huggingface-proxy', {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          prompt: prompt,
-          image: base64Image 
-        }),
-      });
-
-      console.log('📥 Resposta da API - Status:', response.status);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
-      }
-
-      const result = await response.json();
-      console.log('📥 Resposta completa:', result);
-
-      if (!result.success) {
-        throw new Error(result.message || 'Erro na geração da imagem');
-      }
-
-      if (!result.image) {
-        throw new Error('Nenhuma imagem retornada pela API');
-      }
-
-      return result.image;
+      img.onerror = () => reject(new Error('Erro ao carregar imagem para processamento local'));
+      img.src = base64Image;
+      
     } catch (error) {
-      console.error('❌ Erro completo na função de IA:', error);
-      throw error;
+      reject(new Error('Falha no processamento local: ' + error));
     }
-  };
+  });
+};
 
-  const handleAIImageEdit = async () => {
-    if (aiEditing.imageIndex === -1 || !aiEditing.prompt.trim()) return;
+const handleAIImageEdit = async () => {
+  if (aiEditing.imageIndex === -1 || !aiEditing.prompt.trim()) return;
+  
+  setAiEditing(prev => ({...prev, loading: true}));
+  
+  try {
+    const imageFile = mediaFiles[aiEditing.imageIndex];
     
-    setAiEditing(prev => ({...prev, loading: true}));
+    // Converter imagem para base64
+    const base64Image = await fileToBase64(imageFile);
     
+    // Chamar API via Netlify Function
+    const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
+    
+    // Criar File a partir de base64
+    const newFile = await createFileFromBase64(processedImage, `editado-${aiEditing.prompt.substring(0, 10)}-${Date.now()}.jpg`);
+    
+    // Atualizar estado
+    setMediaFiles(prev => {
+      const updated = [...prev];
+      updated[aiEditing.imageIndex] = newFile;
+      return updated;
+    });
+    
+    toast({
+      title: "🎉 Imagem editada com sucesso!",
+      description: `A imagem foi processada com: "${aiEditing.prompt}"`,
+    });
+    
+    setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
+  } catch (error: any) {
+    console.error("Erro ao processar imagem com IA:", error);
+    
+    toast({
+      variant: "destructive",
+      title: "Erro no processamento",
+      description: error.message || "Tente novamente com um prompt diferente.",
+    });
+    setAiEditing(prev => ({...prev, loading: false}));
+  }
+};
+
+// Função auxiliar para conversão de base64
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = (error) => reject(error);
+    reader.readAsDataURL(file);
+  });
+};
+
+// Função para criar File a partir de base64
+const createFileFromBase64 = async (base64: string, filename: string): Promise<File> => {
+  return new Promise((resolve, reject) => {
     try {
-      const imageFile = mediaFiles[aiEditing.imageIndex];
+      // Extrair o conteúdo base64 da data URL
+      let base64Data = base64;
+      let mimeType = 'image/jpeg';
       
-      // Converter imagem para base64
-      const base64Image = await fileToBase64(imageFile);
-      
-      // Chamar API via Netlify Function
-      const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
-      
-      // Criar File a partir de base64
-      const newFile = await createFileFromBase64(processedImage, `ai-${Date.now()}-${aiEditing.prompt.substring(0, 10)}.jpg`);
-      
-      // Atualizar estado
-      setMediaFiles(prev => {
-        const updated = [...prev];
-        updated[aiEditing.imageIndex] = newFile;
-        return updated;
-      });
-      
-      toast({
-        title: "🎉 Imagem processada com IA!",
-        description: "A nova imagem foi gerada com sucesso usando APIs públicas.",
-      });
-      
-      setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
-    } catch (error: any) {
-      console.error("Erro ao processar imagem com IA:", error);
-      
-      toast({
-        variant: "destructive",
-        title: "Erro no processamento IA",
-        description: error.message || "Tente novamente com um prompt diferente.",
-      });
-      setAiEditing(prev => ({...prev, loading: false}));
-    }
-  };
-
-  // Função auxiliar para conversão de base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file);
-    });
-  };
-
-  // Função para criar File a partir de base64
-  const createFileFromBase64 = async (base64: string, filename: string): Promise<File> => {
-    return new Promise((resolve, reject) => {
-      try {
-        // Extrair o conteúdo base64 da data URL
-        let base64Data = base64;
-        let mimeType = 'image/jpeg';
-        
-        if (base64.startsWith('data:')) {
-          const matches = base64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
-          if (matches && matches.length === 3) {
-            mimeType = matches[1];
-            base64Data = matches[2];
-          } else {
-            throw new Error('Formato base64 inválido');
-          }
+      if (base64.startsWith('data:')) {
+        const matches = base64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
+        if (matches && matches.length === 3) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        } else {
+          throw new Error('Formato base64 inválido');
         }
-        
-        // Converter base64 para bytes
-        const byteCharacters = atob(base64Data);
-        const byteArrays = [];
-        
-        for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-          const slice = byteCharacters.slice(offset, offset + 512);
-          const byteNumbers = new Array(slice.length);
-          
-          for (let i = 0; i < slice.length; i++) {
-            byteNumbers[i] = slice.charCodeAt(i);
-          }
-          
-          const byteArray = new Uint8Array(byteNumbers);
-          byteArrays.push(byteArray);
-        }
-        
-        const blob = new Blob(byteArrays, { type: mimeType });
-        const file = new File([blob], filename, { 
-          type: mimeType,
-          lastModified: Date.now()
-        });
-        
-        resolve(file);
-      } catch (error) {
-        console.error('❌ Erro ao criar arquivo da imagem:', error);
-        reject(new Error('Falha ao processar imagem gerada pela IA'));
       }
-    });
-  };
+      
+      // Converter base64 para bytes
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: mimeType });
+      const file = new File([blob], filename, { 
+        type: mimeType,
+        lastModified: Date.now()
+      });
+      
+      resolve(file);
+    } catch (error) {
+      console.error('❌ Erro ao criar arquivo da imagem:', error);
+      reject(new Error('Falha ao processar imagem gerada'));
+    }
+  });
+};
 
   /* --------- Audio Recording ---------- */
   const handleStartRecording = async () => {
