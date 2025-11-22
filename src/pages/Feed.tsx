@@ -542,8 +542,7 @@ export default function Feed() {
       return result.image;
     } catch (error) {
       console.error('❌ Erro completo na função de IA:', error);
-      // Em caso de erro, retornar a imagem original
-      return base64Image;
+      throw error;
     }
   };
 
@@ -561,17 +560,19 @@ export default function Feed() {
       // Chamar API via Netlify Function
       const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
       
-      // Converter base64 de volta para File
-      const newFile = await base64ToFile(processedImage, `ai-${imageFile.name}`);
+      // CORREÇÃO: Criar um novo File a partir da base64
+      const newFile = await createFileFromBase64(processedImage, `ai-${Date.now()}-${imageFile.name}`);
       
-      // Atualizar array de mídias
+      // Atualizar array de mídias - CORREÇÃO: Forçar re-render
       const updatedMediaFiles = [...mediaFiles];
       updatedMediaFiles[aiEditing.imageIndex] = newFile;
-      setMediaFiles(updatedMediaFiles);
+      
+      // CORREÇÃO: Forçar atualização do estado criando um novo array
+      setMediaFiles([...updatedMediaFiles]);
       
       toast({
-        title: "Processamento com IA concluído!",
-        description: "A imagem foi processada com sucesso.",
+        title: "Imagem processada com IA!",
+        description: "A nova imagem foi gerada com sucesso.",
       });
       
       setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
@@ -580,13 +581,52 @@ export default function Feed() {
       toast({
         variant: "destructive",
         title: "Erro no processamento",
-        description: "A imagem original foi mantida. Tente novamente.",
+        description: "Tente novamente com um prompt diferente.",
       });
       setAiEditing(prev => ({...prev, loading: false}));
     }
   };
 
-  // Funções auxiliares para conversão de base64
+  // CORREÇÃO: Função melhorada para criar File a partir de base64
+  const createFileFromBase64 = async (base64: string, filename: string): Promise<File> => {
+    try {
+      // Se for data URL, extrair o conteúdo base64
+      let base64Data = base64;
+      let mimeType = 'image/jpeg';
+      
+      if (base64.startsWith('data:')) {
+        const matches = base64.match(/^data:([a-zA-Z0-9]+\/[a-zA-Z0-9-.+]+);base64,(.*)$/);
+        if (matches) {
+          mimeType = matches[1];
+          base64Data = matches[2];
+        }
+      }
+      
+      // Converter base64 para blob
+      const byteCharacters = atob(base64Data);
+      const byteArrays = [];
+      
+      for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+        const slice = byteCharacters.slice(offset, offset + 512);
+        const byteNumbers = new Array(slice.length);
+        
+        for (let i = 0; i < slice.length; i++) {
+          byteNumbers[i] = slice.charCodeAt(i);
+        }
+        
+        const byteArray = new Uint8Array(byteNumbers);
+        byteArrays.push(byteArray);
+      }
+      
+      const blob = new Blob(byteArrays, { type: mimeType });
+      return new File([blob], filename, { type: mimeType });
+    } catch (error) {
+      console.error('Erro ao criar arquivo:', error);
+      throw new Error('Falha ao processar imagem gerada');
+    }
+  };
+
+  // Função auxiliar para conversão de base64
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
@@ -594,12 +634,6 @@ export default function Feed() {
       reader.onerror = reject;
       reader.readAsDataURL(file);
     });
-  };
-
-  const base64ToFile = (base64: string, filename: string): Promise<File> => {
-    return fetch(base64)
-      .then(res => res.blob())
-      .then(blob => new File([blob], filename, { type: 'image/jpeg' }));
   };
 
   /* --------- Audio Recording ---------- */
