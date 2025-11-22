@@ -1,10 +1,11 @@
+// Feed.tsx completo com IA
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
-  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users
+  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -337,6 +338,14 @@ export default function Feed() {
     unregisterVideo,
   } = useVideoAutoPlayer();
 
+  /* AI Image Editing */
+  const [aiEditing, setAiEditing] = useState<{open: boolean; imageIndex: number; prompt: string; loading: boolean}>({
+    open: false,
+    imageIndex: -1,
+    prompt: "",
+    loading: false
+  });
+
   /* Native Inputs */
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -505,6 +514,88 @@ export default function Feed() {
 
   const removeFile = (idx: number) =>
     setMediaFiles(prev => prev.filter((_, i) => i !== idx));
+
+  /* --------- AI Image Editing ---------- */
+  const callHuggingFaceAPI = async (base64Image: string, prompt: string): Promise<string> => {
+    try {
+      const response = await fetch('/.netlify/functions/huggingface-proxy', {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          prompt: prompt,
+          image: base64Image 
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Erro na API');
+      }
+
+      return result.image;
+    } catch (error) {
+      console.error('Erro na função de IA:', error);
+      throw error;
+    }
+  };
+
+  const handleAIImageEdit = async () => {
+    if (aiEditing.imageIndex === -1 || !aiEditing.prompt.trim()) return;
+    
+    setAiEditing(prev => ({...prev, loading: true}));
+    
+    try {
+      const imageFile = mediaFiles[aiEditing.imageIndex];
+      
+      // Converter imagem para base64
+      const base64Image = await fileToBase64(imageFile);
+      
+      // Chamar API do Hugging Face via Netlify Function
+      const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
+      
+      // Converter base64 de volta para File
+      const newFile = await base64ToFile(processedImage, imageFile.name);
+      
+      // Atualizar array de mídias
+      const updatedMediaFiles = [...mediaFiles];
+      updatedMediaFiles[aiEditing.imageIndex] = newFile;
+      setMediaFiles(updatedMediaFiles);
+      
+      toast({
+        title: "Imagem editada com sucesso!",
+        description: "Alterações aplicadas pela IA.",
+      });
+      
+      setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
+    } catch (error) {
+      console.error("Erro ao processar imagem com IA:", error);
+      toast({
+        variant: "destructive",
+        title: "Erro na edição com IA",
+        description: "Tente novamente ou use outro prompt.",
+      });
+      setAiEditing(prev => ({...prev, loading: false}));
+    }
+  };
+
+  // Funções auxiliares para conversão de base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+  };
+
+  const base64ToFile = (base64: string, filename: string): Promise<File> => {
+    return fetch(base64)
+      .then(res => res.blob())
+      .then(blob => new File([blob], filename, { type: 'image/jpeg' }));
+  };
 
   /* --------- Audio Recording ---------- */
   const handleStartRecording = async () => {
@@ -1217,6 +1308,19 @@ export default function Feed() {
                         >
                           <X className="h-3 w-3" />
                         </Button>
+
+                        {/* Botão de Edição com IA para imagens */}
+                        {file.type.startsWith("image/") && (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            className="absolute bottom-2 left-2 bg-black/70 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300"
+                            onClick={() => setAiEditing({open: true, imageIndex: index, prompt: "", loading: false})}
+                          >
+                            <Sparkles className="h-3 w-3 mr-1" />
+                            IA
+                          </Button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -1608,6 +1712,89 @@ export default function Feed() {
           </div>
         )}
       </div>
+
+      {/* Diálogo de Edição com IA */}
+      <Dialog open={aiEditing.open} onOpenChange={(open) => setAiEditing(prev => ({...prev, open}))}>
+        <DialogContent className="max-w-md rounded-2xl">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="h-5 w-5" />
+              Editar com IA
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            {/* Preview da imagem */}
+            {mediaFiles[aiEditing.imageIndex] && (
+              <div className="relative aspect-square rounded-lg overflow-hidden bg-muted">
+                <img 
+                  src={URL.createObjectURL(mediaFiles[aiEditing.imageIndex])} 
+                  alt="Preview" 
+                  className="w-full h-full object-contain"
+                />
+              </div>
+            )}
+            
+            {/* Input do prompt */}
+            <div className="space-y-2">
+              <label className="text-sm font-medium">
+                Descreva as alterações desejadas:
+              </label>
+              <Textarea
+                placeholder="Ex: transforme em pintura a óleo, adicione efeito vintage, troque o fundo para praia..."
+                value={aiEditing.prompt}
+                onChange={(e) => setAiEditing(prev => ({...prev, prompt: e.target.value}))}
+                rows={3}
+                className="rounded-xl"
+              />
+              <p className="text-xs text-muted-foreground">
+                Dica: seja específico nas alterações que deseja
+              </p>
+            </div>
+            
+            {/* Opções rápidas */}
+            <div className="flex flex-wrap gap-2">
+              {["pintura a óleo", "estilo anime", "filtro vintage", "desenho cartoon", "efeito neon"].map((style) => (
+                <Badge
+                  key={style}
+                  variant="secondary"
+                  className="cursor-pointer hover:bg-primary/20 transition-colors"
+                  onClick={() => setAiEditing(prev => ({...prev, prompt: style}))}
+                >
+                  {style}
+                </Badge>
+              ))}
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false})}
+              className="rounded-xl"
+            >
+              Cancelar
+            </Button>
+            <Button
+              onClick={handleAIImageEdit}
+              disabled={!aiEditing.prompt.trim() || aiEditing.loading}
+              className="rounded-xl bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600"
+            >
+              {aiEditing.loading ? (
+                <>
+                  <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
+                  Processando...
+                </>
+              ) : (
+                <>
+                  <Sparkles className="h-4 w-4 mr-2" />
+                  Aplicar IA
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Diálogo de Usuários que Votaram */}
       <Dialog open={voteUsersDialog.open} onOpenChange={(open) => setVoteUsersDialog(prev => ({...prev, open}))}>
