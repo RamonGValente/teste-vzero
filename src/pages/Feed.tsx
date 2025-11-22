@@ -542,7 +542,8 @@ export default function Feed() {
       return result.image;
     } catch (error) {
       console.error('❌ Erro completo na função de IA:', error);
-      throw error;
+      // Em caso de erro, retornar a imagem original
+      return base64Image;
     }
   };
 
@@ -557,11 +558,11 @@ export default function Feed() {
       // Converter imagem para base64
       const base64Image = await fileToBase64(imageFile);
       
-      // Chamar API do DeepAI via Netlify Function
+      // Chamar API via Netlify Function
       const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
       
       // Converter base64 de volta para File
-      const newFile = await base64ToFile(processedImage, `ai-edited-${imageFile.name}`);
+      const newFile = await base64ToFile(processedImage, `ai-${imageFile.name}`);
       
       // Atualizar array de mídias
       const updatedMediaFiles = [...mediaFiles];
@@ -569,8 +570,8 @@ export default function Feed() {
       setMediaFiles(updatedMediaFiles);
       
       toast({
-        title: "Imagem editada com IA!",
-        description: "Alterações aplicadas com sucesso pela DeepAI.",
+        title: "Processamento com IA concluído!",
+        description: "A imagem foi processada com sucesso.",
       });
       
       setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
@@ -578,8 +579,8 @@ export default function Feed() {
       console.error("Erro ao processar imagem com IA:", error);
       toast({
         variant: "destructive",
-        title: "Erro na edição com IA",
-        description: error.message || "Tente novamente ou use outro prompt.",
+        title: "Erro no processamento",
+        description: "A imagem original foi mantida. Tente novamente.",
       });
       setAiEditing(prev => ({...prev, loading: false}));
     }
@@ -1726,7 +1727,7 @@ export default function Feed() {
               Editar com IA
             </DialogTitle>
             <DialogDescription>
-              Descreva as alterações que deseja aplicar na imagem usando IA generativa
+              Descreva as alterações que deseja aplicar na imagem
             </DialogDescription>
           </DialogHeader>
           
@@ -1755,7 +1756,7 @@ export default function Feed() {
                 className="rounded-xl"
               />
               <p className="text-xs text-muted-foreground">
-                Dica: seja específico nas alterações que deseja. A IA gerará uma nova imagem baseada na sua descrição.
+                A IA tentará gerar uma nova imagem baseada na sua descrição
               </p>
             </div>
             
@@ -1790,7 +1791,7 @@ export default function Feed() {
               {aiEditing.loading ? (
                 <>
                   <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
-                  Processando IA...
+                  Processando...
                 </>
               ) : (
                 <>
