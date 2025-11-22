@@ -8,7 +8,7 @@ exports.handler = async (event, context) => {
     'Access-Control-Allow-Methods': 'POST, OPTIONS'
   };
 
-  // Handle preflight OPTIONS requestt
+  // Handle preflight OPTIONS request
   if (event.httpMethod === 'OPTIONS') {
     return {
       statusCode: 200,
@@ -28,11 +28,11 @@ exports.handler = async (event, context) => {
       };
     }
 
-    // Usar environment variable do Netlify
     const HUGGINGFACE_TOKEN = process.env.HUGGINGFACE_TOKEN;
 
+    // NOVA URL CORRIGIDA - usar router.huggingface.co
     const response = await fetch(
-      "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
+      "https://router.huggingface.co/models/runwayml/stable-diffusion-v1-5",
       {
         method: "POST",
         headers: {
