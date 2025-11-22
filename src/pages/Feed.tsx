@@ -1,4 +1,3 @@
-// Feed.tsx completo com IA
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -19,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 import { MentionText } from "@/components/MentionText";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 
 /* ---------- Helpers ---------- */
@@ -518,6 +517,8 @@ export default function Feed() {
   /* --------- AI Image Editing ---------- */
   const callHuggingFaceAPI = async (base64Image: string, prompt: string): Promise<string> => {
     try {
+      console.log('📤 Enviando para IA - Prompt:', prompt);
+      
       const response = await fetch('/.netlify/functions/huggingface-proxy', {
         method: "POST",
         headers: {
@@ -529,15 +530,18 @@ export default function Feed() {
         }),
       });
 
+      console.log('📥 Resposta da API - Status:', response.status);
+
       const result = await response.json();
+      console.log('📥 Resposta completa:', result);
 
       if (!response.ok) {
-        throw new Error(result.error || 'Erro na API');
+        throw new Error(result.error || `Erro HTTP: ${response.status}`);
       }
 
       return result.image;
     } catch (error) {
-      console.error('Erro na função de IA:', error);
+      console.error('❌ Erro completo na função de IA:', error);
       throw error;
     }
   };
@@ -553,11 +557,11 @@ export default function Feed() {
       // Converter imagem para base64
       const base64Image = await fileToBase64(imageFile);
       
-      // Chamar API do Hugging Face via Netlify Function
+      // Chamar API do DeepAI via Netlify Function
       const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
       
       // Converter base64 de volta para File
-      const newFile = await base64ToFile(processedImage, imageFile.name);
+      const newFile = await base64ToFile(processedImage, `ai-edited-${imageFile.name}`);
       
       // Atualizar array de mídias
       const updatedMediaFiles = [...mediaFiles];
@@ -565,8 +569,8 @@ export default function Feed() {
       setMediaFiles(updatedMediaFiles);
       
       toast({
-        title: "Imagem editada com sucesso!",
-        description: "Alterações aplicadas pela IA.",
+        title: "Imagem editada com IA!",
+        description: "Alterações aplicadas com sucesso pela DeepAI.",
       });
       
       setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
@@ -575,7 +579,7 @@ export default function Feed() {
       toast({
         variant: "destructive",
         title: "Erro na edição com IA",
-        description: "Tente novamente ou use outro prompt.",
+        description: error.message || "Tente novamente ou use outro prompt.",
       });
       setAiEditing(prev => ({...prev, loading: false}));
     }
@@ -1314,7 +1318,7 @@ export default function Feed() {
                           <Button
                             variant="secondary"
                             size="sm"
-                            className="absolute bottom-2 left-2 bg-black/70 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300"
+                            className="absolute bottom-2 left-2 bg-black/70 text-white p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition-all duration-300 hover:bg-black/90 hover:scale-105"
                             onClick={() => setAiEditing({open: true, imageIndex: index, prompt: "", loading: false})}
                           >
                             <Sparkles className="h-3 w-3 mr-1" />
@@ -1721,6 +1725,9 @@ export default function Feed() {
               <Sparkles className="h-5 w-5" />
               Editar com IA
             </DialogTitle>
+            <DialogDescription>
+              Descreva as alterações que deseja aplicar na imagem usando IA generativa
+            </DialogDescription>
           </DialogHeader>
           
           <div className="space-y-4">
@@ -1748,13 +1755,13 @@ export default function Feed() {
                 className="rounded-xl"
               />
               <p className="text-xs text-muted-foreground">
-                Dica: seja específico nas alterações que deseja
+                Dica: seja específico nas alterações que deseja. A IA gerará uma nova imagem baseada na sua descrição.
               </p>
             </div>
             
             {/* Opções rápidas */}
             <div className="flex flex-wrap gap-2">
-              {["pintura a óleo", "estilo anime", "filtro vintage", "desenho cartoon", "efeito neon"].map((style) => (
+              {["pintura a óleo", "estilo anime", "filtro vintage", "desenho cartoon", "efeito neon", "arte digital"].map((style) => (
                 <Badge
                   key={style}
                   variant="secondary"
@@ -1783,12 +1790,12 @@ export default function Feed() {
               {aiEditing.loading ? (
                 <>
                   <RotateCcw className="h-4 w-4 mr-2 animate-spin" />
-                  Processando...
+                  Processando IA...
                 </>
               ) : (
                 <>
                   <Sparkles className="h-4 w-4 mr-2" />
-                  Aplicar IA
+                  Gerar com IA
                 </>
               )}
             </Button>
@@ -1875,7 +1882,12 @@ export default function Feed() {
       {/* Editar */}
       <Dialog open={!!editingPost} onOpenChange={(o) => !o && setEditingPost(null)}>
         <DialogContent className="max-w-lg rounded-2xl shadow-2xl">
-          <DialogHeader><DialogTitle>Editar postagem</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Editar postagem</DialogTitle>
+            <DialogDescription>
+              Faça alterações no conteúdo da sua postagem
+            </DialogDescription>
+          </DialogHeader>
           <Textarea 
             value={editContent} 
             onChange={(e) => setEditContent(e.target.value)} 
@@ -1904,7 +1916,12 @@ export default function Feed() {
       {/* Comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => { if (!o) setOpeningCommentsFor(null); }}>
         <DialogContent className="max-w-xl rounded-2xl shadow-2xl">
-          <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle>Comentários</DialogTitle>
+            <DialogDescription>
+              Veja e adicione comentários nesta postagem
+            </DialogDescription>
+          </DialogHeader>
           <div className="max-h-[50vh] overflow-auto space-y-4 pr-1">
             {loadingComments ? (
               <p className="text-sm text-muted-foreground">Carregando comentários...</p>
