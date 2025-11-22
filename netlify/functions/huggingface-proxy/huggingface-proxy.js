@@ -24,41 +24,109 @@ exports.handler = async (event, context) => {
 
     console.log('🔮 Processando IA - Prompt:', prompt);
 
-    // Opção A: Usar API pública gratuita do Stable Diffusion
+    // CORREÇÃO: Verificar se o token está configurado corretamente
+    const hfToken = process.env.HUGGINGFACE_TOKEN;
+    
+    if (!hfToken || hfToken === 'hf_your_token_here') {
+      console.log('❌ Token do Hugging Face não configurado ou inválido');
+      const simulatedImage = await generateSimulatedImage(prompt);
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          image: simulatedImage,
+          message: "Token HUGGINGFACE_TOKEN não configurado corretamente no Netlify"
+        })
+      };
+    }
+
+    console.log('✅ Token do Hugging Face encontrado');
+
+    // Tentar Hugging Face primeiro
+    console.log('🔄 Tentando Hugging Face API...');
     const response = await fetch(
       "https://api-inference.huggingface.co/models/runwayml/stable-diffusion-v1-5",
       {
         method: "POST",
         headers: {
-          "Authorization": `Bearer ${process.env.HUGGINGFACE_TOKEN || 'hf_your_token_here'}`,
+          "Authorization": `Bearer ${hfToken}`,
           "Content-Type": "application/json",
         },
         body: JSON.stringify({
           inputs: prompt,
           parameters: {
             num_inference_steps: 20,
-            guidance_scale: 7.5
+            guidance_scale: 7.5,
+            width: 512,
+            height: 512
           },
           options: {
             wait_for_model: true,
             use_cache: true
           }
-        }),
+        })
       }
     );
 
-    // Se a API do Hugging Face falhar, usar API alternativa gratuita
-    if (!response.ok) {
-      console.log('❌ Hugging Face falhou, tentando API alternativa...');
+    console.log('📊 Status da resposta Hugging Face:', response.status);
+
+    // CORREÇÃO: Tratamento melhorado da resposta
+    if (response.ok) {
+      console.log('✅ Hugging Face respondeu com sucesso');
+      const imageBuffer = await response.buffer();
       
-      // API gratuita alternativa - Lexica.art
+      // Verificar se a resposta é uma imagem válida (tamanho mínimo)
+      if (imageBuffer.length < 100) {
+        const responseText = imageBuffer.toString();
+        console.log('❌ Resposta não é imagem válida:', responseText.substring(0, 200));
+        throw new Error('API retornou dados inválidos em vez de imagem');
+      }
+      
+      const base64Image = imageBuffer.toString('base64');
+      console.log('✅ Imagem gerada com sucesso, tamanho:', imageBuffer.length, 'bytes');
+
+      return {
+        statusCode: 200,
+        headers,
+        body: JSON.stringify({
+          success: true,
+          image: `data:image/jpeg;base64,${base64Image}`,
+          message: `Imagem gerada com sucesso: "${prompt}"`
+        })
+      };
+    } else {
+      // Tentar parse do erro
+      let errorMessage = `HTTP ${response.status}`;
+      try {
+        const errorText = await response.text();
+        console.log('❌ Erro detalhado Hugging Face:', errorText);
+        errorMessage = errorText;
+      } catch (e) {
+        console.log('❌ Erro Hugging Face (sem corpo):', response.status);
+      }
+      throw new Error(`Hugging Face API error: ${errorMessage}`);
+    }
+
+  } catch (error) {
+    console.error('❌ Erro na function:', error);
+    
+    // Tentar fallback para APIs alternativas
+    try {
+      console.log('🔄 Tentando fallback para Lexica.art...');
+      const { prompt } = JSON.parse(event.body);
+      
+      // Lexica.art API para buscar imagens relacionadas
       const lexicaResponse = await fetch(`https://lexica.art/api/v1/search?q=${encodeURIComponent(prompt)}`);
       
       if (lexicaResponse.ok) {
         const lexicaData = await lexicaResponse.json();
         if (lexicaData.images && lexicaData.images.length > 0) {
-          // Pegar a primeira imagem dos resultados
-          const imageUrl = lexicaData.images[0].src;
+          // Pegar a primeira imagem de melhor qualidade
+          const bestImage = lexicaData.images[0];
+          const imageUrl = bestImage.src;
+          
+          console.log('✅ Encontrada imagem no Lexica.art:', imageUrl);
           const imageResponse = await fetch(imageUrl);
           const imageBuffer = await imageResponse.buffer();
           const base64Image = imageBuffer.toString('base64');
@@ -69,48 +137,19 @@ exports.handler = async (event, context) => {
             body: JSON.stringify({
               success: true,
               image: `data:image/jpeg;base64,${base64Image}`,
-              message: `Imagem gerada: "${prompt}" (via Lexica.art)`
+              message: `Imagem encontrada: "${prompt}" (via Lexica.art)`
             })
           };
         }
       }
-      
-      // Se tudo falhar, criar imagem simulada
-      console.log('🎭 Usando modo simulação');
-      const simulatedImage = await generateSimulatedImage(prompt);
-      
-      return {
-        statusCode: 200,
-        headers,
-        body: JSON.stringify({
-          success: true,
-          image: simulatedImage,
-          message: `Modo simulação: "${prompt}" - Configure uma API real`
-        })
-      };
+    } catch (fallbackError) {
+      console.error('❌ Fallback Lexica.art falhou:', fallbackError);
     }
 
-    // Se Hugging Face funcionou
-    const imageBuffer = await response.buffer();
-    const base64Image = imageBuffer.toString('base64');
-
-    console.log('✅ Imagem processada com sucesso via Hugging Face!');
-
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify({
-        success: true,
-        image: `data:image/jpeg;base64,${base64Image}`,
-        message: `Imagem gerada com sucesso: "${prompt}"`
-      })
-    };
-
-  } catch (error) {
-    console.error('❌ Erro na function:', error);
-    
-    // Em caso de erro, retornar imagem simulada
-    const simulatedImage = await generateSimulatedImage('erro - ' + (prompt || 'desconhecido'));
+    // Último fallback: imagem simulada
+    console.log('🎭 Usando modo simulação como último recurso');
+    const { prompt } = JSON.parse(event.body);
+    const simulatedImage = await generateSimulatedImage(prompt || 'desconhecido');
     
     return {
       statusCode: 200,
@@ -118,13 +157,13 @@ exports.handler = async (event, context) => {
       body: JSON.stringify({
         success: true,
         image: simulatedImage,
-        message: "Modo simulação devido a erro - Tente novamente"
+        message: "Modo simulação - Verifique o token HUGGINGFACE_TOKEN e logs"
       })
     };
   }
 };
 
-// Função para gerar imagem simulada
+// Função para gerar imagem simulada (apenas como fallback)
 async function generateSimulatedImage(prompt) {
   const styles = {
     'anime': { bg: '#FF6B6B', text: '#FFF', accent: '#4ECDC4' },
