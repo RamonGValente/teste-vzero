@@ -390,7 +390,7 @@ export default function Feed() {
     markAsViewed();
   }, [user, queryClient]);
 
-  /* Load posts - CORRIGIDO: Todos os usuários podem ver todas as postagens */
+  /* Load posts */
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
@@ -533,21 +533,15 @@ export default function Feed() {
       console.log('📥 Resposta da API - Status:', response.status);
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.error || `Erro HTTP: ${response.status}`);
+        const errorText = await response.text();
+        throw new Error(`Erro HTTP ${response.status}: ${errorText}`);
       }
 
       const result = await response.json();
       console.log('📥 Resposta completa:', result);
 
-      // CORREÇÃO: Verificação mais robusta do sucesso
       if (!result.success) {
         throw new Error(result.message || 'Erro na geração da imagem');
-      }
-
-      // CORREÇÃO: Verificar se não é imagem simulada
-      if (result.message && result.message.includes('Modo simulação')) {
-        throw new Error('API em modo simulação - Token HUGGINGFACE_TOKEN precisa ser configurado');
       }
 
       if (!result.image) {
@@ -569,16 +563,16 @@ export default function Feed() {
     try {
       const imageFile = mediaFiles[aiEditing.imageIndex];
       
-      // Converter imagem para base64 (para APIs que podem usar imagem de entrada)
+      // Converter imagem para base64
       const base64Image = await fileToBase64(imageFile);
       
       // Chamar API via Netlify Function
       const processedImage = await callHuggingFaceAPI(base64Image, aiEditing.prompt);
       
-      // CORREÇÃO: Função robusta para criar File a partir de base64
-      const newFile = await createFileFromBase64(processedImage, `ai-edited-${Date.now()}.jpg`);
+      // Criar File a partir de base64
+      const newFile = await createFileFromBase64(processedImage, `ai-${Date.now()}-${aiEditing.prompt.substring(0, 10)}.jpg`);
       
-      // CORREÇÃO: Atualizar estado corretamente
+      // Atualizar estado
       setMediaFiles(prev => {
         const updated = [...prev];
         updated[aiEditing.imageIndex] = newFile;
@@ -587,22 +581,33 @@ export default function Feed() {
       
       toast({
         title: "🎉 Imagem processada com IA!",
-        description: "A nova imagem foi gerada com sucesso.",
+        description: "A nova imagem foi gerada com sucesso usando APIs públicas.",
       });
       
       setAiEditing({open: false, imageIndex: -1, prompt: "", loading: false});
     } catch (error: any) {
       console.error("Erro ao processar imagem com IA:", error);
+      
       toast({
         variant: "destructive",
         title: "Erro no processamento IA",
-        description: error.message || "Verifique o token HUGGINGFACE_TOKEN no Netlify.",
+        description: error.message || "Tente novamente com um prompt diferente.",
       });
       setAiEditing(prev => ({...prev, loading: false}));
     }
   };
 
-  // CORREÇÃO: Função robusta para criar File a partir de base64
+  // Função auxiliar para conversão de base64
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = (error) => reject(error);
+      reader.readAsDataURL(file);
+    });
+  };
+
+  // Função para criar File a partir de base64
   const createFileFromBase64 = async (base64: string, filename: string): Promise<File> => {
     return new Promise((resolve, reject) => {
       try {
@@ -645,18 +650,8 @@ export default function Feed() {
         resolve(file);
       } catch (error) {
         console.error('❌ Erro ao criar arquivo da imagem:', error);
-        reject(new Error('Falha ao processar imagem gerada pela IA: ' + error.message));
+        reject(new Error('Falha ao processar imagem gerada pela IA'));
       }
-    });
-  };
-
-  // Função auxiliar para conversão de base64
-  const fileToBase64 = (file: File): Promise<string> => {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.onerror = (error) => reject(error);
-      reader.readAsDataURL(file);
     });
   };
 
@@ -1225,7 +1220,7 @@ export default function Feed() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 overflow-x-hidden">
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
-        {/* Logo Centralizada - ESPAÇO REDUZIDO */}
+        {/* Logo Centralizada */}
         <div className="flex justify-center">
           <img 
             src="https://sistemaapp.netlify.app/assets/logo-wTbWaudN.png" 
