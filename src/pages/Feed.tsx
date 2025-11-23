@@ -6,8 +6,8 @@ import {
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles, Wand2,
   Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile,
-  // NOVO: Adicionado Clock para o contador
-  Clock 
+  Clock, // GARANTIDO: Importação do ícone Clock
+  Loader2 // Importação para spinners
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -117,7 +117,7 @@ function canvasToBlob(canvas: HTMLCanvasElement, type: string, quality: number):
 type PostRow = any;
 type VoteUser = { id: string; username: string; avatar_url: string; vote_type: "heart" | "bomb" };
 
-/* ---------- Hook de Contador Regressivo (NOVO) ---------- */
+/* ---------- Hook de Contador Regressivo (AJUSTADO) ---------- */
 const useCountdown = (endTimeISO: string | undefined | null) => {
   const [timeLeft, setTimeLeft] = useState("");
 
@@ -136,17 +136,15 @@ const useCountdown = (endTimeISO: string | undefined | null) => {
         return;
       }
 
-      // Calcula horas, minutos e segundos
-      const hours = Math.floor(difference / (1000 * 60 * 60));
+      // Calcula minutos e segundos (para um período de 60 minutos ou menos)
       const minutes = Math.floor((difference % (1000 * 60 * 60)) / (1000 * 60));
       const seconds = Math.floor((difference % (1000 * 60)) / 1000);
 
-      const h = hours > 0 ? `${hours}h ` : '';
       const m = minutes.toString().padStart(2, '0');
       const s = seconds.toString().padStart(2, '0');
 
-      // Formato: [Hh] MMm SSs
-      setTimeLeft(`${h}${m}m ${s}s`);
+      // Formato: MMm SSs
+      setTimeLeft(`${m}m ${s}s`);
     };
 
     calculateTimeLeft();
@@ -250,7 +248,7 @@ const useAudioRecorder = () => {
       setIsRecording(true);
       setRecordingTime(0);
       timerRef.current = setInterval(() => {
-        setRecordingTime(prev => { if (prev >= 10) { stopRecording(); return 10; } return prev + 1; });
+        setRecordingTime(prev => { if (prev >= 60 * 60) { stopRecording(); return 60 * 60; } return prev + 1; }); // Aumentado para 60 minutos
       }, 1000);
     } catch (error) { throw new Error('Microfone inacessível'); }
   };
@@ -368,7 +366,7 @@ export default function Feed() {
     return () => { supabase.removeChannel(ch); };
   }, [refetch]);
 
-  /* Vote cron */
+  /* Vote cron (já estava no código) */
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
     f();
@@ -1050,7 +1048,7 @@ export default function Feed() {
             // Pular postagens photo_audio no feed normal (já estão no carrossel)
             if (isPhotoAudio) return null;
 
-            // NOVO: Chamada ao hook de contagem regressiva
+            // HOOK: Chamada ao hook de contagem regressiva
             const countdown = useCountdown(isVotingActive ? post.voting_ends_at : null); 
             const isVotingActiveAndRunning = isVotingActive && countdown !== "Encerrada";
             
@@ -1093,13 +1091,13 @@ export default function Feed() {
                     <div className="bg-gradient-to-br from-muted/50 to-muted/30 rounded-2xl p-4 space-y-3 shadow-inner border border-border/20">
                       <div className="flex items-center justify-between text-sm">
                         
-                        {/* NOVO: Bloco de Status e Contador */}
+                        {/* NOVO/CORRIGIDO: Bloco de Status e Contador */}
                         <div className="flex items-center gap-2">
                           <span className="text-muted-foreground">
-                            {post.is_community_approved ? "Post Aprovado" : post.voting_period_active ? "Aguardando aprovação da comunidade" : "Votação encerrada"}
+                            {post.is_community_approved ? "Post Aprovado" : "Aguardando aprovação"}
                           </span>
                           
-                          {(countdown && isVotingActiveAndRunning) && (
+                          {isVotingActiveAndRunning && (
                             <Badge className="bg-primary/20 text-primary hover:bg-primary/30 font-bold" variant="outline">
                               <Clock className="h-3 w-3 mr-1"/>
                               {countdown}
@@ -1112,7 +1110,7 @@ export default function Feed() {
                             </Badge>
                           )}
                         </div>
-                        {/* FIM NOVO */}
+                        {/* FIM CORREÇÃO */}
 
                         <div className="flex gap-3 text-xs">
                           <Button onClick={() => handleShowVoteUsers(post.id, "heart")} className="flex items-center gap-1 bg-red-50 text-red-700 px-2 py-1 rounded-full shadow-sm hover:bg-red-100" variant="ghost" size="sm"><Heart className="h-3 w-3 text-red-500 fill-red-500"/> {heartVotes}</Button>
@@ -1124,7 +1122,7 @@ export default function Feed() {
                           onClick={() => handleVote(post.id, "heart")}
                           variant={userVote?.vote_type === "heart" ? "default" : "outline"}
                           className={cn("flex-1 rounded-xl transition-all duration-300", userVote?.vote_type === "heart" ? "bg-red-500 hover:bg-red-600 shadow-md" : "hover:bg-red-50/50")}
-                          disabled={!post.voting_period_active}
+                          disabled={!isVotingActiveAndRunning} // Desabilita se encerrada ou não ativa
                         >
                           <Heart className="h-4 w-4 mr-2" /> Aprovar
                         </Button>
@@ -1132,7 +1130,7 @@ export default function Feed() {
                           onClick={() => handleVote(post.id, "bomb")}
                           variant={userVote?.vote_type === "bomb" ? "default" : "outline"}
                           className={cn("flex-1 rounded-xl transition-all duration-300", userVote?.vote_type === "bomb" ? "bg-orange-500 hover:bg-orange-600 shadow-md" : "hover:bg-orange-50/50")}
-                          disabled={!post.voting_period_active}
+                          disabled={!isVotingActiveAndRunning} // Desabilita se encerrada ou não ativa
                         >
                           <Bomb className="h-4 w-4 mr-2" /> Reprovar
                         </Button>
