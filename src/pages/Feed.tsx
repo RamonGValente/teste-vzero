@@ -5,7 +5,8 @@ import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles, Wand2,
-  Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile
+  Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile,
+  Clock, CheckCircle2, AlertCircle
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -22,6 +23,45 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Progress } from "@/components/ui/progress"; // Certifique-se de ter este componente ou use a div html abaixo
+
+/* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
+const VotingCountdown = ({ endsAt, onExpire }: { endsAt: string; onExpire?: () => void }) => {
+  const [timeLeft, setTimeLeft] = useState("");
+  const [isExpired, setIsExpired] = useState(false);
+
+  useEffect(() => {
+    const calculateTime = () => {
+      const now = new Date().getTime();
+      const end = new Date(endsAt).getTime();
+      const diff = end - now;
+
+      if (diff <= 0) {
+        setIsExpired(true);
+        setTimeLeft("Encerrado");
+        if (onExpire) onExpire();
+        return;
+      }
+
+      const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
+      const seconds = Math.floor((diff % (1000 * 60)) / 1000);
+      setTimeLeft(`${minutes}m ${seconds}s`);
+    };
+
+    calculateTime();
+    const interval = setInterval(calculateTime, 1000);
+    return () => clearInterval(interval);
+  }, [endsAt, onExpire]);
+
+  if (isExpired) return <span className="text-xs font-bold text-muted-foreground">Processando...</span>;
+
+  return (
+    <div className="flex items-center gap-1.5 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+      <Clock className="h-3 w-3" />
+      <span>{timeLeft}</span>
+    </div>
+  );
+};
 
 /* ---------- COMPONENTE: Imagem Progressiva (Lazy + Blur-up) ---------- */
 const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: string, className?: string, onClick?: () => void }) => {
@@ -288,6 +328,7 @@ export default function Feed() {
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
+      // Nota: Fetching posts. Importante: Estamos pegando também o post_votes para calcular a aprovação
       const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).order("created_at", { ascending: false });
       if (error) throw error;
       return data as PostRow[];
@@ -309,12 +350,14 @@ export default function Feed() {
     const ch = supabase.channel("feed-realtime")
       .on("postgres_changes", { event: "*", schema: "public", table: "posts" }, () => refetch())
       .on("postgres_changes", { event: "*", schema: "public", table: "likes" }, () => refetch())
+      .on("postgres_changes", { event: "*", schema: "public", table: "post_votes" }, () => refetch())
       .subscribe();
     return () => { supabase.removeChannel(ch); };
   }, [refetch]);
 
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
+    // Check para processar votos expirados a cada minuto
     const i = setInterval(f, 60000); f(); return () => clearInterval(i);
   }, []);
 
@@ -462,12 +505,16 @@ export default function Feed() {
         const { data } = supabase.storage.from("media").getPublicUrl(path);
         audioUrl = MEDIA_PREFIX.audio + data.publicUrl;
       }
-      const ends = new Date(); ends.setHours(ends.getHours() + 1);
+      
+      // Define 60 minutos para votação
+      const ends = new Date(); 
+      ends.setMinutes(ends.getMinutes() + 60);
+
       const content = postType === 'photo_audio' ? '' : newPost;
       const { data: post, error } = await supabase.from("posts").insert({ user_id: user?.id, content, media_urls: mediaUrls.length ? mediaUrls : null, audio_url: audioUrl, post_type: postType, voting_ends_at: ends.toISOString(), voting_period_active: true }).select().single();
       if (error) throw error;
       if (content) { const { saveMentions } = await import("@/utils/mentionsHelper"); await saveMentions(post.id, "post", content, user!.id); }
-      toast({ title: "Publicado!" }); setNewPost(""); setMediaFiles([]); resetRecording(); refetch();
+      toast({ title: "Publicado!", description: "Seu post entrou em votação (60min)" }); setNewPost(""); setMediaFiles([]); resetRecording(); refetch();
     } catch (e:any) { toast({ variant: "destructive", title: "Erro", description: e.message }); } finally { setUploading(false); }
   };
 
@@ -544,15 +591,27 @@ export default function Feed() {
   };
 
   /* Helpers de Ação */
+  const handleLike = async (postId: string) => {
+      // Voto tradicional após aprovação (LIKE)
+      try {
+        const has = posts?.find(p => p.id === postId)?.likes?.find((l:any) => l.user_id === user?.id);
+        if (has) await supabase.from("likes").delete().match({ id: has.id });
+        else await supabase.from("likes").insert({ post_id: postId, user_id: user?.id });
+        refetch();
+      } catch {}
+  };
+
   const handleVote = async (postId: string, type: "heart" | "bomb") => {
+    // Votação de aprovação (POST VOTES)
     try {
-      const has = posts?.find(p => p.id === postId)?.post_votes?.find(v => v.user_id === user?.id);
+      const has = posts?.find(p => p.id === postId)?.post_votes?.find((v:any) => v.user_id === user?.id);
       if (has?.vote_type === type) await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
       else if (has) await supabase.from("post_votes").update({ vote_type: type }).match({ post_id: postId, user_id: user?.id });
       else await supabase.from("post_votes").insert({ post_id: postId, user_id: user?.id, vote_type: type });
       refetch();
     } catch {}
   };
+
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => { await supabase.from("posts").delete().eq("id", id); },
     onSuccess: () => { toast({ title: "Excluído" }); refetch(); }
@@ -626,13 +685,32 @@ export default function Feed() {
 
         {posts?.map((post) => {
           if (post.post_type === 'photo_audio') return null;
+          
+          const isVoting = post.voting_period_active;
+          // Cálculos para a barra de progresso
+          const heartCount = post.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
+          const bombCount = post.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
+          const totalVotes = heartCount + bombCount;
+          const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+
+          // Se passou do tempo de votação, verifica se está aprovado visualmente (ou espera backend atualizar voting_period_active)
+          // Aqui confiamos na flag isVoting vinda do banco
+
           return (
-            <Card key={post.id} className={cn("border-0 shadow-md overflow-hidden", post.is_community_approved && "ring-2 ring-green-500/20")}>
+            <Card key={post.id} className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
               <CardContent className="p-0">
+                {/* Cabeçalho do Post */}
                 <div className="p-4 flex items-center justify-between">
                   <div className="flex items-center gap-3">
                     <Avatar><AvatarImage src={post.profiles?.avatar_url}/><AvatarFallback>{post.profiles?.username?.[0]}</AvatarFallback></Avatar>
-                    <div><UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-sm hover:underline">{post.profiles?.username}</UserLink><p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p></div>
+                    <div>
+                      <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-sm hover:underline">{post.profiles?.username}</UserLink>
+                      <div className="flex items-center gap-2">
+                         <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
+                         {/* Indicador de Status */}
+                         {isVoting ? <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">Em Votação</Badge> : <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">Aprovado</Badge>}
+                      </div>
+                    </div>
                   </div>
                   {post.user_id === user?.id && (
                     <DropdownMenu>
@@ -665,18 +743,49 @@ export default function Feed() {
                   </div>
                 )}
 
-                <div className="p-3 flex items-center gap-2">
-                  <Button variant="ghost" size="sm" onClick={()=>handleVote(post.id, "heart")} className={cn("rounded-full", post.likes?.some((l:any)=>l.user_id===user?.id) && "text-red-500 bg-red-50")}><Heart className={cn("h-5 w-5 mr-1", post.likes?.some((l:any)=>l.user_id===user?.id)&&"fill-current")}/> {post.likes?.length||0}</Button>
-                  <Button variant="ghost" size="sm" onClick={()=>setOpeningCommentsFor(post)} className="rounded-full"><MessageCircle className="h-5 w-5 mr-1"/> {post.comments?.length||0}</Button>
-                  <div className="ml-auto flex gap-2">
-                    {post.voting_period_active && (
-                      <>
-                        <Button size="sm" variant="outline" className="h-8 rounded-full border-green-200 text-green-700 bg-green-50" onClick={()=>handleVote(post.id, "heart")}><Heart className="mr-1 h-3 w-3 fill-current"/> Aprovar</Button>
-                        <Button size="sm" variant="outline" className="h-8 rounded-full border-red-200 text-red-700 bg-red-50" onClick={()=>handleVote(post.id, "bomb")}><Bomb className="mr-1 h-3 w-3 fill-current"/> Rejeitar</Button>
-                      </>
-                    )}
+                {/* ÁREA DE AÇÃO - LÓGICA CONDICIONAL */}
+                {isVoting ? (
+                  <div className="bg-orange-50/50 p-4 border-t border-orange-100">
+                     <div className="flex items-center justify-between mb-2">
+                       <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">Votação da Comunidade</span>
+                       <VotingCountdown endsAt={post.voting_ends_at} onExpire={() => refetch()} />
+                     </div>
+                     
+                     {/* Barra de Progresso da Votação */}
+                     <div className="flex items-center gap-2 mb-3">
+                        <Bomb className="h-4 w-4 text-red-500" />
+                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden flex">
+                           <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500" />
+                           <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
+                        </div>
+                        <Heart className="h-4 w-4 text-green-500 fill-green-500" />
+                     </div>
+
+                     <div className="flex gap-2">
+                        <Button className={cn("flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700", post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-100 ring-1 ring-red-400")} onClick={()=>handleVote(post.id, "bomb")}>
+                          <Bomb className="mr-2 h-4 w-4"/> Rejeitar ({bombCount})
+                        </Button>
+                        <Button className={cn("flex-1 bg-white border border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700", post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-100 ring-1 ring-green-400")} onClick={()=>handleVote(post.id, "heart")}>
+                          <Heart className="mr-2 h-4 w-4 fill-current"/> Aprovar ({heartCount})
+                        </Button>
+                     </div>
                   </div>
-                </div>
+                ) : (
+                  // MODO FEED NORMAL (APÓS APROVAÇÃO)
+                  <div className="p-3 flex items-center gap-2 border-t">
+                    <Button variant="ghost" size="sm" onClick={()=>handleLike(post.id)} className={cn("rounded-full transition-colors", post.likes?.some((l:any)=>l.user_id===user?.id) && "text-red-500 bg-red-50")}>
+                      <Heart className={cn("h-5 w-5 mr-1", post.likes?.some((l:any)=>l.user_id===user?.id)&&"fill-current")}/> 
+                      {post.likes?.length||0}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={()=>setOpeningCommentsFor(post)} className="rounded-full">
+                      <MessageCircle className="h-5 w-5 mr-1"/> 
+                      {post.comments?.length||0}
+                    </Button>
+                    <div className="ml-auto">
+                      <Button variant="ghost" size="icon" className="rounded-full"><Bookmark className="h-5 w-5"/></Button>
+                    </div>
+                  </div>
+                )}
               </CardContent>
             </Card>
           );
