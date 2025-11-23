@@ -282,7 +282,7 @@ const useAudioRecorder = () => {
 };
 
 /* ---------- COMPONENT PRINCIPAL ---------- */
-export default function Feed() {
+export default function Arena() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
@@ -332,7 +332,7 @@ export default function Feed() {
     queryKey: ["posts", user?.id],
     queryFn: async () => {
       // Nota: Fetching posts. Importante: Estamos pegando também o post_votes para calcular a aprovação
-      const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).eq("is_community_approved", true).order("created_at", { ascending: false });
+      const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).eq("is_community_approved", false).order("created_at", { ascending: false });
       if (error) throw error;
       return data as PostRow[];
     },

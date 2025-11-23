@@ -9,6 +9,7 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import Auth from "./pages/Auth";
 import AppLayout from "./components/Layout/AppLayout";
 import Feed from "./pages/Feed";
+import Arena from "./pages/Arena";
 import Explore from "./pages/Explore";
 import Messages from "./pages/Messages";
 import Communities from "./pages/Communities";
@@ -118,6 +119,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
                 <Route path="/" element={<Feed />} />
+                <Route path="/arena" element={<Arena />} />
                 <Route path="/explore" element={<Explore />} />
                 <Route path="/messages" element={<Messages />} />
                 <Route path="/communities" element={<Communities />} />

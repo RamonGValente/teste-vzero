@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home, Search, MessageCircle, Users, User, Menu, X, LogOut, Copy, Check } from "lucide-react";
+import { Home, Search, MessageCircle, Users, User, Menu, X, LogOut, Copy, Check, Zap } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -54,6 +54,7 @@ export default function AppLayout() {
     { name: "Explorar", href: "/explore", icon: Search },
     { name: "Mensagens", href: "/messages", icon: MessageCircle, badge: unreadMessages },
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
+    { name: "Arena", href: "/arena", icon: Zap },
     { name: "Perfil", href: "/profile", icon: User },
   ];
 
