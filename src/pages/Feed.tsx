@@ -23,10 +23,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress"; // Certifique-se de ter este componente ou use a div html abaixo
+import { Progress } from "@/components/ui/progress"; 
 
 /* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
-const VotingCountdown = ({ endsAt, onExpire }: { endsAt: string; onExpire?: () => void }) => {
+const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
 
@@ -53,10 +53,13 @@ const VotingCountdown = ({ endsAt, onExpire }: { endsAt: string; onExpire?: () =
     return () => clearInterval(interval);
   }, [endsAt, onExpire]);
 
-  if (isExpired) return <span className="text-xs font-bold text-muted-foreground">Processando...</span>;
+  if (isExpired) return <span className="text-xs font-bold opacity-70">Processando...</span>;
 
   return (
-    <div className="flex items-center gap-1.5 bg-orange-100 text-orange-700 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+    <div className={cn(
+      "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold animate-pulse",
+      variant === "flash" ? "bg-black/50 text-white border border-white/20" : "bg-orange-100 text-orange-700"
+    )}>
       <Clock className="h-3 w-3" />
       <span>{timeLeft}</span>
     </div>
@@ -518,78 +521,6 @@ export default function Feed() {
     } catch (e:any) { toast({ variant: "destructive", title: "Erro", description: e.message }); } finally { setUploading(false); }
   };
 
-  /* Carousel & Player */
-  const stopCurrentAudio = () => { if (currentAudioRef.current) { currentAudioRef.current.pause(); currentAudioRef.current = null; } setPlayingAudio(null); };
-  const handlePhotoAudioPlay = (url: string) => { stopCurrentAudio(); setPlayingAudio(url); const a = new Audio(stripPrefix(url)); currentAudioRef.current = a; a.onended = () => setPlayingAudio(null); a.play(); };
-  
-  const renderPhotoAudioCarousel = () => {
-    const list = posts?.filter(x => x.post_type === 'photo_audio') || [];
-    if (!list.length) return null;
-    const curr = list[currentCarouselIndex];
-    const img = curr?.media_urls?.[0] ? stripPrefix(curr.media_urls[0]) : null;
-    const isPlaying = playingAudio === curr?.audio_url;
-
-    const next = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex + 1) % list.length); };
-    const prev = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex - 1 + list.length) % list.length); };
-    const onTouchStart = (e: React.TouchEvent) => { setIsDragging(true); setStartX(e.touches[0].clientX); };
-    const onTouchEnd = (e: React.TouchEvent) => { setIsDragging(false); const diff = e.changedTouches[0].clientX - startX; if (diff > 50) prev(); else if (diff < -50) next(); setCurrentTranslate(0); };
-
-    return (
-      <Card className="mb-6 border-0 shadow-2xl bg-card/95 overflow-hidden max-w-sm mx-auto relative group">
-        <div className="absolute top-4 right-4 z-50">
-          {/* FLASH OPTIONS */}
-          {curr.user_id === user?.id && (
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="secondary" size="icon" className="rounded-full h-8 w-8 bg-black/40 text-white hover:bg-black/60 backdrop-blur-md border-0"><MoreVertical className="h-4 w-4"/></Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-40">
-                <DropdownMenuItem onClick={() => { setEditingPost(curr); setEditContent(curr.content||""); }}><Pencil className="mr-2 h-4 w-4"/> Editar</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => deleteMutation.mutate(curr.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4"/> Excluir</DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          )}
-        </div>
-
-        <div className="relative aspect-[9/16] bg-black" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          {img && <ProgressiveImage src={img} alt="Flash" className="w-full h-full" />}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"/>
-          
-          <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
-            <div className="bg-primary/20 backdrop-blur-md p-1.5 rounded-full"><Volume2 className="h-4 w-4 text-white"/></div>
-            <span className="text-white text-sm font-bold drop-shadow-md">Flash</span>
-          </div>
-
-          <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
-             <div className="flex items-center justify-between mb-4">
-                <div className="flex items-center gap-2 text-white">
-                  <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
-                  <span className="font-bold text-sm drop-shadow-md">{curr.profiles?.username}</span>
-                </div>
-                {curr.audio_url && (
-                  <Button size="icon" onClick={() => isPlaying ? stopCurrentAudio() : handlePhotoAudioPlay(curr.audio_url)} className={cn("rounded-full h-12 w-12 shadow-xl transition-transform", isPlaying ? "bg-white text-primary scale-110" : "bg-white/20 backdrop-blur-md text-white")}>
-                    {isPlaying ? <Volume2 className="h-6 w-6 animate-pulse"/> : <Play className="h-6 w-6 ml-1"/>}
-                  </Button>
-                )}
-             </div>
-             {list.length > 1 && (
-               <div className="flex justify-center gap-1">
-                 {list.map((_, i) => <div key={i} className={cn("h-1 rounded-full transition-all", i===currentCarouselIndex ? "bg-white w-6" : "bg-white/30 w-2")}/>)}
-               </div>
-             )}
-          </div>
-          
-          {list.length > 1 && (
-            <>
-              <Button variant="ghost" className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={prev}><ChevronLeft/></Button>
-              <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={next}><ChevronRight/></Button>
-            </>
-          )}
-        </div>
-      </Card>
-    );
-  };
-
   /* Helpers de Ação */
   const handleLike = async (postId: string) => {
       // Voto tradicional após aprovação (LIKE)
@@ -620,6 +551,123 @@ export default function Feed() {
     mutationFn: async () => { if (openingCommentsFor && newCommentText.trim()) await supabase.from("comments").insert({ post_id: openingCommentsFor.id, user_id: user!.id, content: newCommentText.trim() }); },
     onSuccess: () => { setNewCommentText(""); queryClient.invalidateQueries({ queryKey: ["post-comments"] }); refetch(); }
   });
+
+  /* Carousel & Player */
+  const stopCurrentAudio = () => { if (currentAudioRef.current) { currentAudioRef.current.pause(); currentAudioRef.current = null; } setPlayingAudio(null); };
+  const handlePhotoAudioPlay = (url: string) => { stopCurrentAudio(); setPlayingAudio(url); const a = new Audio(stripPrefix(url)); currentAudioRef.current = a; a.onended = () => setPlayingAudio(null); a.play(); };
+  
+  const renderPhotoAudioCarousel = () => {
+    const list = posts?.filter(x => x.post_type === 'photo_audio') || [];
+    if (!list.length) return null;
+    const curr = list[currentCarouselIndex];
+    const img = curr?.media_urls?.[0] ? stripPrefix(curr.media_urls[0]) : null;
+    const isPlaying = playingAudio === curr?.audio_url;
+
+    // Lógica de Votação para Flash
+    const isVoting = curr.voting_period_active;
+    const heartCount = curr.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
+    const bombCount = curr.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
+    const totalVotes = heartCount + bombCount;
+    const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+
+    const next = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex + 1) % list.length); };
+    const prev = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex - 1 + list.length) % list.length); };
+    const onTouchStart = (e: React.TouchEvent) => { setIsDragging(true); setStartX(e.touches[0].clientX); };
+    const onTouchEnd = (e: React.TouchEvent) => { setIsDragging(false); const diff = e.changedTouches[0].clientX - startX; if (diff > 50) prev(); else if (diff < -50) next(); setCurrentTranslate(0); };
+
+    return (
+      <Card className="mb-6 border-0 shadow-2xl bg-card/95 overflow-hidden max-w-sm mx-auto relative group">
+        {/* FLASH OPTIONS - Disponível sempre para o dono */}
+        {curr.user_id === user?.id && (
+            <div className="absolute top-4 right-4 z-50">
+                <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="secondary" size="icon" className="rounded-full h-8 w-8 bg-black/40 text-white hover:bg-black/60 backdrop-blur-md border-0"><MoreVertical className="h-4 w-4"/></Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                    <DropdownMenuItem onClick={() => { setEditingPost(curr); setEditContent(curr.content||""); }}><Pencil className="mr-2 h-4 w-4"/> Editar</DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => deleteMutation.mutate(curr.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4"/> Excluir</DropdownMenuItem>
+                </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        )}
+
+        <div className="relative aspect-[9/16] bg-black" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+          {img && <ProgressiveImage src={img} alt="Flash" className="w-full h-full" />}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"/>
+          
+          <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
+            <div className="bg-primary/20 backdrop-blur-md p-1.5 rounded-full"><Volume2 className="h-4 w-4 text-white"/></div>
+            <span className="text-white text-sm font-bold drop-shadow-md">Flash</span>
+            {isVoting && <VotingCountdown endsAt={curr.voting_ends_at} onExpire={refetch} variant="flash" />}
+          </div>
+
+          <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
+             {isVoting ? (
+                 /* MODO VOTAÇÃO FLASH (Estilo Dark Glass) */
+                 <div className="bg-black/40 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                    <div className="flex items-center gap-2 mb-3 text-white">
+                        <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
+                        <span className="font-bold text-sm drop-shadow-md">{curr.profiles?.username}</span>
+                    </div>
+
+                     <div className="flex items-center gap-2 mb-3">
+                        <Bomb className="h-4 w-4 text-red-500" />
+                        <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden flex">
+                           <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                           <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
+                        </div>
+                        <Heart className="h-4 w-4 text-green-500 fill-green-500" />
+                     </div>
+                     <div className="flex gap-2">
+                        <Button size="sm" className={cn("flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm", curr.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-500/50 hover:bg-red-500/60")} onClick={()=>handleVote(curr.id, "bomb")}>
+                          <Bomb className="mr-2 h-4 w-4"/>
+                        </Button>
+                        <Button size="sm" className={cn("flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm", curr.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-500/50 hover:bg-green-500/60")} onClick={()=>handleVote(curr.id, "heart")}>
+                          <Heart className="mr-2 h-4 w-4 fill-current"/>
+                        </Button>
+                        {curr.audio_url && (
+                            <Button size="sm" variant="secondary" onClick={() => isPlaying ? stopCurrentAudio() : handlePhotoAudioPlay(curr.audio_url)} className="rounded-full w-10 p-0 bg-white text-black hover:bg-white/90">
+                                {isPlaying ? <Pause className="h-4 w-4"/> : <Play className="h-4 w-4 ml-0.5"/>}
+                            </Button>
+                        )}
+                     </div>
+                 </div>
+             ) : (
+                 /* MODO NORMAL APROVADO */
+                 <>
+                    <div className="flex items-center justify-between mb-4">
+                        <div className="flex items-center gap-2 text-white">
+                        <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
+                        <span className="font-bold text-sm drop-shadow-md">{curr.profiles?.username}</span>
+                        </div>
+                        {curr.audio_url && (
+                        <Button size="icon" onClick={() => isPlaying ? stopCurrentAudio() : handlePhotoAudioPlay(curr.audio_url)} className={cn("rounded-full h-12 w-12 shadow-xl transition-transform", isPlaying ? "bg-white text-primary scale-110" : "bg-white/20 backdrop-blur-md text-white")}>
+                            {isPlaying ? <Volume2 className="h-6 w-6 animate-pulse"/> : <Play className="h-6 w-6 ml-1"/>}
+                        </Button>
+                        )}
+                    </div>
+                 </>
+             )}
+
+             {list.length > 1 && (
+               <div className="flex justify-center gap-1 mt-4">
+                 {list.map((_, i) => <div key={i} className={cn("h-1 rounded-full transition-all", i===currentCarouselIndex ? "bg-white w-6" : "bg-white/30 w-2")}/>)}
+               </div>
+             )}
+          </div>
+          
+          {list.length > 1 && (
+            <>
+              <Button variant="ghost" className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={prev}><ChevronLeft/></Button>
+              <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={next}><ChevronRight/></Button>
+            </>
+          )}
+        </div>
+      </Card>
+    );
+  };
+
   const { data: comments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id], enabled: !!openingCommentsFor,
     queryFn: async () => (await supabase.from("comments").select(`*, author:profiles!comments_user_id_fkey(username, avatar_url)`).eq("post_id", openingCommentsFor!.id).order("created_at")).data
@@ -687,14 +735,10 @@ export default function Feed() {
           if (post.post_type === 'photo_audio') return null;
           
           const isVoting = post.voting_period_active;
-          // Cálculos para a barra de progresso
           const heartCount = post.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
           const bombCount = post.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
           const totalVotes = heartCount + bombCount;
           const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
-
-          // Se passou do tempo de votação, verifica se está aprovado visualmente (ou espera backend atualizar voting_period_active)
-          // Aqui confiamos na flag isVoting vinda do banco
 
           return (
             <Card key={post.id} className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
