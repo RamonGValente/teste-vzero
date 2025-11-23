@@ -75,7 +75,6 @@ interface CustomAudioPlayerProps {
 interface SpeechState {
   messageId: string;
   isSpeaking: boolean;
-  isSupported: boolean;
 }
 
 // Lista de idiomas disponíveis expandida
@@ -113,7 +112,7 @@ const getSpeechLang = (code: string): string => {
 // --- Componente do Menu de Idiomas Centralizado ---
 const LanguageMenuModal = ({ 
   messageId, 
-  originalText,
+  originalText, 
   currentTranslation, 
   onTranslate,
   onClose 
@@ -375,17 +374,9 @@ export default function Messages() {
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
+  
+  // Removido o isSupported do state para não esconder o botão
   const [speechStates, setSpeechStates] = useState<SpeechState[]>([]);
-  const [isSpeechSupported, setIsSpeechSupported] = useState(false);
-
-  // Verificar se a Web Speech API é suportada (com fallback para webkit)
-  useEffect(() => {
-    const checkSupport = () => {
-      if (typeof window === 'undefined') return false;
-      return 'speechSynthesis' in window || 'webkitSpeechSynthesis' in window;
-    };
-    setIsSpeechSupported(checkSupport());
-  }, []);
 
   const formatTime = (seconds: number) => {
     if (isNaN(seconds)) return "0:00";
@@ -399,76 +390,88 @@ export default function Messages() {
   // ====================================================================
 
   const speakText = useCallback((text: string, messageId: string, targetLang: string = 'pt') => {
-    // Tenta obter a síntese padrão ou a prefixada (compatibilidade Opera/Chrome Mobile)
+    // Tenta obter o sintetizador. Adiciona fallback para webkit (Opera/Chrome antigos/Android)
     const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
 
     if (!synth) {
       toast({
-        title: "Recurso não suportado",
-        description: "Seu navegador não suporta síntese de voz.",
+        title: "Recurso indisponível",
+        description: "Seu navegador não suporta a leitura de texto em voz alta.",
         variant: "destructive"
       });
       return;
     }
 
-    // Para qualquer fala em andamento
-    synth.cancel();
+    try {
+      // Cancela falas anteriores para evitar sobreposição
+      synth.cancel();
 
-    // Atualiza o estado para mostrar que esta mensagem está sendo falada
-    setSpeechStates(prev => {
-      const existing = prev.find(s => s.messageId === messageId);
-      if (existing) {
-        return prev.map(s => 
-          s.messageId === messageId ? { ...s, isSpeaking: true } : { ...s, isSpeaking: false }
-        );
+      // Atualiza estado visual
+      setSpeechStates(prev => {
+        const existing = prev.find(s => s.messageId === messageId);
+        if (existing) {
+          return prev.map(s => 
+            s.messageId === messageId ? { ...s, isSpeaking: true } : { ...s, isSpeaking: false }
+          );
+        }
+        return [...prev.map(s => ({ ...s, isSpeaking: false })), 
+          { messageId, isSpeaking: true }];
+      });
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      
+      // Configura idioma
+      const speechLang = getSpeechLang(targetLang);
+      utterance.lang = speechLang;
+      utterance.rate = 0.9;
+      utterance.pitch = 1;
+      utterance.volume = 1;
+
+      // Tenta carregar vozes (hack para mobile)
+      const voices = synth.getVoices();
+      if (voices.length > 0) {
+          const preferredVoice = voices.find(v => v.lang === speechLang);
+          if (preferredVoice) utterance.voice = preferredVoice;
       }
-      return [...prev.map(s => ({ ...s, isSpeaking: false })), 
-        { messageId, isSpeaking: true, isSupported: true }];
-    });
 
-    const utterance = new SpeechSynthesisUtterance(text);
-    
-    // Configura o idioma baseado na tradução ou padrão
-    const speechLang = getSpeechLang(targetLang);
-    utterance.lang = speechLang;
-    utterance.rate = 0.9; // Velocidade um pouco mais lenta para melhor compreensão
-    utterance.pitch = 1;
-    utterance.volume = 1;
+      utterance.onend = () => {
+        setSpeechStates(prev => prev.map(s => 
+          s.messageId === messageId ? { ...s, isSpeaking: false } : s
+        ));
+      };
 
-    // Correção para Android/Opera: Tenta carregar vozes explicitamente
-    const voices = synth.getVoices();
-    if (voices.length > 0) {
-        const preferredVoice = voices.find(v => v.lang === speechLang);
-        if (preferredVoice) utterance.voice = preferredVoice;
+      utterance.onerror = (event) => {
+        console.error('Erro na síntese de voz:', event);
+        setSpeechStates(prev => prev.map(s => 
+          s.messageId === messageId ? { ...s, isSpeaking: false } : s
+        ));
+        // Opcional: não mostrar toast de erro no onerrror pois alguns navegadores
+        // disparam isso ao cancelar a fala anterior, o que é normal.
+      };
+
+      synth.speak(utterance);
+
+    } catch (error) {
+      console.error("Falha fatal no TTS:", error);
+      toast({
+        title: "Erro ao reproduzir",
+        description: "Ocorreu um erro ao tentar usar a voz do sistema.",
+        variant: "destructive"
+      });
+      setSpeechStates(prev => prev.map(s => 
+        s.messageId === messageId ? { ...s, isSpeaking: false } : s
+      ));
     }
-
-    utterance.onend = () => {
-      setSpeechStates(prev => prev.map(s => 
-        s.messageId === messageId ? { ...s, isSpeaking: false } : s
-      ));
-    };
-
-    utterance.onerror = (event) => {
-      console.error('Erro na síntese de voz:', event);
-      setSpeechStates(prev => prev.map(s => 
-        s.messageId === messageId ? { ...s, isSpeaking: false } : s
-      ));
-    };
-
-    synth.speak(utterance);
   }, [toast]);
 
   const stopSpeech = useCallback((messageId?: string) => {
-    // Usa o sintetizador correto para cancelar
     const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
     
     if (messageId) {
-      // Para apenas a mensagem específica no visual
       setSpeechStates(prev => prev.map(s => 
         s.messageId === messageId ? { ...s, isSpeaking: false } : s
       ));
     } else {
-      // Para todas as mensagens no visual
       setSpeechStates(prev => prev.map(s => ({ ...s, isSpeaking: false })));
     }
     
@@ -1118,17 +1121,15 @@ export default function Messages() {
                             )}
                           </div>
                           
-                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO PARA MOBILE */}
+                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO PARA MOBILE - VISÍVEL SEMPRE */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
-                              {/* Informação de hora e status da tradução */}
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
                                   {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
                                 
-                                {/* Informações da tradução quando ativa */}
                                 {translationState?.isTranslated && (
                                   <div className="flex items-center gap-1 text-[9px] opacity-70 text-muted-foreground font-medium">
                                     <Globe className="h-2 w-2" />
@@ -1148,38 +1149,34 @@ export default function Messages() {
                               </div>
                               
                               <div className="flex items-center gap-1">
-                                {/* Botão de áudio (Text-to-Speech) - CSS Ajustado para Mobile */}
-                                {isSpeechSupported && (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className={cn(
-                                      "h-6 px-2 text-[10px] transition-all",
-                                      // Visibilidade melhorada para mobile:
-                                      speechState?.isSpeaking 
-                                        ? "text-primary opacity-100 font-medium" 
-                                        : "text-muted-foreground opacity-70 hover:opacity-100 hover:text-foreground"
-                                    )}
-                                    onClick={() => {
-                                      if (speechState?.isSpeaking) {
-                                        stopSpeech(msg.id);
-                                      } else {
-                                        const targetLang = translationState?.isTranslated 
-                                          ? translationState.targetLang 
-                                          : 'pt';
-                                        speakText(displayText, msg.id, targetLang);
-                                      }
-                                    }}
-                                  >
-                                    {speechState?.isSpeaking ? (
-                                      <VolumeX className="h-3 w-3" />
-                                    ) : (
-                                      <Volume2 className="h-3 w-3" />
-                                    )}
-                                  </Button>
-                                )}
+                                {/* Botão de áudio (Text-to-Speech) - SEM CONDICIONAL */}
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className={cn(
+                                    "h-6 px-2 text-[10px] transition-all",
+                                    speechState?.isSpeaking 
+                                      ? "text-primary opacity-100 font-medium" 
+                                      : "text-muted-foreground opacity-70 hover:opacity-100 hover:text-foreground"
+                                  )}
+                                  onClick={() => {
+                                    if (speechState?.isSpeaking) {
+                                      stopSpeech(msg.id);
+                                    } else {
+                                      const targetLang = translationState?.isTranslated 
+                                        ? translationState.targetLang 
+                                        : 'pt';
+                                      speakText(displayText, msg.id, targetLang);
+                                    }
+                                  }}
+                                >
+                                  {speechState?.isSpeaking ? (
+                                    <VolumeX className="h-3 w-3" />
+                                  ) : (
+                                    <Volume2 className="h-3 w-3" />
+                                  )}
+                                </Button>
 
-                                {/* Botão de tradução */}
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
