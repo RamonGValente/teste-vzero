@@ -378,9 +378,13 @@ export default function Messages() {
   const [speechStates, setSpeechStates] = useState<SpeechState[]>([]);
   const [isSpeechSupported, setIsSpeechSupported] = useState(false);
 
-  // Verificar se a Web Speech API é suportada
+  // Verificar se a Web Speech API é suportada (com fallback para webkit)
   useEffect(() => {
-    setIsSpeechSupported('speechSynthesis' in window);
+    const checkSupport = () => {
+      if (typeof window === 'undefined') return false;
+      return 'speechSynthesis' in window || 'webkitSpeechSynthesis' in window;
+    };
+    setIsSpeechSupported(checkSupport());
   }, []);
 
   const formatTime = (seconds: number) => {
@@ -395,7 +399,10 @@ export default function Messages() {
   // ====================================================================
 
   const speakText = useCallback((text: string, messageId: string, targetLang: string = 'pt') => {
-    if (!isSpeechSupported) {
+    // Tenta obter a síntese padrão ou a prefixada (compatibilidade Opera/Chrome Mobile)
+    const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
+
+    if (!synth) {
       toast({
         title: "Recurso não suportado",
         description: "Seu navegador não suporta síntese de voz.",
@@ -405,7 +412,7 @@ export default function Messages() {
     }
 
     // Para qualquer fala em andamento
-    window.speechSynthesis.cancel();
+    synth.cancel();
 
     // Atualiza o estado para mostrar que esta mensagem está sendo falada
     setSpeechStates(prev => {
@@ -428,6 +435,13 @@ export default function Messages() {
     utterance.pitch = 1;
     utterance.volume = 1;
 
+    // Correção para Android/Opera: Tenta carregar vozes explicitamente
+    const voices = synth.getVoices();
+    if (voices.length > 0) {
+        const preferredVoice = voices.find(v => v.lang === speechLang);
+        if (preferredVoice) utterance.voice = preferredVoice;
+    }
+
     utterance.onend = () => {
       setSpeechStates(prev => prev.map(s => 
         s.messageId === messageId ? { ...s, isSpeaking: false } : s
@@ -439,27 +453,28 @@ export default function Messages() {
       setSpeechStates(prev => prev.map(s => 
         s.messageId === messageId ? { ...s, isSpeaking: false } : s
       ));
-      toast({
-        title: "Erro na reprodução",
-        description: "Não foi possível reproduzir o áudio.",
-        variant: "destructive"
-      });
     };
 
-    window.speechSynthesis.speak(utterance);
-  }, [isSpeechSupported, toast]);
+    synth.speak(utterance);
+  }, [toast]);
 
   const stopSpeech = useCallback((messageId?: string) => {
+    // Usa o sintetizador correto para cancelar
+    const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
+    
     if (messageId) {
-      // Para apenas a mensagem específica
+      // Para apenas a mensagem específica no visual
       setSpeechStates(prev => prev.map(s => 
         s.messageId === messageId ? { ...s, isSpeaking: false } : s
       ));
     } else {
-      // Para todas as mensagens
+      // Para todas as mensagens no visual
       setSpeechStates(prev => prev.map(s => ({ ...s, isSpeaking: false })));
     }
-    window.speechSynthesis.cancel();
+    
+    if (synth) {
+      synth.cancel();
+    }
   }, []);
 
   const getSpeechState = (messageId: string) => {
@@ -467,7 +482,7 @@ export default function Messages() {
   };
 
   // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO - VERSÃO FUNCIONAL ANTERIOR
+  // FUNÇÕES DE TRADUÇÃO
   // ====================================================================
 
   const translateText = async (text: string, targetLang: string): Promise<string> => {
@@ -758,7 +773,6 @@ export default function Messages() {
             if (timer.status === 'deleting' && timer.currentText) {
               const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
               const elapsedTime = 120 - timer.timeLeft + 1;
-              // ALTERAÇÃO: Agora apaga do início para o final (de cima para baixo)
               const lettersToRemove = Math.floor(originalText.length * (elapsedTime / 120));
               const lettersToKeep = Math.max(0, originalText.length - lettersToRemove);
               updatedTimers.push({ 
@@ -1104,7 +1118,7 @@ export default function Messages() {
                             )}
                           </div>
                           
-                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO */}
+                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO PARA MOBILE */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
                               
@@ -1134,14 +1148,17 @@ export default function Messages() {
                               </div>
                               
                               <div className="flex items-center gap-1">
-                                {/* Botão de áudio (Text-to-Speech) */}
+                                {/* Botão de áudio (Text-to-Speech) - CSS Ajustado para Mobile */}
                                 {isSpeechSupported && (
                                   <Button
                                     variant="ghost"
                                     size="sm"
                                     className={cn(
-                                      "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all",
-                                      speechState?.isSpeaking && "text-primary opacity-100"
+                                      "h-6 px-2 text-[10px] transition-all",
+                                      // Visibilidade melhorada para mobile:
+                                      speechState?.isSpeaking 
+                                        ? "text-primary opacity-100 font-medium" 
+                                        : "text-muted-foreground opacity-70 hover:opacity-100 hover:text-foreground"
                                     )}
                                     onClick={() => {
                                       if (speechState?.isSpeaking) {
