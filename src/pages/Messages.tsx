@@ -50,7 +50,7 @@ import { useAuth } from "@/hooks/useAuth";
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
-  expiryTime: number; // Novo campo para controlar o tempo absoluto
+  expiryTime: number; 
   status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
   currentText?: string;
   messageType: 'text' | 'audio' | 'media';
@@ -400,21 +400,53 @@ export default function Messages() {
 
   const getSpeechState = (messageId: string) => speechStates.find(s => s.messageId === messageId);
 
-  // --- Translation Functions ---
+  // --- TRANSLATION LOGIC (UPDATED FOR LARGE TEXTS) ---
+  const callTranslateApi = async (textChunk: string, targetLang: string): Promise<string> => {
+    const response = await fetch('/.netlify/functions/translate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: textChunk, targetLang, type: 'translate' })
+    });
+    if (!response.ok) throw new Error('API Error');
+    const result = await response.json();
+    return result.data?.translatedText || textChunk;
+  };
+
   const translateText = async (text: string, targetLang: string): Promise<string> => {
     if (!text?.trim()) return text;
+    
+    // Limite seguro para evitar erro de payload ou timeout da API (300 a 400 chars é um bom padrão)
+    const CHUNK_SIZE = 350;
+
+    // Se for pequeno, chama direto
+    if (text.length <= CHUNK_SIZE) {
+        return await callTranslateApi(text, targetLang);
+    }
+
+    // Se for grande, quebra em pedaços respeitando frases
+    const chunks: string[] = [];
+    let currentChunk = "";
+    
+    // Divide por pontuação mantendo a pontuação
+    const sentences = text.match(/[^.!?\n]+[.!?\n]+|[^.!?\n]+$/g) || [text];
+
+    sentences.forEach(sentence => {
+        if ((currentChunk + sentence).length > CHUNK_SIZE && currentChunk.length > 0) {
+            chunks.push(currentChunk.trim());
+            currentChunk = "";
+        }
+        currentChunk += sentence;
+    });
+    if (currentChunk.trim().length > 0) chunks.push(currentChunk.trim());
+
     try {
-      const response = await fetch('/.netlify/functions/translate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, targetLang, type: 'translate' })
-      });
-      if (!response.ok) throw new Error('API Error');
-      const result = await response.json();
-      return result.data?.translatedText || text;
+        // Traduz pedaços em paralelo
+        const promises = chunks.map(chunk => callTranslateApi(chunk, targetLang));
+        const results = await Promise.all(promises);
+        return results.join(" ");
     } catch (error) {
-      console.error('Translation error:', error);
-      throw error;
+        console.error('Erro na tradução em lote:', error);
+        throw error;
     }
   };
 
@@ -442,7 +474,7 @@ export default function Messages() {
       const translatedText = await translateText(text, targetLang);
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, translatedText, isTranslated: true, isLoading: false, targetLang, sourceLang: 'auto' } : t));
     } catch (error) {
-      toast({ title: "Erro na tradução", description: "Tente novamente.", variant: "destructive" });
+      toast({ title: "Erro na tradução", description: "Texto muito longo ou erro de conexão.", variant: "destructive" });
       setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isLoading: false, isTranslated: false } : t));
     }
   };
@@ -549,7 +581,7 @@ export default function Messages() {
 
 
   // ====================================================================
-  // LOGICA DO TIMER CORRIGIDA (BASEADA EM VISUALIZAÇÃO/AÇÃO LOCAL)
+  // LOGICA DO TIMER (Mantida versão LocalStorage/Visualização)
   // ====================================================================
 
   // Inicia timer de audio MANUALMENTE (ao dar play)
@@ -561,7 +593,6 @@ export default function Messages() {
       const now = Date.now();
       const expiryTime = now + 120000; // 120 segundos
 
-      // Salva no LocalStorage para persistir refresh
       const storageKey = `timer_${user?.id}_${messageId}`;
       localStorage.setItem(storageKey, expiryTime.toString());
 
@@ -579,14 +610,12 @@ export default function Messages() {
   useEffect(() => {
     if (!messages || !user) return;
     
-    // 1. INICIALIZAÇÃO: Verifica mensagens novas ou carregadas
     setMessageTimers(prev => {
       const now = Date.now();
       const newTimers: MessageTimer[] = [];
       const currentTimerIds = new Set(prev.map(t => t.messageId));
       
       messages.forEach(message => {
-        // Ignora minhas mensagens, deletadas ou já em timer
         if (message.user_id === user.id || deletedMessages.has(message.id) || currentTimerIds.has(message.id)) return;
         
         const messageType = getMessageType(message);
@@ -596,30 +625,24 @@ export default function Messages() {
         let expiryTime = 0;
 
         if (storedExpiry) {
-           // Se já existe no storage, usa o tempo salvo
            expiryTime = parseInt(storedExpiry, 10);
         } else {
-           // Se NÃO existe no storage:
            if (messageType === 'text' || messageType === 'media') {
-             // Texto/Media: Inicia AGORA (Visualizou ao carregar)
-             expiryTime = now + 120000; // 2 minutos
+             expiryTime = now + 120000; // 2 minutos a partir da visualização
              localStorage.setItem(storageKey, expiryTime.toString());
            } else {
-             // Audio: NÃO inicia. Espera o usuário dar Play (startAudioTimer)
-             return;
+             return; // Audio espera play
            }
         }
 
-        // Calcula tempo restante real
         const timeLeft = Math.max(0, Math.ceil((expiryTime - now) / 1000));
         
-        // Se ainda tem tempo ou está nos 5s finais de 'deleting', adiciona
         if (timeLeft > 0 || (now - expiryTime < 5000)) {
            newTimers.push({ 
              messageId: message.id, 
              timeLeft: timeLeft, 
              expiryTime: expiryTime,
-             status: timeLeft <= 0 ? 'deleting' : 'counting', // Ajusta status inicial se já passou
+             status: timeLeft <= 0 ? 'deleting' : 'counting', 
              messageType 
            });
         }
@@ -631,7 +654,7 @@ export default function Messages() {
 
   }, [messages, user, deletedMessages, getMessageType]);
 
-  // 2. LOOP DE CONTAGEM (setInterval)
+  // Loop de contagem
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageTimers(prev => {
@@ -645,14 +668,12 @@ export default function Messages() {
         prev.forEach(timer => {
           if (timer.status === 'deleted') {
              hasChanges = true;
-             return; // Limpa da memória
+             return; 
           }
 
-          // Recalcula tempo baseado no expiryTime absoluto (mais preciso que decremento)
           const realTimeLeft = Math.max(0, Math.ceil((timer.expiryTime - now) / 1000));
           
           if (realTimeLeft <= 0 && timer.status === 'counting') {
-             // O tempo acabou -> Muda para deletando
              hasChanges = true;
              if (timer.messageType === 'text') {
                 updatedTimers.push({
@@ -662,23 +683,18 @@ export default function Messages() {
                    currentText: messages?.find(m => m.id === timer.messageId)?.content || '',
                 });
              } else {
-                updatedTimers.push({ ...timer, timeLeft: 5, status: 'showingUndoing' }); // 5s para undo
+                updatedTimers.push({ ...timer, timeLeft: 5, status: 'showingUndoing' });
              }
           } 
           else if (timer.status === 'deleting') {
-             // Animação de texto sumindo
-             // Usamos um contador interno auxiliar ou decremento simples aqui para animação visual
-             const animationTimeTotal = 120; // Tempo arbitrário para apagar o texto visualmente
-             const timeSinceExpiry = Math.floor((now - timer.expiryTime) / 1000); // Segundos passados desde expiração
+             const timeSinceExpiry = Math.floor((now - timer.expiryTime) / 1000); 
              
-             // Se passou muito tempo desde expiração, vai para Undoing
-             if (timeSinceExpiry > 5) { // 5 segundos apagando
+             if (timeSinceExpiry > 5) { 
                 updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5, currentText: undefined });
              } else {
-                // Lógica de apagar letras
                 if (timer.currentText) {
                    const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
-                   const ratio = Math.min(1, timeSinceExpiry / 5); // 0 a 1 em 5 segundos
+                   const ratio = Math.min(1, timeSinceExpiry / 5); 
                    const lettersToKeep = Math.floor(originalText.length * (1 - ratio));
                    updatedTimers.push({ ...timer, currentText: originalText.slice(0, lettersToKeep) });
                 } else {
@@ -688,11 +704,8 @@ export default function Messages() {
              hasChanges = true;
           }
           else if (timer.status === 'showingUndoing') {
-             // Contagem final antes de sumir do banco
-             // Aqui usamos timeLeft decrementado manualmente pois é uma fase curta pós-expiração
              if (timer.timeLeft <= 0) {
                 messagesToDelete.push(timer.messageId);
-                // Remove do localStorage também para limpar lixo
                 if (user) localStorage.removeItem(`timer_${user.id}_${timer.messageId}`);
                 updatedTimers.push({ ...timer, status: 'deleted' });
              } else {
@@ -701,7 +714,6 @@ export default function Messages() {
              hasChanges = true;
           } 
           else {
-             // Contagem normal
              if (timer.timeLeft !== realTimeLeft) {
                 updatedTimers.push({ ...timer, timeLeft: realTimeLeft });
                 hasChanges = true;
@@ -747,7 +759,6 @@ export default function Messages() {
     return () => { supabase.removeChannel(channel); };
   }, [refetchMessages, refetchConversations, user]);
 
-  // Scroll to bottom when messages change
   useEffect(() => { 
     if (messages && messages.length > 0) {
       if (isAtBottom) setTimeout(() => scrollToBottom(false), 100); 
