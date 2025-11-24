@@ -77,7 +77,7 @@ interface SpeechState {
   isSpeaking: boolean;
 }
 
-// Lista de idiomas disponíveis expandida
+// Lista de idiomas disponíveis
 const AVAILABLE_LANGUAGES = [
   { code: 'pt', name: 'Português (BR)', flag: '🇧🇷', nativeName: 'Português', speechLang: 'pt-BR' },
   { code: 'en', name: 'Inglês', flag: '🇺🇸', nativeName: 'English', speechLang: 'en-US' },
@@ -109,7 +109,7 @@ const getSpeechLang = (code: string): string => {
   return lang ? lang.speechLang : 'pt-BR';
 };
 
-// --- Componente do Menu de Idiomas Centralizado ---
+// --- Componente do Menu de Idiomas ---
 const LanguageMenuModal = ({ 
   messageId, 
   originalText, 
@@ -142,25 +142,18 @@ const LanguageMenuModal = ({
         className="bg-popover border shadow-2xl rounded-lg w-full max-w-md mx-4 max-h-[80vh] flex flex-col animate-in zoom-in-95 duration-200"
         onClick={(e) => e.stopPropagation()}
       >
-        {/* Cabeçalho do Menu */}
         <div className="p-4 border-b bg-muted/20 flex-shrink-0">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Languages className="h-5 w-5 text-primary" />
               <span className="font-semibold text-lg">Traduzir mensagem</span>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8"
-              onClick={onClose}
-            >
+            <Button variant="ghost" size="icon" className="h-8 w-8" onClick={onClose}>
               <X className="h-4 w-4" />
             </Button>
           </div>
         </div>
 
-        {/* Abas de Categorias */}
         <div className="px-4 pt-3 flex-shrink-0">
           <Tabs value={selectedCategory} onValueChange={(v: any) => setSelectedCategory(v)} className="w-full">
             <TabsList className="w-full grid grid-cols-2 h-9">
@@ -170,10 +163,8 @@ const LanguageMenuModal = ({
           </Tabs>
         </div>
 
-        {/* Lista de Idiomas */}
         <ScrollArea className="flex-1 px-2 py-2">
           <div className="space-y-1 pb-2">
-            {/* Opção para ver original se já estiver traduzido */}
             {currentTranslation?.isTranslated && (
               <button
                 className="w-full text-left px-3 py-3 text-sm hover:bg-accent hover:text-accent-foreground rounded-md flex items-center gap-3 font-medium text-primary border border-primary/20 mb-2"
@@ -182,15 +173,12 @@ const LanguageMenuModal = ({
                 <X className="h-4 w-4" />
                 <div className="flex-1">
                   <div>Ver Original</div>
-                  <div className="text-xs text-muted-foreground">
-                    {getLanguageNativeName(currentTranslation.sourceLang || 'auto')}
-                  </div>
+                  <div className="text-xs text-muted-foreground">{getLanguageNativeName(currentTranslation.sourceLang || 'auto')}</div>
                 </div>
                 <Check className="h-4 w-4 text-primary" />
               </button>
             )}
 
-            {/* Idiomas */}
             {(selectedCategory === 'popular' ? popularLanguages : AVAILABLE_LANGUAGES).map((lang) => (
               <button
                 key={lang.code}
@@ -212,12 +200,11 @@ const LanguageMenuModal = ({
             ))}
           </div>
         </ScrollArea>
-
-        {/* Rodapé com informações */}
+        
         <div className="p-3 border-t bg-muted/10 flex-shrink-0">
           <div className="flex items-center gap-2 text-xs text-muted-foreground px-1">
             <Globe className="h-3 w-3" />
-            <span>Tradução automática por LibreTranslate</span>
+            <span>Tradução automática</span>
           </div>
         </div>
       </div>
@@ -226,12 +213,7 @@ const LanguageMenuModal = ({
 };
 
 // --- CustomAudioPlayer Component ---
-const CustomAudioPlayer = ({ 
-  audioUrl, 
-  className,
-  onPlay,
-  isOwn 
-}: CustomAudioPlayerProps) => {
+const CustomAudioPlayer = ({ audioUrl, className, onPlay, isOwn }: CustomAudioPlayerProps) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [duration, setDuration] = useState(0);
@@ -278,8 +260,6 @@ const CustomAudioPlayer = ({
   const handleLoadedMetadata = () => {
     if (audioRef.current) {
       setDuration(audioRef.current.duration);
-      setProgress(0);
-      setCurrentTime(0);
     }
   };
 
@@ -300,21 +280,8 @@ const CustomAudioPlayer = ({
     setProgress(percent * 100);
   };
 
-  const playerClasses = cn(
-    "flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 bg-background border",
-    isOwn ? "bg-primary text-primary-foreground" : "bg-card border text-foreground/80",
-    className
-  );
-
-  const buttonVariant = isOwn ? "secondary" : "primary"; 
-  const buttonIconColor = isOwn ? "text-primary" : "text-primary-foreground";
-  const progressBg = isOwn ? "bg-white/70" : "bg-primary/60";
-  const thumbColor = isOwn ? "bg-secondary" : "bg-primary";
-  const timeColorPrimary = isOwn ? "text-primary-foreground/80" : "text-primary";
-  const timeColorSecondary = isOwn ? "text-primary-foreground/60" : "text-muted-foreground";
-
   return (
-    <div className={playerClasses}>
+    <div className={cn("flex items-center gap-3 p-2 rounded-full shadow-lg transition-all duration-200 border", isOwn ? "bg-primary text-primary-foreground" : "bg-card border text-foreground/80", className)}>
       <audio
         ref={audioRef}
         onTimeUpdate={handleTimeUpdate}
@@ -323,30 +290,24 @@ const CustomAudioPlayer = ({
         onPause={() => setIsPlaying(false)}
         preload="metadata"
       >
-        <source src={audioUrl} type="audio/webm" />
-        <source src={audioUrl} type="audio/mp3" />
-        <source src={audioUrl} type="audio/wav" />
+        <source src={audioUrl} />
       </audio>
       <Button
-        variant={buttonVariant}
+        variant={isOwn ? "secondary" : "default"}
         size="icon"
         onClick={handlePlayPause}
-        className={cn("flex-shrink-0 h-9 w-9 rounded-full hover:bg-opacity-80 transition-colors duration-150", buttonIconColor)}
+        className={cn("flex-shrink-0 h-9 w-9 rounded-full hover:bg-opacity-80 transition-colors duration-150", isOwn ? "text-primary" : "text-primary-foreground")}
       >
         {isPlaying ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 fill-current translate-x-[1px]" />}
       </Button>
       <div className="flex-1 min-w-0 space-y-1 pr-2">
-        <div 
-          className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40"
-          onClick={handleSeek}
-          title="Clique para buscar"
-        >
-          <div className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", progressBg)} style={{ width: `${progress}%` }} />
-          <div className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", thumbColor)} style={{ left: `calc(${progress}% - 8px)` }} />
+        <div className="w-full h-5 relative rounded-full overflow-hidden cursor-pointer bg-muted/40" onClick={handleSeek}>
+          <div className={cn("absolute inset-y-0 left-0 transition-all duration-100 ease-linear", isOwn ? "bg-white/70" : "bg-primary/60")} style={{ width: `${progress}%` }} />
+          <div className={cn("absolute top-1/2 -translate-y-1/2 h-4 w-4 rounded-full shadow-md transition-all duration-100 ease-linear", isOwn ? "bg-secondary" : "bg-primary")} style={{ left: `calc(${progress}% - 8px)` }} />
         </div>
         <div className="flex justify-between text-xs font-medium opacity-80">
-          <span className={timeColorPrimary}>{formatTimePlayer(currentTime)}</span> 
-          <span className={timeColorSecondary}>{formatTimePlayer(duration)}</span> 
+          <span className={isOwn ? "text-primary-foreground/80" : "text-primary"}>{formatTimePlayer(currentTime)}</span> 
+          <span className={isOwn ? "text-primary-foreground/60" : "text-muted-foreground"}>{formatTimePlayer(duration)}</span> 
         </div>
       </div>
     </div>
@@ -374,8 +335,6 @@ export default function Messages() {
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
-  
-  // Removido o isSupported do state para não esconder o botão
   const [speechStates, setSpeechStates] = useState<SpeechState[]>([]);
 
   const formatTime = (seconds: number) => {
@@ -385,238 +344,119 @@ export default function Messages() {
     return `${mins}:${secs.toString().padStart(2, '0')}`;
   };
 
-  // ====================================================================
-  // FUNÇÕES DE TEXT-TO-SPEECH (TEXTO PARA ÁUDIO)
-  // ====================================================================
-
+  // --- TTS Functions ---
   const speakText = useCallback((text: string, messageId: string, targetLang: string = 'pt') => {
-    // Tenta obter o sintetizador. Adiciona fallback para webkit (Opera/Chrome antigos/Android)
     const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
-
     if (!synth) {
-      toast({
-        title: "Recurso indisponível",
-        description: "Seu navegador não suporta a leitura de texto em voz alta.",
-        variant: "destructive"
-      });
+      toast({ title: "Erro", description: "Seu navegador não suporta leitura de voz.", variant: "destructive" });
       return;
     }
 
     try {
-      // Cancela falas anteriores para evitar sobreposição
       synth.cancel();
-
-      // Atualiza estado visual
       setSpeechStates(prev => {
-        const existing = prev.find(s => s.messageId === messageId);
-        if (existing) {
-          return prev.map(s => 
-            s.messageId === messageId ? { ...s, isSpeaking: true } : { ...s, isSpeaking: false }
-          );
-        }
-        return [...prev.map(s => ({ ...s, isSpeaking: false })), 
-          { messageId, isSpeaking: true }];
+        const others = prev.filter(s => s.messageId !== messageId).map(s => ({ ...s, isSpeaking: false }));
+        return [...others, { messageId, isSpeaking: true }];
       });
 
       const utterance = new SpeechSynthesisUtterance(text);
-      
-      // Configura idioma
       const speechLang = getSpeechLang(targetLang);
       utterance.lang = speechLang;
       utterance.rate = 0.9;
-      utterance.pitch = 1;
-      utterance.volume = 1;
 
-      // Tenta carregar vozes (hack para mobile)
       const voices = synth.getVoices();
       if (voices.length > 0) {
-          const preferredVoice = voices.find(v => v.lang === speechLang);
-          if (preferredVoice) utterance.voice = preferredVoice;
+        const preferredVoice = voices.find(v => v.lang === speechLang);
+        if (preferredVoice) utterance.voice = preferredVoice;
       }
 
-      utterance.onend = () => {
-        setSpeechStates(prev => prev.map(s => 
-          s.messageId === messageId ? { ...s, isSpeaking: false } : s
-        ));
-      };
-
-      utterance.onerror = (event) => {
-        console.error('Erro na síntese de voz:', event);
-        setSpeechStates(prev => prev.map(s => 
-          s.messageId === messageId ? { ...s, isSpeaking: false } : s
-        ));
-        // Opcional: não mostrar toast de erro no onerrror pois alguns navegadores
-        // disparam isso ao cancelar a fala anterior, o que é normal.
-      };
+      utterance.onend = () => setSpeechStates(prev => prev.map(s => s.messageId === messageId ? { ...s, isSpeaking: false } : s));
+      utterance.onerror = () => setSpeechStates(prev => prev.map(s => s.messageId === messageId ? { ...s, isSpeaking: false } : s));
 
       synth.speak(utterance);
-
     } catch (error) {
-      console.error("Falha fatal no TTS:", error);
-      toast({
-        title: "Erro ao reproduzir",
-        description: "Ocorreu um erro ao tentar usar a voz do sistema.",
-        variant: "destructive"
-      });
-      setSpeechStates(prev => prev.map(s => 
-        s.messageId === messageId ? { ...s, isSpeaking: false } : s
-      ));
+      console.error("TTS Error:", error);
+      setSpeechStates(prev => prev.map(s => s.messageId === messageId ? { ...s, isSpeaking: false } : s));
     }
   }, [toast]);
 
   const stopSpeech = useCallback((messageId?: string) => {
     const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
-    
     if (messageId) {
-      setSpeechStates(prev => prev.map(s => 
-        s.messageId === messageId ? { ...s, isSpeaking: false } : s
-      ));
+      setSpeechStates(prev => prev.map(s => s.messageId === messageId ? { ...s, isSpeaking: false } : s));
     } else {
       setSpeechStates(prev => prev.map(s => ({ ...s, isSpeaking: false })));
     }
-    
-    if (synth) {
-      synth.cancel();
-    }
+    if (synth) synth.cancel();
   }, []);
 
-  const getSpeechState = (messageId: string) => {
-    return speechStates.find(s => s.messageId === messageId);
-  };
+  // Limpa o TTS ao desmontar
+  useEffect(() => {
+    return () => {
+      const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
+      if (synth) synth.cancel();
+    };
+  }, []);
 
-  // ====================================================================
-  // FUNÇÕES DE TRADUÇÃO
-  // ====================================================================
+  const getSpeechState = (messageId: string) => speechStates.find(s => s.messageId === messageId);
 
+  // --- Translation Functions ---
   const translateText = async (text: string, targetLang: string): Promise<string> => {
-    if (!text || text.trim().length === 0) return text;
-    
+    if (!text?.trim()) return text;
     try {
       const response = await fetch('/.netlify/functions/translate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ 
-          text: text, 
-          targetLang, 
-          type: 'translate' 
-        })
+        body: JSON.stringify({ text, targetLang, type: 'translate' })
       });
-      
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-      
+      if (!response.ok) throw new Error('API Error');
       const result = await response.json();
-      
-      if (result.success && result.data && result.data.translatedText) {
-        return result.data.translatedText;
-      }
-      
-      throw new Error('Erro na resposta da API');
+      return result.data?.translatedText || text;
     } catch (error) {
-      console.error('Erro na tradução:', error);
+      console.error('Translation error:', error);
       throw error;
     }
   };
 
   const handleTranslate = async (messageId: string, text: string, targetLang: string) => {
-    // Fecha o menu imediatamente
     setOpenMenuId(null);
-
     const existingTranslation = translations.find(t => t.messageId === messageId);
 
-    // Se o usuário clicou em "Ver Original"
     if (targetLang === 'original') {
-      if (existingTranslation) {
-        setTranslations(prev => prev.map(t => 
-          t.messageId === messageId ? { ...t, isTranslated: false } : t
-        ));
-      }
+      if (existingTranslation) setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: false } : t));
       return;
     }
 
-    // Se já estiver traduzido para o mesmo idioma, apenas alterna
     if (existingTranslation?.translatedText && existingTranslation.targetLang === targetLang) {
-      setTranslations(prev => prev.map(t => 
-        t.messageId === messageId ? { ...t, isTranslated: !t.isTranslated } : t
-      ));
+      setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isTranslated: !t.isTranslated } : t));
       return;
     }
 
-    // Inicia Loading
     setTranslations(prev => {
       const existing = prev.find(t => t.messageId === messageId);
-      if (existing) {
-        return prev.map(t => 
-          t.messageId === messageId ? { 
-            ...t, 
-            isLoading: true, 
-            targetLang,
-            isTranslated: false
-          } : t
-        );
-      }
-      return [...prev, { 
-        messageId, 
-        originalText: text, 
-        translatedText: '', 
-        isTranslated: false, 
-        isLoading: true, 
-        targetLang 
-      }];
+      if (existing) return prev.map(t => t.messageId === messageId ? { ...t, isLoading: true, targetLang, isTranslated: false } : t);
+      return [...prev, { messageId, originalText: text, translatedText: '', isTranslated: false, isLoading: true, targetLang }];
     });
 
     try {
       const translatedText = await translateText(text, targetLang);
-      
-      setTranslations(prev => prev.map(t => 
-        t.messageId === messageId ? { 
-          ...t, 
-          translatedText, 
-          isTranslated: true, 
-          isLoading: false,
-          targetLang,
-          sourceLang: 'auto'
-        } : t
-      ));
+      setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, translatedText, isTranslated: true, isLoading: false, targetLang, sourceLang: 'auto' } : t));
     } catch (error) {
-      console.error('Falha na tradução:', error);
-      toast({ 
-        title: "Erro na tradução", 
-        description: "Não foi possível traduzir a mensagem no momento. Tente novamente.", 
-        variant: "destructive" 
-      });
-      // Remove o estado de loading
-      setTranslations(prev => prev.map(t => 
-        t.messageId === messageId ? { 
-          ...t, 
-          isLoading: false,
-          isTranslated: false
-        } : t
-      ));
+      toast({ title: "Erro na tradução", description: "Tente novamente.", variant: "destructive" });
+      setTranslations(prev => prev.map(t => t.messageId === messageId ? { ...t, isLoading: false, isTranslated: false } : t));
     }
   };
 
-  const getTranslationState = (messageId: string) => {
-    return translations.find(t => t.messageId === messageId);
-  };
+  const getTranslationState = (messageId: string) => translations.find(t => t.messageId === messageId);
+  const getSelectedMessageText = () => messages?.find(m => m.id === openMenuId)?.content || '';
 
-  // Função para obter o texto da mensagem selecionada para o modal
-  const getSelectedMessageText = () => {
-    if (!openMenuId || !messages) return '';
-    const message = messages.find(m => m.id === openMenuId);
-    return message?.content || '';
-  };
-
-  // Fecha menus ao clicar fora
   useEffect(() => {
     const handleClickOutside = () => setOpenMenuId(null);
     window.addEventListener('click', handleClickOutside);
     return () => window.removeEventListener('click', handleClickOutside);
   }, []);
 
-  // ====================================================================
-
+  // --- Scroll Logic ---
   const scrollToBottom = useCallback((instant: boolean = false) => {
     if (messagesContainerRef.current) {
       messagesContainerRef.current.scrollTo({
@@ -641,6 +481,7 @@ export default function Messages() {
     return () => container.removeEventListener('scroll', handleScroll);
   }, [handleScroll]);
 
+  // --- Queries ---
   const { data: profile } = useQuery({
     queryKey: ["user-profile", user?.id],
     enabled: !!user,
@@ -706,6 +547,7 @@ export default function Messages() {
     return 'media';
   }, []);
 
+  // --- Timer Logic (CRITICAL FIX) ---
   const startAudioTimer = useCallback((messageId: string) => {
     setMessageTimers(prev => {
       if (prev.find(timer => timer.messageId === messageId)) return prev;
@@ -713,21 +555,51 @@ export default function Messages() {
     });
   }, []);
 
+  // FIXED: Only create timers for RECENT messages to avoid memory leaks on large chats
   useEffect(() => {
     if (!messages || !user) return;
-    messages.forEach(message => {
-      if (message.user_id !== user.id && !deletedMessages.has(message.id)) {
+    
+    // Evita loop infinito usando functional update e filtrando
+    setMessageTimers(prev => {
+      const now = Date.now();
+      const newTimers: MessageTimer[] = [];
+      const currentTimerIds = new Set(prev.map(t => t.messageId));
+      
+      messages.forEach(message => {
+        // Skip own messages, deleted messages, or messages already with timers
+        if (message.user_id === user.id || deletedMessages.has(message.id) || currentTimerIds.has(message.id)) return;
+        
         const messageType = getMessageType(message);
-        const existingTimer = messageTimers.find(timer => timer.messageId === message.id);
-        if (existingTimer) return;
-        if (messageType === 'text' || messageType === 'media') {
-          setMessageTimers(prev => [...prev, { messageId: message.id, timeLeft: 120, status: 'counting', messageType }]);
+        
+        // CORREÇÃO: Só inicia timer automático se a mensagem tiver menos de 2.5 minutos de idade
+        // Isso impede que o app tente processar 500 mensagens antigas de uma vez
+        const msgTime = new Date(message.created_at).getTime();
+        const isRecent = (now - msgTime) < 150000; // 2.5 min
+
+        if (isRecent && (messageType === 'text' || messageType === 'media')) {
+           // Calcula o tempo restante real baseado em quando a mensagem foi criada
+           // Se a mensagem chegou há 30s, o timer deve começar em 90s, não 120s
+           const secondsElapsed = Math.floor((now - msgTime) / 1000);
+           const timeLeft = Math.max(0, 120 - secondsElapsed);
+           
+           if (timeLeft > 0) {
+             newTimers.push({ 
+               messageId: message.id, 
+               timeLeft: timeLeft, 
+               status: 'counting', 
+               messageType 
+             });
+           }
         }
-      }
+      });
+
+      if (newTimers.length === 0) return prev;
+      return [...prev, ...newTimers];
     });
-  }, [messages, user, deletedMessages, messageTimers, getMessageType]);
+  }, [messages, user, deletedMessages, getMessageType]);
 
   const deleteMessages = async (messageIds: string[]) => {
+    if (messageIds.length === 0) return;
     try {
       await supabase.from('messages').update({ deleted_at: new Date().toISOString(), content: null, media_urls: null }).in('id', messageIds);
       setDeletedMessages(prev => {
@@ -735,8 +607,8 @@ export default function Messages() {
         messageIds.forEach(id => newSet.add(id));
         return newSet;
       });
-      refetchMessages();
-      refetchConversations();
+      // Removemos refetch imediato para evitar flicker, o Realtime cuidará disso ou o optimistic update local
+      // refetchMessages(); 
     } catch (error) {
       console.error('Erro ao excluir mensagens:', error);
     }
@@ -745,10 +617,21 @@ export default function Messages() {
   useEffect(() => {
     const interval = setInterval(() => {
       setMessageTimers(prev => {
+        if (prev.length === 0) return prev;
+
         const updatedTimers: MessageTimer[] = [];
         const messagesToDelete: string[] = [];
+        let hasChanges = false;
+
         prev.forEach(timer => {
+          // CORREÇÃO: Remove timers "deleted" do array de estado para limpar memória
+          if (timer.status === 'deleted') {
+             hasChanges = true;
+             return; 
+          }
+
           if (timer.timeLeft <= 1) {
+            hasChanges = true;
             switch (timer.status) {
               case 'counting':
                 if (timer.messageType === 'text') {
@@ -756,7 +639,7 @@ export default function Messages() {
                     ...timer,
                     status: 'deleting',
                     currentText: messages?.find(m => m.id === timer.messageId)?.content || '',
-                    timeLeft: 120
+                    timeLeft: 120 // Tempo da animação de apagar
                   });
                 } else {
                   updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5 });
@@ -767,65 +650,85 @@ export default function Messages() {
                 break;
               case 'showingUndoing':
                 messagesToDelete.push(timer.messageId);
-                updatedTimers.push({ ...timer, status: 'deleted' });
+                updatedTimers.push({ ...timer, status: 'deleted' }); // Será removido no próximo tick
                 break;
               default:
                 updatedTimers.push(timer);
             }
           } else {
+            // Lógica de "backspace" visual
             if (timer.status === 'deleting' && timer.currentText) {
               const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
-              const elapsedTime = 120 - timer.timeLeft + 1;
-              const lettersToRemove = Math.floor(originalText.length * (elapsedTime / 120));
+              // Acelera a animação um pouco para garantir
+              const totalDeleteTime = 120;
+              const elapsedTime = totalDeleteTime - timer.timeLeft + 2; 
+              const lettersToRemove = Math.floor(originalText.length * (elapsedTime / totalDeleteTime));
               const lettersToKeep = Math.max(0, originalText.length - lettersToRemove);
+              
+              if (lettersToKeep !== timer.currentText.length) hasChanges = true;
+              
               updatedTimers.push({ 
                 ...timer, 
                 timeLeft: timer.timeLeft - 1, 
-                currentText: originalText.slice(lettersToRemove) 
+                currentText: originalText.slice(0, lettersToKeep) // Fix slice logic
               });
             } else {
               updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1 });
             }
           }
         });
+
         if (messagesToDelete.length > 0) deleteMessages(messagesToDelete);
-        return updatedTimers;
+        return hasChanges || messagesToDelete.length > 0 ? updatedTimers : prev;
       });
     }, 1000);
     return () => clearInterval(interval);
-  }, [messages]);
+  }, [messages]); // Dependência em messages é necessária para o efeito de texto, mas a lógica interna foi otimizada
 
   const getMessageState = (messageId: string) => messageTimers.find(timer => timer.messageId === messageId);
 
+  // --- Realtime & View Update ---
   useEffect(() => {
     if (!user) return;
     const channel = supabase.channel("global-messages")
-      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => { refetchMessages(); refetchConversations(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => { 
+        refetchMessages(); 
+        refetchConversations(); 
+      })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => { refetchConversations(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [refetchMessages, refetchConversations, user]);
 
-  useEffect(() => {
-    if (user && selectedConversation) {
-      supabase.from("last_viewed").upsert(
-        { user_id: user.id, section: "messages", viewed_at: new Date().toISOString() },
-        { onConflict: "user_id,section" }
-      ).then(() => queryClient.invalidateQueries({ queryKey: ["unread-messages"] }));
+  // Scroll to bottom when messages change
+  useEffect(() => { 
+    if (messages && messages.length > 0) {
+      if (isAtBottom) setTimeout(() => scrollToBottom(false), 100); 
     }
-  }, [user, selectedConversation, queryClient]);
+  }, [messages, isAtBottom, scrollToBottom]);
 
-  useEffect(() => { if (messages && isAtBottom) setTimeout(() => scrollToBottom(false), 100); }, [messages, isAtBottom, scrollToBottom]);
-  useEffect(() => { if (selectedConversation) setTimeout(() => scrollToBottom(true), 100); }, [selectedConversation, scrollToBottom]);
+  useEffect(() => { 
+    if (selectedConversation) setTimeout(() => scrollToBottom(true), 200); 
+  }, [selectedConversation, scrollToBottom]);
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversation || !user) return;
-    const { data: msg } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, content: text }).select().single();
+    
+    // Otimização: Limpa campo imediatamente (MessageInput já faz isso, mas garantimos aqui se necessário)
+    
+    const { data: msg, error } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, content: text }).select().single();
+    
+    if (error) {
+        toast({ title: "Erro ao enviar", variant: "destructive" });
+        return;
+    }
+
     if (msg) {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(msg.id, "message", text, user.id);
-      refetchMessages();
-      scrollToBottom(true);
+      await refetchMessages();
+      // Força scroll
+      setTimeout(() => scrollToBottom(true), 100);
     }
   };
 
@@ -843,7 +746,7 @@ export default function Messages() {
       });
       const urls = await Promise.all(uploadPromises);
       await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: urls });
-      refetchMessages();
+      await refetchMessages();
       scrollToBottom(true);
     } catch (e) {
       toast({ title: "Erro no envio", variant: "destructive" });
@@ -859,7 +762,7 @@ export default function Messages() {
       if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
       await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: [publicUrl] });
-      refetchMessages();
+      await refetchMessages();
       scrollToBottom(true);
     } catch (e) {
       toast({ title: "Erro", variant: "destructive" });
@@ -900,7 +803,6 @@ export default function Messages() {
 
   return (
     <div className="flex h-[calc(100vh-4rem)] lg:h-screen bg-background overflow-hidden relative">
-      {/* Modal de Idioma Centralizado */}
       {openMenuId && (
         <LanguageMenuModal
           messageId={openMenuId}
@@ -1121,15 +1023,12 @@ export default function Messages() {
                             )}
                           </div>
                           
-                          {/* BOTÃO DE TRADUÇÃO E ÁUDIO MELHORADO PARA MOBILE - VISÍVEL SEMPRE */}
                           {!isOwn && msg.content && (
                             <div className="flex justify-between items-center mt-2 border-t border-foreground/5 pt-1 relative">
-                              
                               <div className="flex items-center gap-2">
                                 <span className={cn("text-[10px] opacity-60", isOwn ? "text-primary-foreground" : "text-muted-foreground")}>
                                   {new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}
                                 </span>
-                                
                                 {translationState?.isTranslated && (
                                   <div className="flex items-center gap-1 text-[9px] opacity-70 text-muted-foreground font-medium">
                                     <Globe className="h-2 w-2" />
@@ -1137,74 +1036,38 @@ export default function Messages() {
                                       {translationState.sourceLang && translationState.sourceLang !== 'auto' && (
                                         <>
                                           <span>{AVAILABLE_LANGUAGES.find(l => l.code === translationState.sourceLang)?.flag || '🌐'}</span>
-                                          <span className="text-[8px] opacity-60">{getLanguageName(translationState.sourceLang)}</span>
                                           <ArrowRight className="h-2 w-2" />
                                         </>
                                       )}
                                       <span>{AVAILABLE_LANGUAGES.find(l => l.code === translationState.targetLang)?.flag || '🌐'}</span>
-                                      <span className="text-[8px] opacity-60">{getLanguageName(translationState.targetLang)}</span>
                                     </span>
                                   </div>
                                 )}
                               </div>
                               
                               <div className="flex items-center gap-1">
-                                {/* Botão de áudio (Text-to-Speech) - SEM CONDICIONAL */}
                                 <Button
                                   variant="ghost"
                                   size="sm"
-                                  className={cn(
-                                    "h-6 px-2 text-[10px] transition-all",
-                                    speechState?.isSpeaking 
-                                      ? "text-primary opacity-100 font-medium" 
-                                      : "text-muted-foreground opacity-70 hover:opacity-100 hover:text-foreground"
-                                  )}
-                                  onClick={() => {
-                                    if (speechState?.isSpeaking) {
-                                      stopSpeech(msg.id);
-                                    } else {
-                                      const targetLang = translationState?.isTranslated 
-                                        ? translationState.targetLang 
-                                        : 'pt';
-                                      speakText(displayText, msg.id, targetLang);
-                                    }
-                                  }}
+                                  className={cn("h-6 px-2 text-[10px] transition-all", speechState?.isSpeaking ? "text-primary opacity-100 font-medium" : "text-muted-foreground opacity-70 hover:opacity-100")}
+                                  onClick={() => speechState?.isSpeaking ? stopSpeech(msg.id) : speakText(displayText, msg.id, translationState?.isTranslated ? translationState.targetLang : 'pt')}
                                 >
-                                  {speechState?.isSpeaking ? (
-                                    <VolumeX className="h-3 w-3" />
-                                  ) : (
-                                    <Volume2 className="h-3 w-3" />
-                                  )}
+                                  {speechState?.isSpeaking ? <VolumeX className="h-3 w-3" /> : <Volume2 className="h-3 w-3" />}
                                 </Button>
 
                                 <Button 
                                   variant="ghost" 
                                   size="sm" 
-                                  className={cn(
-                                    "h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", 
-                                    translationState?.isLoading && "opacity-100",
-                                    translationState?.isTranslated && "text-primary opacity-100"
-                                  )}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setOpenMenuId(msg.id);
-                                  }}
+                                  className={cn("h-6 px-2 text-[10px] opacity-60 hover:opacity-100 transition-all flex items-center gap-1", translationState?.isLoading && "opacity-100", translationState?.isTranslated && "text-primary opacity-100")}
+                                  onClick={(e) => { e.stopPropagation(); setOpenMenuId(msg.id); }}
                                   disabled={translationState?.isLoading}
                                 >
-                                  {translationState?.isLoading ? (
-                                    <><Loader2 className="h-3 w-3 animate-spin mr-1" />Traduzindo...</>
-                                  ) : (
-                                    <>
-                                      <Languages className="h-3 w-3 mr-1" /> 
-                                      {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
-                                      <ChevronDown className="h-3 w-3 ml-1 opacity-50" />
-                                    </>
-                                  )}
+                                  {translationState?.isLoading ? <Loader2 className="h-3 w-3 animate-spin mr-1" /> : <Languages className="h-3 w-3 mr-1" />} 
+                                  {translationState?.isTranslated ? "Traduzido" : "Traduzir"}
                                 </Button>
                               </div>
                             </div>
                           )}
-
                           {isOwn && <span className="text-[10px] opacity-60 block text-right mt-1">{new Date(msg.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})}</span>}
                         </div>
                       )}
@@ -1228,7 +1091,6 @@ export default function Messages() {
              <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse"><MessageSquarePlus className="h-16 w-16 text-primary" /></div>
              <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Suas Mensagens</h1>
              <p className="text-muted-foreground max-w-md mb-8 text-lg">Selecione uma conversa na barra lateral ou inicie um novo chat com seus amigos.</p>
-             {!isMobile && <div className="flex gap-4 text-sm text-muted-foreground/60"><span className="flex items-center gap-1"><Lock className="h-3 w-3" /> Criptografado de ponta a ponta</span></div>}
           </div>
         )}
       </div>
