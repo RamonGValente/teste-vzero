@@ -50,6 +50,7 @@ import { useAuth } from "@/hooks/useAuth";
 interface MessageTimer {
   messageId: string;
   timeLeft: number;
+  expiryTime: number; // Novo campo para controlar o tempo absoluto
   status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
   currentText?: string;
   messageType: 'text' | 'audio' | 'media';
@@ -232,7 +233,7 @@ const CustomAudioPlayer = ({ audioUrl, className, onPlay, isOwn }: CustomAudioPl
         setIsPlaying(true);
         if (!hasTriggeredOnPlay.current) {
           hasTriggeredOnPlay.current = true;
-          onPlay();
+          onPlay(); // Dispara o início do timer apenas no primeiro Play
         }
       }
     } catch (error) {
@@ -390,7 +391,6 @@ export default function Messages() {
     if (synth) synth.cancel();
   }, []);
 
-  // Limpa o TTS ao desmontar
   useEffect(() => {
     return () => {
       const synth = window.speechSynthesis || (window as any).webkitSpeechSynthesis;
@@ -547,56 +547,176 @@ export default function Messages() {
     return 'media';
   }, []);
 
-  // --- Timer Logic (CRITICAL FIX) ---
+
+  // ====================================================================
+  // LOGICA DO TIMER CORRIGIDA (BASEADA EM VISUALIZAÇÃO/AÇÃO LOCAL)
+  // ====================================================================
+
+  // Inicia timer de audio MANUALMENTE (ao dar play)
   const startAudioTimer = useCallback((messageId: string) => {
     setMessageTimers(prev => {
       if (prev.find(timer => timer.messageId === messageId)) return prev;
-      return [...prev, { messageId, timeLeft: 120, status: 'counting', messageType: 'audio' }];
-    });
-  }, []);
 
-  // FIXED: Only create timers for RECENT messages to avoid memory leaks on large chats
+      // Define expiração para 2 minutos a partir de AGORA (momento do Play)
+      const now = Date.now();
+      const expiryTime = now + 120000; // 120 segundos
+
+      // Salva no LocalStorage para persistir refresh
+      const storageKey = `timer_${user?.id}_${messageId}`;
+      localStorage.setItem(storageKey, expiryTime.toString());
+
+      return [...prev, { 
+        messageId, 
+        timeLeft: 120, 
+        expiryTime: expiryTime,
+        status: 'counting', 
+        messageType: 'audio' 
+      }];
+    });
+  }, [user]);
+
+  // Gerencia inicialização e contagem dos timers
   useEffect(() => {
     if (!messages || !user) return;
     
-    // Evita loop infinito usando functional update e filtrando
+    // 1. INICIALIZAÇÃO: Verifica mensagens novas ou carregadas
     setMessageTimers(prev => {
       const now = Date.now();
       const newTimers: MessageTimer[] = [];
       const currentTimerIds = new Set(prev.map(t => t.messageId));
       
       messages.forEach(message => {
-        // Skip own messages, deleted messages, or messages already with timers
+        // Ignora minhas mensagens, deletadas ou já em timer
         if (message.user_id === user.id || deletedMessages.has(message.id) || currentTimerIds.has(message.id)) return;
         
         const messageType = getMessageType(message);
-        
-        // CORREÇÃO: Só inicia timer automático se a mensagem tiver menos de 2.5 minutos de idade
-        // Isso impede que o app tente processar 500 mensagens antigas de uma vez
-        const msgTime = new Date(message.created_at).getTime();
-        const isRecent = (now - msgTime) < 150000; // 2.5 min
+        const storageKey = `timer_${user.id}_${message.id}`;
+        const storedExpiry = localStorage.getItem(storageKey);
 
-        if (isRecent && (messageType === 'text' || messageType === 'media')) {
-           // Calcula o tempo restante real baseado em quando a mensagem foi criada
-           // Se a mensagem chegou há 30s, o timer deve começar em 90s, não 120s
-           const secondsElapsed = Math.floor((now - msgTime) / 1000);
-           const timeLeft = Math.max(0, 120 - secondsElapsed);
-           
-           if (timeLeft > 0) {
-             newTimers.push({ 
-               messageId: message.id, 
-               timeLeft: timeLeft, 
-               status: 'counting', 
-               messageType 
-             });
+        let expiryTime = 0;
+
+        if (storedExpiry) {
+           // Se já existe no storage, usa o tempo salvo
+           expiryTime = parseInt(storedExpiry, 10);
+        } else {
+           // Se NÃO existe no storage:
+           if (messageType === 'text' || messageType === 'media') {
+             // Texto/Media: Inicia AGORA (Visualizou ao carregar)
+             expiryTime = now + 120000; // 2 minutos
+             localStorage.setItem(storageKey, expiryTime.toString());
+           } else {
+             // Audio: NÃO inicia. Espera o usuário dar Play (startAudioTimer)
+             return;
            }
+        }
+
+        // Calcula tempo restante real
+        const timeLeft = Math.max(0, Math.ceil((expiryTime - now) / 1000));
+        
+        // Se ainda tem tempo ou está nos 5s finais de 'deleting', adiciona
+        if (timeLeft > 0 || (now - expiryTime < 5000)) {
+           newTimers.push({ 
+             messageId: message.id, 
+             timeLeft: timeLeft, 
+             expiryTime: expiryTime,
+             status: timeLeft <= 0 ? 'deleting' : 'counting', // Ajusta status inicial se já passou
+             messageType 
+           });
         }
       });
 
       if (newTimers.length === 0) return prev;
       return [...prev, ...newTimers];
     });
+
   }, [messages, user, deletedMessages, getMessageType]);
+
+  // 2. LOOP DE CONTAGEM (setInterval)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setMessageTimers(prev => {
+        if (prev.length === 0) return prev;
+
+        const now = Date.now();
+        const updatedTimers: MessageTimer[] = [];
+        const messagesToDelete: string[] = [];
+        let hasChanges = false;
+
+        prev.forEach(timer => {
+          if (timer.status === 'deleted') {
+             hasChanges = true;
+             return; // Limpa da memória
+          }
+
+          // Recalcula tempo baseado no expiryTime absoluto (mais preciso que decremento)
+          const realTimeLeft = Math.max(0, Math.ceil((timer.expiryTime - now) / 1000));
+          
+          if (realTimeLeft <= 0 && timer.status === 'counting') {
+             // O tempo acabou -> Muda para deletando
+             hasChanges = true;
+             if (timer.messageType === 'text') {
+                updatedTimers.push({
+                   ...timer,
+                   timeLeft: 0,
+                   status: 'deleting',
+                   currentText: messages?.find(m => m.id === timer.messageId)?.content || '',
+                });
+             } else {
+                updatedTimers.push({ ...timer, timeLeft: 5, status: 'showingUndoing' }); // 5s para undo
+             }
+          } 
+          else if (timer.status === 'deleting') {
+             // Animação de texto sumindo
+             // Usamos um contador interno auxiliar ou decremento simples aqui para animação visual
+             const animationTimeTotal = 120; // Tempo arbitrário para apagar o texto visualmente
+             const timeSinceExpiry = Math.floor((now - timer.expiryTime) / 1000); // Segundos passados desde expiração
+             
+             // Se passou muito tempo desde expiração, vai para Undoing
+             if (timeSinceExpiry > 5) { // 5 segundos apagando
+                updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5, currentText: undefined });
+             } else {
+                // Lógica de apagar letras
+                if (timer.currentText) {
+                   const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
+                   const ratio = Math.min(1, timeSinceExpiry / 5); // 0 a 1 em 5 segundos
+                   const lettersToKeep = Math.floor(originalText.length * (1 - ratio));
+                   updatedTimers.push({ ...timer, currentText: originalText.slice(0, lettersToKeep) });
+                } else {
+                   updatedTimers.push(timer);
+                }
+             }
+             hasChanges = true;
+          }
+          else if (timer.status === 'showingUndoing') {
+             // Contagem final antes de sumir do banco
+             // Aqui usamos timeLeft decrementado manualmente pois é uma fase curta pós-expiração
+             if (timer.timeLeft <= 0) {
+                messagesToDelete.push(timer.messageId);
+                // Remove do localStorage também para limpar lixo
+                if (user) localStorage.removeItem(`timer_${user.id}_${timer.messageId}`);
+                updatedTimers.push({ ...timer, status: 'deleted' });
+             } else {
+                updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1 });
+             }
+             hasChanges = true;
+          } 
+          else {
+             // Contagem normal
+             if (timer.timeLeft !== realTimeLeft) {
+                updatedTimers.push({ ...timer, timeLeft: realTimeLeft });
+                hasChanges = true;
+             } else {
+                updatedTimers.push(timer);
+             }
+          }
+        });
+
+        if (messagesToDelete.length > 0) deleteMessages(messagesToDelete);
+        return hasChanges ? updatedTimers : prev;
+      });
+    }, 1000);
+    return () => clearInterval(interval);
+  }, [messages, user]);
 
   const deleteMessages = async (messageIds: string[]) => {
     if (messageIds.length === 0) return;
@@ -607,83 +727,10 @@ export default function Messages() {
         messageIds.forEach(id => newSet.add(id));
         return newSet;
       });
-      // Removemos refetch imediato para evitar flicker, o Realtime cuidará disso ou o optimistic update local
-      // refetchMessages(); 
     } catch (error) {
       console.error('Erro ao excluir mensagens:', error);
     }
   };
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setMessageTimers(prev => {
-        if (prev.length === 0) return prev;
-
-        const updatedTimers: MessageTimer[] = [];
-        const messagesToDelete: string[] = [];
-        let hasChanges = false;
-
-        prev.forEach(timer => {
-          // CORREÇÃO: Remove timers "deleted" do array de estado para limpar memória
-          if (timer.status === 'deleted') {
-             hasChanges = true;
-             return; 
-          }
-
-          if (timer.timeLeft <= 1) {
-            hasChanges = true;
-            switch (timer.status) {
-              case 'counting':
-                if (timer.messageType === 'text') {
-                  updatedTimers.push({
-                    ...timer,
-                    status: 'deleting',
-                    currentText: messages?.find(m => m.id === timer.messageId)?.content || '',
-                    timeLeft: 120 // Tempo da animação de apagar
-                  });
-                } else {
-                  updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5 });
-                }
-                break;
-              case 'deleting':
-                updatedTimers.push({ ...timer, status: 'showingUndoing', timeLeft: 5, currentText: undefined });
-                break;
-              case 'showingUndoing':
-                messagesToDelete.push(timer.messageId);
-                updatedTimers.push({ ...timer, status: 'deleted' }); // Será removido no próximo tick
-                break;
-              default:
-                updatedTimers.push(timer);
-            }
-          } else {
-            // Lógica de "backspace" visual
-            if (timer.status === 'deleting' && timer.currentText) {
-              const originalText = messages?.find(m => m.id === timer.messageId)?.content || '';
-              // Acelera a animação um pouco para garantir
-              const totalDeleteTime = 120;
-              const elapsedTime = totalDeleteTime - timer.timeLeft + 2; 
-              const lettersToRemove = Math.floor(originalText.length * (elapsedTime / totalDeleteTime));
-              const lettersToKeep = Math.max(0, originalText.length - lettersToRemove);
-              
-              if (lettersToKeep !== timer.currentText.length) hasChanges = true;
-              
-              updatedTimers.push({ 
-                ...timer, 
-                timeLeft: timer.timeLeft - 1, 
-                currentText: originalText.slice(0, lettersToKeep) // Fix slice logic
-              });
-            } else {
-              updatedTimers.push({ ...timer, timeLeft: timer.timeLeft - 1 });
-            }
-          }
-        });
-
-        if (messagesToDelete.length > 0) deleteMessages(messagesToDelete);
-        return hasChanges || messagesToDelete.length > 0 ? updatedTimers : prev;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [messages]); // Dependência em messages é necessária para o efeito de texto, mas a lógica interna foi otimizada
 
   const getMessageState = (messageId: string) => messageTimers.find(timer => timer.messageId === messageId);
 
@@ -713,21 +760,12 @@ export default function Messages() {
 
   const handleSendMessage = async (text: string) => {
     if (!text.trim() || !selectedConversation || !user) return;
-    
-    // Otimização: Limpa campo imediatamente (MessageInput já faz isso, mas garantimos aqui se necessário)
-    
     const { data: msg, error } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, content: text }).select().single();
-    
-    if (error) {
-        toast({ title: "Erro ao enviar", variant: "destructive" });
-        return;
-    }
-
+    if (error) { toast({ title: "Erro ao enviar", variant: "destructive" }); return; }
     if (msg) {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(msg.id, "message", text, user.id);
       await refetchMessages();
-      // Força scroll
       setTimeout(() => scrollToBottom(true), 100);
     }
   };
@@ -968,7 +1006,7 @@ export default function Messages() {
                           <Clock className="h-3 w-3" />
                           <span>
                             {timerState.status === 'counting' && formatTime(timerState.timeLeft)}
-                            {timerState.status === 'deleting' && `Apagando... ${formatTime(timerState.timeLeft)}`}
+                            {timerState.status === 'deleting' && `Apagando...`}
                             {timerState.status === 'showingUndoing' && `${timerState.timeLeft}s`}
                           </span>
                         </div>
@@ -977,7 +1015,7 @@ export default function Messages() {
                       {!isOwn && messageType === 'audio' && !timerState && (
                         <div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
                           <Clock className="h-3 w-3" />
-                          <span>Reproduza o áudio para iniciar o timer</span>
+                          <span>Reproduza para iniciar timer</span>
                         </div>
                       )}
 
