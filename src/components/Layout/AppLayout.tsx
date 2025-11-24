@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Home, Search, MessageCircle, Users, User, Menu, X, LogOut, Copy, Check, Zap } from "lucide-react";
+import { Bomb, Check, Copy, Crown, Home, LogOut, Menu, MessageCircle, Search, User, Users, X, Zap } from "lucide-react";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -7,29 +7,31 @@ import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
-import { ThemeToggle } from "@/components/ThemeToggle";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from "@/components/ui/dialog";
 import { WeatherWidget } from "@/components/WeatherWidget";
-import { StealthModeToggle } from "@/components/StealthModeToggle";
 import { useAuth } from "@/hooks/useAuth";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useUnreadFeed } from "@/hooks/useUnreadFeed";
 import { useUnreadCommunities } from "@/hooks/useUnreadCommunities";
-import { useStealthMode } from "@/hooks/useStealthMode";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import logo from "@/assets/logo.png";
 
 export default function AppLayout() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [adModalOpen, setAdModalOpen] = useState(false);
+  const [adName, setAdName] = useState("");
+  const [adPhone, setAdPhone] = useState("");
+  const [adEmail, setAdEmail] = useState("");
+  const [adDescription, setAdDescription] = useState("");
+  const [adImage, setAdImage] = useState<File | null>(null);
+  const [adSubmitting, setAdSubmitting] = useState(false);
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
   const unreadMessages = useUnreadMessages();
   const unreadFeed = useUnreadFeed();
   const unreadCommunities = useUnreadCommunities();
-  const { config } = useStealthMode();
-
   const { data: profile } = useQuery({
     queryKey: ["user-profile-sidebar", user?.id],
     enabled: !!user?.id,
@@ -48,6 +50,180 @@ export default function AppLayout() {
       return data;
     },
   });
+
+  type UdgRankingEntry = {
+    userId: string;
+    username: string;
+    avatar_url: string | null;
+    heartsApproved: number;
+    bombs: number;
+  };
+
+  const { data: udgRanking } = useQuery<{
+    king: UdgRankingEntry | null;
+    bombado: UdgRankingEntry | null;
+  }>({
+    queryKey: ["udg-ranking"],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`
+          id,
+          user_id,
+          is_community_approved,
+          profiles:user_id (
+            id,
+            username,
+            avatar_url
+          ),
+          post_votes (
+            vote_type
+          )
+        `);
+
+      if (error) {
+        console.error("Error fetching UDG ranking:", error);
+        return { king: null, bombado: null };
+      }
+
+      const stats = new Map<string, UdgRankingEntry>();
+
+      (data ?? []).forEach((post: any) => {
+        const userId = post.user_id as string | undefined;
+        if (!userId) return;
+
+        const profile = post.profiles as {
+          id: string;
+          username?: string | null;
+          avatar_url?: string | null;
+        } | null;
+
+        let entry = stats.get(userId);
+        if (!entry) {
+          entry = {
+            userId,
+            username: profile?.username || "Usuário",
+            avatar_url: profile?.avatar_url ?? null,
+            heartsApproved: 0,
+            bombs: 0,
+          };
+          stats.set(userId, entry);
+        }
+
+        const votes: Array<{ vote_type: "heart" | "bomb" }> = post.post_votes ?? [];
+        for (const vote of votes) {
+          if (vote.vote_type === "heart" && post.is_community_approved) {
+            entry.heartsApproved += 1;
+          }
+          if (vote.vote_type === "bomb") {
+            entry.bombs += 1;
+          }
+        }
+      });
+
+      const entries = Array.from(stats.values());
+      if (!entries.length) {
+        return { king: null, bombado: null };
+      }
+
+      const king = entries.reduce<UdgRankingEntry | null>(
+        (best, entry) =>
+          entry.heartsApproved > (best?.heartsApproved ?? 0) ? entry : best,
+        null
+      );
+
+      const bombado = entries.reduce<UdgRankingEntry | null>(
+        (best, entry) =>
+          entry.bombs > (best?.bombs ?? 0) ? entry : best,
+        null
+      );
+
+      return { king, bombado };
+    },
+  });
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove("king-mode", "bombado-mode");
+
+    if (!udgRanking) return;
+
+    if (user?.id && udgRanking.king?.userId === user.id) {
+      root.classList.add("king-mode");
+    } else if (user?.id && udgRanking.bombado?.userId === user.id) {
+      root.classList.add("bombado-mode");
+    }
+  }, [udgRanking, user?.id]);
+
+  const handleAdSubmit = async () => {
+    if (!adName || !adEmail || !adDescription) {
+      toast({
+        title: "Campos obrigatórios",
+        description: "Preencha pelo menos nome, e-mail e descrição.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setAdSubmitting(true);
+
+      let imageUrl: string | null = null;
+      if (adImage) {
+        const ext = adImage.name.split(".").pop() || "jpg";
+        const path = `ads/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
+        const { error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(path, adImage);
+
+        if (!uploadError) {
+          const { data: publicData } = supabase.storage.from("media").getPublicUrl(path);
+          imageUrl = publicData.publicUrl;
+        }
+      }
+
+      const bodyLines = [
+        "Novo pedido de anúncio via UndoinG:",
+        "",
+        `Nome/Empresa: ${adName}`,
+        `Telefone: ${adPhone || "-"}`,
+        `E-mail: ${adEmail}`,
+        "",
+        "Sobre o anunciante:",
+        adDescription,
+        "",
+        imageUrl ? `Imagem: ${imageUrl}` : "",
+      ].filter(Boolean);
+
+      const mailto = `mailto:sistemasrtr@gmail.com?subject=${encodeURIComponent(
+        "Novo anúncio - " + adName
+      )}&body=${encodeURIComponent(bodyLines.join("\n"))}`;
+
+      window.location.href = mailto;
+
+      toast({
+        title: "Proposta de anúncio preparada",
+        description: "Abrimos seu e-mail com os dados preenchidos. É só enviar para concluir.",
+      });
+
+      setAdModalOpen(false);
+      setAdName("");
+      setAdPhone("");
+      setAdEmail("");
+      setAdDescription("");
+      setAdImage(null);
+    } catch (err) {
+      console.error(err);
+      toast({
+        title: "Erro ao preparar anúncio",
+        description: "Tente novamente em alguns instantes.",
+        variant: "destructive",
+      });
+    } finally {
+      setAdSubmitting(false);
+    }
+  };
 
   const navigation = [
     { name: "Dissect", href: "/", icon: Home, badge: unreadFeed },
@@ -101,11 +277,6 @@ export default function AppLayout() {
         )}
       >
         <div className="flex flex-col h-full">
-          {/* Logo */}
-          <div className="p-3 border-b flex-shrink-0">
-            <img src={logo} alt="UndoinG" className="h-20 mx-auto" />
-          </div>
-
           {/* Navigation */}
           <nav className="flex-1 p-2 space-y-1 overflow-y-auto">
             {navigation.map((item) => (
@@ -141,44 +312,88 @@ export default function AppLayout() {
 
           {/* User Section */}
           <div className="p-2 border-t space-y-2 flex-shrink-0">
-            {/* Stealth Mode Toggle */}
-            <div className="flex items-center gap-2">
-              <StealthModeToggle />
-              <ThemeToggle />
-            </div>
+            {/*             <WeatherWidget />
+            
 
-            {/* UDG Code */}
-            {profile?.friend_code ? (
-              <Card className="p-2 bg-gradient-to-br from-primary/10 to-secondary/10">
-                <p className="text-xs font-medium mb-1 text-muted-foreground">Seu Código UDG</p>
+            <WeatherWidget />
+
+            {/* Ranking UDG */}
+            {udgRanking?.king && (
+              <Card
+                className="mt-3 p-2 bg-gradient-to-r from-yellow-500/20 via-amber-500/10 to-yellow-400/20 border border-yellow-500/50 shadow-sm cursor-pointer"
+                onClick={() => navigate(`/profile/${udgRanking.king?.userId}`)}
+              >
+                <p className="text-[11px] font-bold mb-1 tracking-wide text-yellow-600 flex items-center gap-1">
+                  <Crown className="h-3 w-3" />
+                  REI-UDG
+                </p>
                 <div className="flex items-center gap-2">
-                  <div className="flex-1 bg-background rounded px-2 py-1">
-                    <p className="text-xs font-mono font-bold text-primary">
-                      {profile.friend_code}
+                  <Avatar className="h-8 w-8 border-2 border-yellow-400">
+                    <AvatarImage src={udgRanking.king.avatar_url || undefined} />
+                    <AvatarFallback className="bg-yellow-500 text-xs font-bold text-black">
+                      {udgRanking.king.username?.[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">
+                      {udgRanking.king.username}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {udgRanking.king.heartsApproved} ❤️ · {udgRanking.king.bombs} 💣
                     </p>
                   </div>
-                  <Button 
-                    onClick={copyCode} 
-                    variant="ghost" 
-                    size="icon"
-                    className="h-7 w-7 flex-shrink-0"
-                  >
-                    {copied ? (
-                      <Check className="h-3 w-3 text-green-600" />
-                    ) : (
-                      <Copy className="h-3 w-3" />
-                    )}
-                  </Button>
                 </div>
               </Card>
-            ) : (
-              <Card className="p-2 bg-muted">
-                <p className="text-xs text-muted-foreground">Carregando código UDG...</p>
+            )}
+
+            {udgRanking?.bombado && (
+              <Card
+                className="mt-2 p-2 bg-gradient-to-r from-slate-900/80 via-slate-800/80 to-slate-900/80 border border-slate-700 shadow-sm cursor-pointer"
+                onClick={() => navigate(`/profile/${udgRanking.bombado?.userId}`)}
+              >
+                <p className="text-[11px] font-bold mb-1 tracking-wide text-red-500 flex items-center gap-1">
+                  <Bomb className="h-3 w-3" />
+                  Bombado
+                </p>
+                <div className="flex items-center gap-2">
+                  <Avatar className="h-8 w-8 border-2 border-slate-500">
+                    <AvatarImage src={udgRanking.bombado.avatar_url || undefined} />
+                    <AvatarFallback className="bg-slate-600 text-xs font-bold text-white">
+                      {udgRanking.bombado.username?.[0]?.toUpperCase()}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold truncate">
+                      {udgRanking.bombado.username}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground truncate">
+                      {udgRanking.bombado.heartsApproved} ❤️ · {udgRanking.bombado.bombs} 💣
+                    </p>
+                  </div>
+                </div>
               </Card>
             )}
-            
-            <WeatherWidget />
-            
+
+            {/* Espaço para anúncios */}
+            <div className="mt-3 grid grid-cols-1 gap-2">
+              <Card
+                className="h-16 flex items-center justify-center border-dashed border-2 border-primary cursor-pointer hover:bg-primary/5 transition"
+                onClick={() => setAdModalOpen(true)}
+              >
+                <p className="text-xs font-semibold text-primary uppercase tracking-wide">
+                  Anuncie aqui
+                </p>
+              </Card>
+              <Card
+                className="h-16 flex items-center justify-center border-dashed border border-muted-foreground/40 cursor-pointer hover:bg-muted/60 transition"
+                onClick={() => setAdModalOpen(true)}
+              >
+                <p className="text-[11px] text-muted-foreground text-center px-2">
+                  Espaço reservado para parceiros e campanhas especiais
+                </p>
+              </Card>
+            </div>
+
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 flex-1 min-w-0">
                 <Avatar className="h-8 w-8">
@@ -231,6 +446,92 @@ export default function AppLayout() {
           </div>
         </footer>
       </main>
+
+      <Dialog open={adModalOpen} onOpenChange={setAdModalOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Quero anunciar na UndoinG</DialogTitle>
+            <DialogDescription>
+              Preencha os dados abaixo. Nosso time analisará sua proposta e entrará em contato.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-3 py-2">
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Nome ou Empresa</label>
+              <input
+                className="w-full rounded-md border px-2 py-1 text-xs bg-background"
+                value={adName}
+                onChange={(e) => setAdName(e.target.value)}
+                placeholder="Ex: RTR Sistemas"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 gap-2">
+              <div className="space-y-1">
+                <label className="text-xs font-medium">Telefone ou celular</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-xs bg-background"
+                  value={adPhone}
+                  onChange={(e) => setAdPhone(e.target.value)}
+                  placeholder="(00) 00000-0000"
+                />
+              </div>
+              <div className="space-y-1">
+                <label className="text-xs font-medium">E-mail</label>
+                <input
+                  className="w-full rounded-md border px-2 py-1 text-xs bg-background"
+                  value={adEmail}
+                  onChange={(e) => setAdEmail(e.target.value)}
+                  placeholder="voce@empresa.com"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Conte-nos sobre você</label>
+              <textarea
+                className="w-full rounded-md border px-2 py-1 text-xs bg-background min-h-[80px]"
+                value={adDescription}
+                onChange={(e) => setAdDescription(e.target.value)}
+                placeholder="Explique brevemente seu negócio, público e tipo de anúncio desejado."
+              />
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-medium">Imagem do anúncio (1 imagem)</label>
+              <input
+                type="file"
+                accept="image/*"
+                className="w-full text-xs"
+                onChange={(e) => setAdImage(e.target.files?.[0] ?? null)}
+              />
+              <p className="text-[10px] text-muted-foreground">
+                A imagem será enviada junto à sua proposta de anúncio.
+              </p>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setAdModalOpen(false)}
+            >
+              Cancelar
+            </Button>
+            <Button
+              type="button"
+              size="sm"
+              onClick={handleAdSubmit}
+              disabled={adSubmitting}
+            >
+              {adSubmitting ? "Enviando..." : "Enviar proposta"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

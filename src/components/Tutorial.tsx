@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { X, Home, Search, MessageCircle, Users, User, Shield, Sun, Copy } from "lucide-react";
+import { X, Home, Search, MessageCircle, Users, User, Shield } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
@@ -11,61 +11,61 @@ interface TutorialProps {
 const tutorialSteps = [
   {
     title: "Bem-vindo ao UndoinG! 🎉",
-    description: "Vamos fazer um tour rápido pelas funcionalidades principais do sistema.",
+    description: "Vamos fazer um tour rápido pelas funcionalidades principais do sistema e te mostrar como usamos tecnologia e segurança para proteger sua experiência.",
     icon: Home,
     gradient: "from-violet-500/20 to-purple-500/20",
   },
   {
     title: "Feed de Postagens 📱",
-    description: "No Feed você pode criar postagens, reagir com emojis, comentar e interagir com outros usuários. É o coração da nossa rede social!",
+    description: "No Feed você pode criar postagens, reagir com corações ou bombas, participar de votações e interagir com outros usuários. Aqui é o coração da nossa comunidade.",
     icon: Home,
     gradient: "from-blue-500/20 to-cyan-500/20",
   },
   {
     title: "Explorar Conteúdos 🔍",
-    description: "Na seção Explorar, descubra novos conteúdos, tendências e usuários interessantes para seguir.",
+    description: "Na seção Explorar, você descobre novos conteúdos, tendências e usuários interessantes para seguir. Use essa área para encontrar pessoas com gostos parecidos com os seus.",
     icon: Search,
     gradient: "from-green-500/20 to-emerald-500/20",
   },
   {
     title: "Mensagens Privadas 💬",
-    description: "Converse em tempo real com seus amigos! Envie mensagens de texto, áudio, imagens e vídeos. Crie salas privadas para conversas em grupo.",
+    description: "Converse em tempo real com seus amigos. Envie mensagens de texto, áudios, imagens e mais. As conversas são organizadas em salas para você manter tudo sob controle.",
     icon: MessageCircle,
     gradient: "from-pink-500/20 to-rose-500/20",
   },
   {
     title: "Comunidades 👥",
-    description: "Participe de comunidades, crie discussões e conecte-se com pessoas que compartilham seus interesses.",
+    description: "Participe de comunidades, crie discussões e conecte-se com pessoas que compartilham seus interesses. Cada comunidade tem seu próprio espaço e dinâmica.",
     icon: Users,
     gradient: "from-orange-500/20 to-amber-500/20",
   },
   {
     title: "Seu Perfil ⭐",
-    description: "Personalize seu perfil, veja suas postagens e gerencie suas informações pessoais.",
+    description: "Personalize seu perfil, atualize sua foto e acompanhe suas postagens, interações e presença na plataforma. É o seu cartão de visita dentro do UndoinG.",
     icon: User,
     gradient: "from-indigo-500/20 to-blue-500/20",
   },
   {
-    title: "Código UDG 🔑",
-    description: "Seu código único UDG está no menu lateral. Compartilhe com amigos para que eles possam te adicionar facilmente!",
-    icon: Copy,
+    title: "Tradução e Áudio na Leitura 🌎🎧",
+    description: "Ative os recursos de tradução e leitura em áudio para entender conteúdos em outros idiomas e ouvir postagens e mensagens. Isso torna a plataforma mais acessível e inclusiva para todos.",
+    icon: Shield,
     gradient: "from-teal-500/20 to-cyan-500/20",
   },
   {
-    title: "Modo Stealth 🕶️",
-    description: "Ative o Modo Stealth para ocultar o aplicativo. Configure um PIN de 6 dígitos e acesse usando métodos específicos por plataforma (calculadora, discador, etc).",
+    title: "Segurança e Proteção 🔐",
+    description: "Suas informações são armazenadas com segurança, o acesso é protegido por autenticação e usamos ferramentas de moderação para manter a comunidade mais segura. Evite compartilhar dados sensíveis em público e use as reações e interações com responsabilidade.",
     icon: Shield,
     gradient: "from-purple-500/20 to-violet-500/20",
   },
   {
-    title: "Temas Personalizados 🎨",
-    description: "Alterne entre modo claro e escuro usando o botão no menu lateral. Personalize sua experiência visual!",
-    icon: Sun,
+    title: "Instalação como App (PWA) 📲",
+    description: "Você pode instalar o UndoinG na tela inicial do seu celular ou computador, como se fosse um app nativo. Quando o aviso de instalação aparecer, basta tocar em Instalar. Caso não apareça, use o menu do navegador para adicionar à tela inicial.",
+    icon: Home,
     gradient: "from-yellow-500/20 to-orange-500/20",
   },
   {
     title: "Tudo Pronto! 🚀",
-    description: "Você está pronto para começar! Explore, conecte-se e divirta-se no UndoinG. Bem-vindo à comunidade!",
+    description: "Agora é com você! Explore, conecte-se, teste os recursos de tradução, áudio e notificações, e aproveite a experiência completa do UndoinG.",
     icon: Home,
     gradient: "from-violet-500/20 to-fuchsia-500/20",
   },

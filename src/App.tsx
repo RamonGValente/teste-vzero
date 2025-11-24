@@ -17,9 +17,7 @@ import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
-import { useStealthMode } from "@/hooks/useStealthMode";
 import { useAuth } from "@/hooks/useAuth";
-import { activateUniversalStealthMode } from "@/utils/stealthDetector";
 
 const queryClient = new QueryClient();
 
@@ -45,39 +43,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       {children}
     </>
   );
-}
-
-function StealthGuard({ children }: { children: React.ReactNode }) {
-  const { config, reveal } = useStealthMode();
-  const [isRevealed, setIsRevealed] = useState(!config.isHidden);
-
-  useEffect(() => {
-    setIsRevealed(!config.isHidden);
-  }, [config.isHidden]);
-
-  useEffect(() => {
-    if (!config.enabled || !config.isHidden) return;
-
-    const cleanup = activateUniversalStealthMode(config.pin, () => {
-      reveal(config.pin);
-      setIsRevealed(true);
-    });
-
-    return cleanup;
-  }, [config.enabled, config.isHidden, config.pin, reveal]);
-
-  if (config.enabled && config.isHidden && !isRevealed) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <h1 className="text-2xl font-bold text-muted-foreground">Nova Aba</h1>
-          <p className="text-sm text-muted-foreground">Página em branco</p>
-        </div>
-      </div>
-    );
-  }
-
-  return <>{children}</>;
 }
 
 function TutorialGuard({ children }: { children: React.ReactNode }) {
@@ -112,9 +77,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <PWAInstallPrompt />
-      <StealthGuard>
-        <BrowserRouter>
-          <TutorialGuard>
+      <BrowserRouter>
+        <TutorialGuard>
             <Routes>
               <Route path="/auth" element={<Auth />} />
               <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
@@ -131,7 +95,6 @@ const App = () => (
             </Routes>
           </TutorialGuard>
         </BrowserRouter>
-      </StealthGuard>
     </TooltipProvider>
   </QueryClientProvider>
 );
