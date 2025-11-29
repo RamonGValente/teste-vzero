@@ -2,74 +2,119 @@ import { Card } from "@/components/ui/card";
 import { Avatar, AvatarImage, AvatarFallback } from "@/components/ui/avatar";
 import { useUdgRanking } from "@/hooks/useUdgRanking";
 import { UserLink } from "@/components/UserLink";
+import { Crown, Heart, Bomb } from "lucide-react";
 
 export default function Rankings() {
   const { heartsRanking, bombsRanking } = useUdgRanking();
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
-      <h1 className="text-3xl font-bold text-center mb-4">Rankings</h1>
+    <div className="min-h-screen bg-background">
+      <div className="max-w-5xl mx-auto px-4 py-6 space-y-6">
+        <header className="space-y-2 text-center">
+          <h1 className="text-3xl font-bold flex items-center justify-center gap-2">
+            <Crown className="h-6 w-6 text-yellow-500" />
+            Rankings
+          </h1>
+          <p className="text-sm text-muted-foreground">
+            Veja os líderes em corações e bombas na comunidade
+          </p>
+        </header>
 
-      <div className="grid gap-6 md:grid-cols-2">
-        <Card className="p-4">
-          <h2 className="font-semibold mb-3">Top corações</h2>
-          <div className="space-y-2">
-            {heartsRanking.map((entry, index) => (
-              <div
-                key={entry.userId}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 text-right text-sm">
-                    #{index + 1}
-                  </span>
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={entry.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {entry.username?.[0]?.toUpperCase() ?? "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <UserLink userId={entry.userId} username={entry.username || ""}>
-                    {entry.username}
-                  </UserLink>
+        <div className="grid gap-6 md:grid-cols-2">
+          <Card className="p-6">
+            <h2 className="font-semibold mb-4 flex items-center gap-2 text-lg">
+              <Heart className="h-5 w-5 text-pink-500" />
+              Top corações
+            </h2>
+            <div className="space-y-3">
+              {heartsRanking.map((entry, index) => (
+                <div
+                  key={entry.userId}
+                  className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right text-sm font-medium">
+                      #{index + 1}
+                    </span>
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={entry.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {entry.username?.[0]?.toUpperCase() ?? "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <UserLink 
+                        userId={entry.userId} 
+                        username={entry.username || ""}
+                        className="font-semibold text-sm hover:underline"
+                      >
+                        {entry.username}
+                      </UserLink>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.heartsTotal} corações
+                      </span>
+                    </div>
+                  </div>
+                  {index === 0 && (
+                    <Crown className="h-5 w-5 text-yellow-500" />
+                  )}
                 </div>
-                <span className="text-sm font-semibold">
-                  {entry.heartsTotal} ❤
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+              {heartsRanking.length === 0 && (
+                <p className="text-center text-muted-foreground py-4">
+                  Ainda não há dados de corações
+                </p>
+              )}
+            </div>
+          </Card>
 
-        <Card className="p-4">
-          <h2 className="font-semibold mb-3">Top bombas</h2>
-          <div className="space-y-2">
-            {bombsRanking.map((entry, index) => (
-              <div
-                key={entry.userId}
-                className="flex items-center justify-between gap-3"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-6 text-right text-sm">
-                    #{index + 1}
-                  </span>
-                  <Avatar className="h-8 w-8">
-                    <AvatarImage src={entry.avatar_url || undefined} />
-                    <AvatarFallback>
-                      {entry.username?.[0]?.toUpperCase() ?? "?"}
-                    </AvatarFallback>
-                  </Avatar>
-                  <UserLink userId={entry.userId} username={entry.username || ""}>
-                    {entry.username}
-                  </UserLink>
+          <Card className="p-6">
+            <h2 className="font-semibold mb-4 flex items-center gap-2 text-lg">
+              <Bomb className="h-5 w-5 text-red-500" />
+              Top bombas
+            </h2>
+            <div className="space-y-3">
+              {bombsRanking.map((entry, index) => (
+                <div
+                  key={entry.userId}
+                  className="flex items-center justify-between gap-3 p-2 rounded-lg hover:bg-accent/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="w-6 text-right text-sm font-medium">
+                      #{index + 1}
+                    </span>
+                    <Avatar className="h-10 w-10">
+                      <AvatarImage src={entry.avatar_url || undefined} />
+                      <AvatarFallback>
+                        {entry.username?.[0]?.toUpperCase() ?? "?"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex flex-col">
+                      <UserLink 
+                        userId={entry.userId} 
+                        username={entry.username || ""}
+                        className="font-semibold text-sm hover:underline"
+                      >
+                        {entry.username}
+                      </UserLink>
+                      <span className="text-xs text-muted-foreground">
+                        {entry.bombsTotal} bombas
+                      </span>
+                    </div>
+                  </div>
+                  {index === 0 && (
+                    <Bomb className="h-5 w-5 text-red-500" />
+                  )}
                 </div>
-                <span className="text-sm font-semibold">
-                  {entry.bombsTotal} 💣
-                </span>
-              </div>
-            ))}
-          </div>
-        </Card>
+              ))}
+              {bombsRanking.length === 0 && (
+                <p className="text-center text-muted-foreground py-4">
+                  Ainda não há dados de bombas
+                </p>
+              )}
+            </div>
+          </Card>
+        </div>
       </div>
     </div>
   );

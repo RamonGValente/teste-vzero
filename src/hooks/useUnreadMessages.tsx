@@ -1,9 +1,10 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 
 export function useUnreadMessages() {
   const { user } = useAuth();
+  const queryClient = useQueryClient();
 
   const { data: unreadCount = 0 } = useQuery({
     queryKey: ["unread-messages", user?.id],
@@ -46,5 +47,28 @@ export function useUnreadMessages() {
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 
-  return unreadCount;
+  const markAsRead = async () => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from("last_viewed")
+        .upsert({
+          user_id: user.id,
+          section: "messages",
+          viewed_at: new Date().toISOString(),
+        });
+
+      if (error) {
+        console.error("Error marking messages as read:", error);
+      } else {
+        // Invalidate and refetch the query to update the count
+        queryClient.invalidateQueries({ queryKey: ["unread-messages", user.id] });
+      }
+    } catch (error) {
+      console.error("Error in markAsRead:", error);
+    }
+  };
+
+  return { unreadCount, markAsRead };
 }

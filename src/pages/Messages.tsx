@@ -527,21 +527,50 @@ export default function Messages() {
     queryKey: ["conversations"],
     queryFn: async () => {
       const { data, error } = await supabase.from("conversations")
-        .select(`*, conversation_participants!inner(user_id, profiles(username, avatar_url)), messages(id, content, created_at, media_urls, user_id)`)
+        .select(`*, conversation_participants!inner(user_id, profiles(username, avatar_url)), messages(id, content, created_at, media_urls, user_id, deleted_at)`)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
     },
   });
 
+  // Função para verificar se uma conversa tem mensagens válidas
+  const hasValidMessages = useCallback((conv: any) => {
+    if (!conv.messages || conv.messages.length === 0) return false;
+    
+    // Verifica se há pelo menos uma mensagem não deletada
+    const validMessages = conv.messages.filter((msg: any) => 
+      msg.deleted_at === null && 
+      (msg.content !== null || (msg.media_urls && msg.media_urls.length > 0))
+    );
+    
+    return validMessages.length > 0;
+  }, []);
+
   const processedConversations = useMemo(() => {
     if (!rawConversations || !user) return [];
+    
     const uniqueMap = new Map();
+    
     rawConversations.forEach((conv) => {
+      // Filtra apenas conversas que têm mensagens válidas
+      if (!hasValidMessages(conv)) return;
+      
       const lastMsgDate = conv.messages?.[0]?.created_at 
         ? new Date(conv.messages[0].created_at).getTime() 
         : new Date(conv.created_at).getTime();
-      const convWithDate = { ...conv, sortTime: lastMsgDate };
+      
+      const convWithDate = { 
+        ...conv, 
+        sortTime: lastMsgDate,
+        // Adiciona contador de mensagens não visualizadas
+        unreadCount: conv.messages?.filter((msg: any) => 
+          msg.user_id !== user.id && 
+          msg.viewed_at === null &&
+          msg.deleted_at === null
+        ).length || 0
+      };
+      
       if (conv.is_group) {
         uniqueMap.set(conv.id, convWithDate);
       } else {
@@ -554,8 +583,10 @@ export default function Messages() {
         }
       }
     });
-    return Array.from(uniqueMap.values()).sort((a, b) => b.sortTime - a.sortTime);
-  }, [rawConversations, user]);
+    
+    return Array.from(uniqueMap.values())
+      .sort((a, b) => b.sortTime - a.sortTime);
+  }, [rawConversations, user, hasValidMessages]);
 
   const { data: messages, refetch: refetchMessages, isLoading: isLoadingMessages } = useQuery({
     queryKey: ["messages", selectedConversation],
@@ -578,7 +609,6 @@ export default function Messages() {
     )) return 'audio';
     return 'media';
   }, []);
-
 
   // ====================================================================
   // LOGICA DO TIMER (Mantida versão LocalStorage/Visualização)
@@ -895,20 +925,52 @@ export default function Messages() {
                     const otherParticipant = conv.conversation_participants.find((p:any) => p.user_id !== user?.id);
                     const lastMessage = conv.messages?.[0];
                     const isActive = selectedConversation === conv.id;
+                    const hasUnreadMessages = conv.unreadCount > 0;
+                    
                     return (
-                      <button key={conv.id} onClick={() => setSelectedConversation(conv.id)} className={cn("flex items-center gap-3 p-4 border-b border-muted/40 hover:bg-accent/40 transition-all text-left w-full", isActive && "bg-accent/60 border-l-4 border-l-primary pl-[13px]")}>
+                      <button 
+                        key={conv.id} 
+                        onClick={() => setSelectedConversation(conv.id)} 
+                        className={cn(
+                          "flex items-center gap-3 p-4 border-b border-muted/40 hover:bg-accent/40 transition-all text-left w-full relative",
+                          isActive && "bg-accent/60 border-l-4 border-l-primary pl-[13px]"
+                        )}
+                      >
                         <div className="relative">
                           <Avatar className="h-12 w-12 border-2 border-background">
                             <AvatarImage src={otherParticipant?.profiles?.avatar_url} />
-                            <AvatarFallback className="bg-muted font-semibold">{conv.is_group ? <Users className="h-4 w-4" /> : otherParticipant?.profiles?.username?.[0]?.toUpperCase()}</AvatarFallback>
+                            <AvatarFallback className="bg-muted font-semibold">
+                              {conv.is_group ? <Users className="h-4 w-4" /> : otherParticipant?.profiles?.username?.[0]?.toUpperCase()}
+                            </AvatarFallback>
                           </Avatar>
+                          {hasUnreadMessages && (
+                            <div className="absolute -top-1 -right-1 w-5 h-5 bg-red-500 rounded-full flex items-center justify-center border-2 border-background">
+                              <span className="text-[10px] font-bold text-white">
+                                {conv.unreadCount > 9 ? '9+' : conv.unreadCount}
+                              </span>
+                            </div>
+                          )}
                         </div>
                         <div className="flex-1 min-w-0">
                           <div className="flex justify-between items-baseline mb-1">
-                            <span className="font-semibold truncate text-sm">{conv.name || otherParticipant?.profiles?.username || "Sala Privada"}</span>
-                            {lastMessage && <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">{new Date(lastMessage.created_at).toLocaleDateString() === new Date().toLocaleDateString() ? new Date(lastMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) : new Date(lastMessage.created_at).toLocaleDateString()}</span>}
+                            <span className="font-semibold truncate text-sm">
+                              {conv.name || otherParticipant?.profiles?.username || "Sala Privada"}
+                            </span>
+                            {lastMessage && (
+                              <span className="text-[10px] text-muted-foreground whitespace-nowrap ml-2">
+                                {new Date(lastMessage.created_at).toLocaleDateString() === new Date().toLocaleDateString() 
+                                  ? new Date(lastMessage.created_at).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'})
+                                  : new Date(lastMessage.created_at).toLocaleDateString()
+                                }
+                              </span>
+                            )}
                           </div>
-                          <p className="text-xs text-muted-foreground truncate">{lastMessage?.content ? (lastMessage.user_id === user?.id ? "Você: " : "") + lastMessage.content : (lastMessage?.media_urls ? "📷 Mídia enviada" : "Toque para conversar")}</p>
+                          <p className="text-xs text-muted-foreground truncate">
+                            {lastMessage?.content 
+                              ? (lastMessage.user_id === user?.id ? "Você: " : "") + lastMessage.content 
+                              : (lastMessage?.media_urls ? "📷 Mídia enviada" : "Toque para conversar")
+                            }
+                          </p>
                         </div>
                       </button>
                     );
@@ -960,11 +1022,19 @@ export default function Messages() {
                      <>
                       <Avatar className="h-10 w-10 border">
                         <AvatarImage src={peer?.profiles?.avatar_url} />
-                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white">{peer?.profiles?.username?.[0]?.toUpperCase() || <User />}</AvatarFallback>
+                        <AvatarFallback className="bg-gradient-to-br from-primary to-secondary text-white">
+                          {peer?.profiles?.username?.[0]?.toUpperCase() || <User />}
+                        </AvatarFallback>
                       </Avatar>
                       <div className="leading-tight">
-                        <h3 className="font-semibold flex items-center gap-2">{conv?.name || peer?.profiles?.username || "Chat"}{peer?.user_id && <UserLink userId={peer.user_id} username={peer.profiles?.username || ""} className="opacity-0 w-0 h-0 overflow-hidden" />}</h3>
-                        <p className="text-xs text-green-600 font-medium flex items-center gap-1"><span className="block w-2 h-2 bg-green-500 rounded-full animate-pulse" />Online</p>
+                        <h3 className="font-semibold flex items-center gap-2">
+                          {conv?.name || peer?.profiles?.username || "Chat"}
+                          {peer?.user_id && <UserLink userId={peer.user_id} username={peer.profiles?.username || ""} className="opacity-0 w-0 h-0 overflow-hidden" />}
+                        </h3>
+                        <p className="text-xs text-green-600 font-medium flex items-center gap-1">
+                          <span className="block w-2 h-2 bg-green-500 rounded-full animate-pulse" />
+                          Online
+                        </p>
                       </div>
                      </>
                    );
@@ -1031,7 +1101,9 @@ export default function Messages() {
                       )}
 
                       {timerState?.status === 'showingUndoing' && (
-                        <div className="px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg mb-2 animate-pulse"><span className="text-destructive font-mono font-bold tracking-wider">UnDoInG</span></div>
+                        <div className="px-4 py-2 bg-destructive/10 border border-destructive/20 rounded-lg mb-2 animate-pulse">
+                          <span className="text-destructive font-mono font-bold tracking-wider">UnDoInG</span>
+                        </div>
                       )}
 
                       {msg.media_urls && msg.media_urls.length > 0 && timerState?.status !== 'showingUndoing' && (
@@ -1137,7 +1209,9 @@ export default function Messages() {
           </>
         ) : (
           <div className="flex flex-col items-center justify-center h-full text-center p-8 animate-in fade-in duration-500">
-             <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse"><MessageSquarePlus className="h-16 w-16 text-primary" /></div>
+             <div className="w-32 h-32 bg-gradient-to-tr from-primary/20 to-secondary/20 rounded-full flex items-center justify-center mb-6 animate-pulse">
+               <MessageSquarePlus className="h-16 w-16 text-primary" />
+             </div>
              <h1 className="text-3xl font-bold tracking-tight mb-3 bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">Suas Mensagens</h1>
              <p className="text-muted-foreground max-w-md mb-8 text-lg">Selecione uma conversa na barra lateral ou inicie um novo chat com seus amigos.</p>
           </div>

@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
-import { Bomb, Check, Copy, Crown, Home, LogOut, Menu, MessageCircle, Search, User, Users, X, Zap } from "lucide-react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { Bomb, Check, Copy, Crown, Home, LogOut, Menu, MessageCircle, Search, User, Users, X, Zap, Globe, Swords } from "lucide-react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useUnreadMessages } from "@/hooks/useUnreadMessages";
 import { useUnreadFeed } from "@/hooks/useUnreadFeed";
 import { useUnreadCommunities } from "@/hooks/useUnreadCommunities";
+import { useUdgRanking } from "@/hooks/useUdgRanking";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
 
@@ -29,9 +30,23 @@ export default function AppLayout() {
   const { user, signOut } = useAuth();
   const { toast } = useToast();
   const navigate = useNavigate();
-  const unreadMessages = useUnreadMessages();
+  const location = useLocation();
+  
+  // Usar hook customizado para mensagens não lidas - agora com markAsRead
+  const { unreadCount: unreadMessages, markAsRead } = useUnreadMessages();
   const unreadFeed = useUnreadFeed();
   const unreadCommunities = useUnreadCommunities();
+
+  // Usar o hook melhorado para ranking UDG
+  const { king, bombado } = useUdgRanking();
+
+  // Zerar contador de mensagens quando estiver na página de mensagens
+  useEffect(() => {
+    if (location.pathname === '/messages') {
+      markAsRead();
+    }
+  }, [location.pathname, markAsRead]);
+
   const { data: profile } = useQuery({
     queryKey: ["user-profile-sidebar", user?.id],
     enabled: !!user?.id,
@@ -51,110 +66,18 @@ export default function AppLayout() {
     },
   });
 
-  type UdgRankingEntry = {
-    userId: string;
-    username: string;
-    avatar_url: string | null;
-    heartsApproved: number;
-    bombs: number;
-  };
-
-  const { data: udgRanking } = useQuery<{
-    king: UdgRankingEntry | null;
-    bombado: UdgRankingEntry | null;
-  }>({
-    queryKey: ["udg-ranking"],
-    enabled: !!user?.id,
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("posts")
-        .select(`
-          id,
-          user_id,
-          is_community_approved,
-          profiles:user_id (
-            id,
-            username,
-            avatar_url
-          ),
-          post_votes (
-            vote_type
-          )
-        `);
-
-      if (error) {
-        console.error("Error fetching UDG ranking:", error);
-        return { king: null, bombado: null };
-      }
-
-      const stats = new Map<string, UdgRankingEntry>();
-
-      (data ?? []).forEach((post: any) => {
-        const userId = post.user_id as string | undefined;
-        if (!userId) return;
-
-        const profile = post.profiles as {
-          id: string;
-          username?: string | null;
-          avatar_url?: string | null;
-        } | null;
-
-        let entry = stats.get(userId);
-        if (!entry) {
-          entry = {
-            userId,
-            username: profile?.username || "Usuário",
-            avatar_url: profile?.avatar_url ?? null,
-            heartsApproved: 0,
-            bombs: 0,
-          };
-          stats.set(userId, entry);
-        }
-
-        const votes: Array<{ vote_type: "heart" | "bomb" }> = post.post_votes ?? [];
-        for (const vote of votes) {
-          if (vote.vote_type === "heart" && post.is_community_approved) {
-            entry.heartsApproved += 1;
-          }
-          if (vote.vote_type === "bomb") {
-            entry.bombs += 1;
-          }
-        }
-      });
-
-      const entries = Array.from(stats.values());
-      if (!entries.length) {
-        return { king: null, bombado: null };
-      }
-
-      const king = entries.reduce<UdgRankingEntry | null>(
-        (best, entry) =>
-          entry.heartsApproved > (best?.heartsApproved ?? 0) ? entry : best,
-        null
-      );
-
-      const bombado = entries.reduce<UdgRankingEntry | null>(
-        (best, entry) =>
-          entry.bombs > (best?.bombs ?? 0) ? entry : best,
-        null
-      );
-
-      return { king, bombado };
-    },
-  });
-
   useEffect(() => {
     const root = document.documentElement;
     root.classList.remove("king-mode", "bombado-mode");
 
-    if (!udgRanking) return;
+    if (!king && !bombado) return;
 
-    if (user?.id && udgRanking.king?.userId === user.id) {
+    if (user?.id && king?.userId === user.id) {
       root.classList.add("king-mode");
-    } else if (user?.id && udgRanking.bombado?.userId === user.id) {
+    } else if (user?.id && bombado?.userId === user.id) {
       root.classList.add("bombado-mode");
     }
-  }, [udgRanking, user?.id]);
+  }, [king, bombado, user?.id]);
 
   const handleAdSubmit = async () => {
     if (!adName || !adEmail || !adDescription) {
@@ -226,11 +149,12 @@ export default function AppLayout() {
   };
 
   const navigation = [
-    { name: "Dissect", href: "/", icon: Home, badge: unreadFeed },
+    { name: "World Flow", href: "/", icon: Globe, badge: unreadFeed },
     { name: "Explorar", href: "/explore", icon: Search },
     { name: "Mensagens", href: "/messages", icon: MessageCircle, badge: unreadMessages },
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
-    { name: "Arena", href: "/arena", icon: Zap },
+    { name: "Arena", href: "/arena", icon: Swords },
+    { name: "Rankings", href: "/rankings", icon: Zap },
     { name: "Perfil", href: "/profile", icon: User },
   ];
 
@@ -251,6 +175,11 @@ export default function AppLayout() {
         description: `${numbersOnly} copiado para área de transferência`,
       });
     }
+  };
+
+  const handleMessagesClick = () => {
+    setSidebarOpen(false);
+    markAsRead();
   };
 
   return (
@@ -284,7 +213,7 @@ export default function AppLayout() {
                 key={item.name}
                 to={item.href}
                 end={item.href === "/"}
-                onClick={() => setSidebarOpen(false)}
+                onClick={item.href === "/messages" ? handleMessagesClick : () => setSidebarOpen(false)}
                 className={({ isActive }) =>
                   cn(
                     "flex items-center gap-3 px-3 py-2 rounded-lg transition-all",
@@ -312,16 +241,13 @@ export default function AppLayout() {
 
           {/* User Section */}
           <div className="p-2 border-t space-y-2 flex-shrink-0">
-            {/*             <WeatherWidget />
-            
-
             <WeatherWidget />
 
             {/* Ranking UDG */}
-            {udgRanking?.king && (
+            {king && (
               <Card
                 className="mt-3 p-2 bg-gradient-to-r from-yellow-500/20 via-amber-500/10 to-yellow-400/20 border border-yellow-500/50 shadow-sm cursor-pointer"
-                onClick={() => navigate(`/profile/${udgRanking.king?.userId}`)}
+                onClick={() => navigate(`/profile/${king.userId}`)}
               >
                 <p className="text-[11px] font-bold mb-1 tracking-wide text-yellow-600 flex items-center gap-1">
                   <Crown className="h-3 w-3" />
@@ -329,27 +255,27 @@ export default function AppLayout() {
                 </p>
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8 border-2 border-yellow-400">
-                    <AvatarImage src={udgRanking.king.avatar_url || undefined} />
+                    <AvatarImage src={king.avatar_url || undefined} />
                     <AvatarFallback className="bg-yellow-500 text-xs font-bold text-black">
-                      {udgRanking.king.username?.[0]?.toUpperCase()}
+                      {king.username?.[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold truncate">
-                      {udgRanking.king.username}
+                      {king.username || "Usuário"}
                     </p>
                     <p className="text-[10px] text-muted-foreground truncate">
-                      {udgRanking.king.heartsApproved} ❤️ · {udgRanking.king.bombs} 💣
+                      {king.heartsTotal} ❤️ · {king.bombsTotal} 💣
                     </p>
                   </div>
                 </div>
               </Card>
             )}
 
-            {udgRanking?.bombado && (
+            {bombado && (
               <Card
                 className="mt-2 p-2 bg-gradient-to-r from-slate-900/80 via-slate-800/80 to-slate-900/80 border border-slate-700 shadow-sm cursor-pointer"
-                onClick={() => navigate(`/profile/${udgRanking.bombado?.userId}`)}
+                onClick={() => navigate(`/profile/${bombado.userId}`)}
               >
                 <p className="text-[11px] font-bold mb-1 tracking-wide text-red-500 flex items-center gap-1">
                   <Bomb className="h-3 w-3" />
@@ -357,17 +283,17 @@ export default function AppLayout() {
                 </p>
                 <div className="flex items-center gap-2">
                   <Avatar className="h-8 w-8 border-2 border-slate-500">
-                    <AvatarImage src={udgRanking.bombado.avatar_url || undefined} />
+                    <AvatarImage src={bombado.avatar_url || undefined} />
                     <AvatarFallback className="bg-slate-600 text-xs font-bold text-white">
-                      {udgRanking.bombado.username?.[0]?.toUpperCase()}
+                      {bombado.username?.[0]?.toUpperCase()}
                     </AvatarFallback>
                   </Avatar>
                   <div className="flex-1 min-w-0">
                     <p className="text-xs font-semibold truncate">
-                      {udgRanking.bombado.username}
+                      {bombado.username || "Usuário"}
                     </p>
                     <p className="text-[10px] text-muted-foreground truncate">
-                      {udgRanking.bombado.heartsApproved} ❤️ · {udgRanking.bombado.bombs} 💣
+                      {bombado.heartsTotal} ❤️ · {bombado.bombsTotal} 💣
                     </p>
                   </div>
                 </div>
