@@ -94,7 +94,7 @@ const AVAILABLE_LANGUAGES = [
   { code: 'hi', name: 'Hindi', flag: '🇮🇳', nativeName: 'हिन्दी', speechLang: 'hi-IN' },
 ];
 
-// Funções auxiliares para idiomas
+// Funções auxiliares para idiomas...
 const getLanguageName = (code: string): string => {
   const lang = AVAILABLE_LANGUAGES.find(l => l.code === code);
   return lang ? lang.name : code.toUpperCase();
