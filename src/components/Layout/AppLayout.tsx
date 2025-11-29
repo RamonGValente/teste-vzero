@@ -357,7 +357,7 @@ export default function AppLayout() {
         />
       )}
 
-      {/* Main Content */}
+      {/* Main Content     */}
       <main className="lg:ml-72 min-h-screen flex flex-col">
         <div className="flex-1">
           <Outlet />
