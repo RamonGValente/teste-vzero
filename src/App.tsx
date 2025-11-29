@@ -18,7 +18,7 @@ import NotFound from "./pages/NotFound";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
-import Rankings from "./pages/Rankings.tsx"; // ✅ Adicione a extensão .tsx
+// import Rankings from "./pages/Rankings.tsx"; // ✅ TEMPORARIAMENTE COMENTADO
 
 const queryClient = new QueryClient();
 
@@ -37,7 +37,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
     return <Navigate to="/auth" replace />;
   }
 
-  // ✅ Usuário logado: monta o listener aqui e depois renderiza o conteúdo protegido
   return (
     <>
       <RealtimeAttentionListener />
@@ -90,9 +89,8 @@ const App = () => (
                 <Route path="/communities" element={<Communities />} />
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/:userId" element={<Profile />} />
-                <Route path="/rankings" element={<Rankings />} />
+                {/* ✅ TEMPORARIAMENTE COMENTADO - <Route path="/rankings" element={<Rankings />} /> */}
               </Route>
-              {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
               <Route path="*" element={<NotFound />} />
             </Routes>
           </TutorialGuard>

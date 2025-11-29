@@ -66,7 +66,7 @@ export default function Rankings() {
                 </p>
               )}
             </div>
-          </Card>
+          </Card>           
 
           <Card className="p-6">
             <h2 className="font-semibold mb-4 flex items-center gap-2 text-lg">
@@ -109,7 +109,7 @@ export default function Rankings() {
               ))}
               {bombsRanking.length === 0 && (
                 <p className="text-center text-muted-foreground py-4">
-                  Ainda não há dados de bombas
+                  Ainda não há dados de bombas.
                 </p>
               )}
             </div>
