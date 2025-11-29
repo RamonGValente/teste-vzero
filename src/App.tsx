@@ -18,7 +18,7 @@ import NotFound from "./pages/NotFound";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
-import Rankings from "./pages/Rankings";
+import Rankings from "./pages/Rankings.tsx"; // ✅ Adicione a extensão .tsx
 
 const queryClient = new QueryClient();
 
