@@ -18,6 +18,7 @@ import NotFound from "./pages/NotFound";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
+import ResetPassword from "@/pages/ResetPassword";
 import Rankings from "@/pages/Rankings"; // ✅ Alterado para alias @
 
 const queryClient = new QueryClient();
@@ -90,6 +91,8 @@ const App = () => (
                 <Route path="/profile" element={<Profile />} />
                 <Route path="/profile/:userId" element={<Profile />} />
                 <Route path="/rankings" element={<Rankings />} /> {/* ✅ DESCOMENTADO */}
+                <Route path="/auth" element={<Auth />} />
+                <Route path="/auth/reset-password" element={<ResetPassword />} />
               </Route>
               <Route path="*" element={<NotFound />} />
             </Routes>

@@ -15,6 +15,7 @@ export default function Auth() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
+  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -82,6 +83,44 @@ export default function Auth() {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email) {
+      toast({
+        variant: "destructive",
+        title: "Informe o e-mail",
+        description: "Preencha o campo de email para recuperar a senha.",
+      });
+      return;
+    }
+
+    setResetLoading(true);
+
+    try {
+      const { error } = await supabase.auth.resetPasswordForEmail(email, {
+        redirectTo: `${window.location.origin}/auth/reset-password`,
+      });
+
+      if (error) {
+        throw error;
+      }
+
+      toast({
+        title: "Email de recuperação enviado",
+        description:
+          "Se este email estiver cadastrado, você receberá um link para redefinir sua senha.",
+      });
+    } catch (error: any) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao recuperar senha",
+        description:
+          error.message || "Não foi possível enviar o email de recuperação.",
+      });
+    } finally {
+      setResetLoading(false);
     }
   };
 
@@ -164,6 +203,19 @@ export default function Auth() {
               {isLogin
                 ? "Não tem conta? Criar uma"
                 : "Já tem conta? Fazer login"}
+            </Button>
+
+            <Button
+              type="button"
+              variant="link"
+              className="w-full mt-2 text-sm"
+              onClick={handleForgotPassword}
+              disabled={resetLoading}
+            >
+              {resetLoading && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
+              Recuperar minha senha
             </Button>
           </form>
         </CardContent>
