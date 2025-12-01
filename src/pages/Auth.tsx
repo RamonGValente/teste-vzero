@@ -11,11 +11,11 @@ import logo from "@/assets/logo.png";
 
 export default function Auth() {
   const [loading, setLoading] = useState(false);
+  const [resetLoading, setResetLoading] = useState(false);
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [resetLoading, setResetLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -155,7 +155,7 @@ export default function Auth() {
                   placeholder="seu_usuario"
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
-                  disabled={loading}
+                  disabled={loading || resetLoading}
                 />
               </div>
             )}
@@ -168,7 +168,7 @@ export default function Auth() {
                 placeholder="seu@email.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                disabled={loading}
+                disabled={loading || resetLoading}
               />
             </div>
             
@@ -180,16 +180,18 @@ export default function Auth() {
                 placeholder="••••••••"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                disabled={loading}
+                disabled={loading || resetLoading}
               />
             </div>
 
             <Button
               type="submit"
               className="w-full bg-gradient-to-r from-primary to-secondary hover:opacity-90"
-              disabled={loading}
+              disabled={loading || resetLoading}
             >
-              {loading && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+              {(loading || resetLoading) && (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              )}
               {isLogin ? "Entrar" : "Criar Conta"}
             </Button>
 
@@ -198,7 +200,7 @@ export default function Auth() {
               variant="ghost"
               className="w-full"
               onClick={() => setIsLogin(!isLogin)}
-              disabled={loading}
+              disabled={loading || resetLoading}
             >
               {isLogin
                 ? "Não tem conta? Criar uma"
@@ -210,7 +212,7 @@ export default function Auth() {
               variant="link"
               className="w-full mt-2 text-sm"
               onClick={handleForgotPassword}
-              disabled={resetLoading}
+              disabled={resetLoading || loading}
             >
               {resetLoading && (
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

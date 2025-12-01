@@ -15,11 +15,11 @@ import Messages from "./pages/Messages";
 import Communities from "./pages/Communities";
 import Profile from "./pages/Profile";
 import NotFound from "./pages/NotFound";
+import ResetPassword from "./pages/ResetPassword";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
-import ResetPassword from "@/pages/ResetPassword";
-import Rankings from "@/pages/Rankings"; // ✅ Alterado para alias @
+import Rankings from "@/pages/Rankings"; // ✅ usando alias @
 
 const queryClient = new QueryClient();
 
@@ -80,24 +80,28 @@ const App = () => (
       <PWAInstallPrompt />
       <BrowserRouter>
         <TutorialGuard>
-            <Routes>
-              <Route path="/auth" element={<Auth />} />
-              <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
-                <Route path="/" element={<Feed />} />
-                <Route path="/arena" element={<Arena />} />
-                <Route path="/explore" element={<Explore />} />
-                <Route path="/messages" element={<Messages />} />
-                <Route path="/communities" element={<Communities />} />
-                <Route path="/profile" element={<Profile />} />
-                <Route path="/profile/:userId" element={<Profile />} />
-                <Route path="/rankings" element={<Rankings />} /> {/* ✅ DESCOMENTADO */}
-                <Route path="/auth" element={<Auth />} />
-                <Route path="/auth/reset-password" element={<ResetPassword />} />
-              </Route>
-              <Route path="*" element={<NotFound />} />
-            </Routes>
-          </TutorialGuard>
-        </BrowserRouter>
+          <Routes>
+            {/* Auth + recuperação de senha NÃO ficam atrás do ProtectedRoute */}
+            <Route path="/auth" element={<Auth />} />
+            <Route path="/auth/reset-password" element={<ResetPassword />} />
+
+            {/* Rotas protegidas */}
+            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+              <Route path="/" element={<Feed />} />
+              <Route path="/arena" element={<Arena />} />
+              <Route path="/explore" element={<Explore />} />
+              <Route path="/messages" element={<Messages />} />
+              <Route path="/communities" element={<Communities />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/profile/:userId" element={<Profile />} />
+              <Route path="/rankings" element={<Rankings />} />
+            </Route>
+
+            {/* 404 interna */}
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+        </TutorialGuard>
+      </BrowserRouter>
     </TooltipProvider>
   </QueryClientProvider>
 );

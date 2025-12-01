@@ -19,8 +19,6 @@ export default function ResetPassword() {
   const navigate = useNavigate();
   const { toast } = useToast();
 
-  // Quando o usuário chega aqui pelo link do e-mail, o Supabase já
-  // deve ter criado uma sessão de "recovery". A gente só confere.
   useEffect(() => {
     const checkSession = async () => {
       const { data, error } = await supabase.auth.getSession();
@@ -70,7 +68,7 @@ export default function ResetPassword() {
 
     try {
       const { error } = await supabase.auth.updateUser({
-        password: password,
+        password,
       });
 
       if (error) {
@@ -82,8 +80,6 @@ export default function ResetPassword() {
         description: "Já pode usar a nova senha para acessar o sistema.",
       });
 
-      // Aqui você escolhe: mandar direto pro sistema ou para tela de login.
-      // Vou mandar direto pra home (já autenticado):
       navigate("/");
     } catch (err: any) {
       toast({
@@ -96,7 +92,6 @@ export default function ResetPassword() {
     }
   };
 
-  // Enquanto verifica a sessão
   if (checkingSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -108,7 +103,6 @@ export default function ResetPassword() {
     );
   }
 
-  // Se o link for inválido / expirado (sem sessão)
   if (!hasValidSession) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background p-4">
@@ -129,7 +123,6 @@ export default function ResetPassword() {
     );
   }
 
-  // Tela normal de redefinição de senha
   return (
     <div className="min-h-screen flex items-center justify-center bg-background p-4">
       <div className="absolute inset-0 bg-gradient-to-br from-primary/10 via-background to-secondary/10 -z-10" />
