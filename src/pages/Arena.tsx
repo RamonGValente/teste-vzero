@@ -6,7 +6,7 @@ import {
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles, Wand2,
   Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile,
-  Clock, CheckCircle2, AlertCircle
+  Clock, CheckCircle2, AlertCircle, Flame
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -23,10 +23,10 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress"; 
+import { Progress } from "@/components/ui/progress";
 
 /* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
-const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" }) => {
+const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" | "viral" }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
 
@@ -58,7 +58,9 @@ const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: st
   return (
     <div className={cn(
       "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold animate-pulse",
-      variant === "flash" ? "bg-black/50 text-white border border-white/20" : "bg-orange-100 text-orange-700"
+      variant === "flash" ? "bg-black/50 text-white border border-white/20" : 
+      variant === "viral" ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border border-white/20" :
+      "bg-orange-100 text-orange-700"
     )}>
       <Clock className="h-3 w-3" />
       <span>{timeLeft}</span>
@@ -66,13 +68,12 @@ const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: st
   );
 };
 
-/* ---------- COMPONENTE: Imagem Progressiva (Lazy + Blur-up) ---------- */
+/* ---------- COMPONENTE: Imagem Progressiva ---------- */
 const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: string, className?: string, onClick?: () => void }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   
   return (
     <div className={cn("relative overflow-hidden bg-muted/30", className)} onClick={onClick}>
-      {/* Placeholder borrado para UX imediata */}
       <img 
         src={src} 
         alt={alt}
@@ -82,7 +83,6 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
         )}
         aria-hidden="true"
       />
-      {/* Imagem Real com Lazy Loading */}
       <img
         src={src}
         alt={alt}
@@ -97,7 +97,7 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
   );
 };
 
-/* ---------- Configurações de Estilo IA (Presets Otimizados) ---------- */
+/* ---------- Configurações de Estilo IA ---------- */
 const AI_STYLES = [
   { id: 'rejuvenate', label: 'Rejuvenescer', icon: Baby, color: 'bg-green-100 text-green-600', prompt: 'make them look 20 years younger, remove deep wrinkles, face lift, glowing youthful skin, high fidelity, 8k, soft studio lighting', filter: 'rejuvenate' },
   { id: 'beauty', label: 'Embelezar', icon: Sparkles, color: 'bg-pink-100 text-pink-600', prompt: 'high quality, beautified, perfect lighting, 8k, smooth skin, makeup, glamour', filter: 'beauty' },
@@ -114,6 +114,64 @@ const AI_STYLES = [
   { id: 'terror', label: 'Terror', icon: Skull, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
   { id: 'cold', label: 'Frio / Inverno', icon: Music, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
 ];
+
+/* ---------- COMPONENTE: Player de Vídeo Viral ---------- */
+const ViralVideoPlayer = ({ src, isPlaying, onPlayPause, onToggleMute, isMuted }: { 
+  src: string; 
+  isPlaying: boolean; 
+  onPlayPause: () => void; 
+  onToggleMute: () => void;
+  isMuted: boolean;
+}) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.play().catch(console.error);
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isPlaying]);
+
+  return (
+    <div className="relative w-full h-full">
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full h-full object-cover"
+        loop
+        muted={isMuted}
+        playsInline
+        onClick={onPlayPause}
+      />
+      <Button
+        variant="ghost"
+        size="icon"
+        className="absolute top-2 right-2 h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+        onClick={(e) => {
+          e.stopPropagation();
+          onToggleMute();
+        }}
+      >
+        {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+      </Button>
+      {!isPlaying && (
+        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-12 w-12 rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-white/30"
+            onClick={onPlayPause}
+          >
+            <Play className="h-6 w-6 ml-1" />
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+};
 
 /* ---------- Helpers ---------- */
 const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
@@ -292,7 +350,10 @@ export default function Arena() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [postType, setPostType] = useState<'standard' | 'photo_audio'>('standard');
+  const [postType, setPostType] = useState<'standard' | 'photo_audio' | 'viral_clips'>('standard');
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const [videoMuted, setVideoMuted] = useState(true);
 
   const { isRecording, audioBlob, recordingTime, startRecording, stopRecording, resetRecording } = useAudioRecorder();
   const { playingVideo, muted, playVideo, pauseVideo, toggleMute, registerVideo, unregisterVideo } = useVideoAutoPlayer();
@@ -304,6 +365,8 @@ export default function Arena() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
+  const viralClipCameraInputRef = useRef<HTMLInputElement>(null);
+  const viralClipGalleryInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -331,8 +394,11 @@ export default function Arena() {
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
-      // Nota: Fetching posts. Importante: Estamos pegando também o post_votes para calcular a aprovação
-      const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).eq("is_community_approved", false).order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`)
+        .eq("is_community_approved", false)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data as PostRow[];
     },
@@ -360,7 +426,6 @@ export default function Arena() {
 
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
-    // Check para processar votos expirados a cada minuto
     const i = setInterval(f, 60000); f(); return () => clearInterval(i);
   }, []);
 
@@ -385,9 +450,45 @@ export default function Arena() {
     setProcessing(false);
     if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
   };
-  const removeFile = (idx: number) => setMediaFiles(prev => prev.filter((_, i) => i !== idx));
 
-  /* IA Logic (Com Rejuvenescer Avançado) */
+  const onViralClipPicked = async (files?: FileList | null) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
+    setProcessing(true);
+    const accepted: File[] = [];
+    for (const f of list) {
+      try {
+        if (f.type.startsWith("video/")) {
+          const dur = await getMediaDurationSafe(f).catch(() => 0);
+          setVideoDuration(dur);
+          if (dur <= 30.3) {
+            accepted.push(f);
+            toast({
+              title: "Vídeo selecionado!",
+              description: `Duração: ${dur.toFixed(1)}s`
+            });
+          } else {
+            toast({ 
+              variant: "destructive", 
+              title: "Vídeo muito longo", 
+              description: "ViralClips devem ter no máximo 30 segundos" 
+            });
+          }
+        }
+      } catch {}
+    }
+    setProcessing(false);
+    if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
+  };
+
+  const removeFile = (idx: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== idx));
+    if (postType === 'viral_clips') {
+      setVideoDuration(null);
+    }
+  };
+
+  /* IA Logic */
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file); });
   };
@@ -405,31 +506,26 @@ export default function Arena() {
         ctx.drawImage(img, 0, 0);
 
         if (filterType === 'rejuvenate') {
-          // 1. Criar camada desfocada (Pele de Bebê)
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
           const tempCtx = tempCanvas.getContext('2d')!;
           tempCtx.filter = 'blur(12px)'; 
           tempCtx.drawImage(img, 0, 0);
 
-          // 2. High-Key Glow (Screen) - Esconde imperfeições com luz
           ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.6; // Ajustável
+          ctx.globalAlpha = 0.6;
           ctx.drawImage(tempCanvas, 0, 0);
 
-          // 3. Devolver nitidez aos traços (Overlay do Original)
           ctx.globalCompositeOperation = 'overlay';
           ctx.globalAlpha = 0.4;
           ctx.filter = 'contrast(1.2)';
           ctx.drawImage(img, 0, 0);
 
-          // 4. Color Grading (Tom Pêssego Saudável)
           ctx.globalCompositeOperation = 'soft-light';
           ctx.globalAlpha = 0.3;
-          ctx.fillStyle = '#ffb7a5'; // Pêssego quente
+          ctx.fillStyle = '#ffb7a5';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Final
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1.0;
           ctx.filter = 'saturate(1.1)';
@@ -489,41 +585,84 @@ export default function Arena() {
 
   /* Post Creation */
   const handleCreatePost = async () => {
-    if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); return; }
-    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { toast({ variant: "destructive", title: "Conteúdo vazio" }); return; }
+    if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { 
+      toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); 
+      return; 
+    }
+    if (postType === 'viral_clips' && mediaFiles.length === 0) { 
+      toast({ variant: "destructive", title: "Selecione um vídeo para ViralClip" }); 
+      return; 
+    }
+    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { 
+      toast({ variant: "destructive", title: "Conteúdo vazio" }); 
+      return; 
+    }
+    
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
       let audioUrl: string | null = null;
+      
       for (const file of mediaFiles) {
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
         await supabase.storage.from("media").upload(path, file);
         const { data } = supabase.storage.from("media").getPublicUrl(path);
-        mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + data.publicUrl);
+        
+        if (file.type.startsWith("video/")) {
+          mediaUrls.push(MEDIA_PREFIX.video + data.publicUrl);
+        } else if (file.type.startsWith("image/")) {
+          mediaUrls.push(MEDIA_PREFIX.image + data.publicUrl);
+        }
       }
-      if (audioBlob) {
+      
+      if (audioBlob && postType === 'photo_audio') {
         const path = `${user?.id}/${Date.now()}-audio.wav`;
         await supabase.storage.from("media").upload(path, audioBlob);
         const { data } = supabase.storage.from("media").getPublicUrl(path);
         audioUrl = MEDIA_PREFIX.audio + data.publicUrl;
       }
       
-      // Define 60 minutos para votação
       const ends = new Date(); 
       ends.setMinutes(ends.getMinutes() + 60);
 
       const content = postType === 'photo_audio' ? '' : newPost;
-      const { data: post, error } = await supabase.from("posts").insert({ user_id: user?.id, content, media_urls: mediaUrls.length ? mediaUrls : null, audio_url: audioUrl, post_type: postType, voting_ends_at: ends.toISOString(), voting_period_active: true }).select().single();
+      const { data: post, error } = await supabase.from("posts").insert({ 
+        user_id: user?.id, 
+        content, 
+        media_urls: mediaUrls.length ? mediaUrls : null, 
+        audio_url: audioUrl, 
+        post_type: postType, 
+        voting_ends_at: ends.toISOString(), 
+        voting_period_active: true 
+      }).select().single();
+      
       if (error) throw error;
-      if (content) { const { saveMentions } = await import("@/utils/mentionsHelper"); await saveMentions(post.id, "post", content, user!.id); }
-      toast({ title: "Publicado!", description: "Seu post entrou em votação (60min)" }); setNewPost(""); setMediaFiles([]); resetRecording(); refetch();
-    } catch (e:any) { toast({ variant: "destructive", title: "Erro", description: e.message }); } finally { setUploading(false); }
+      
+      if (content) { 
+        const { saveMentions } = await import("@/utils/mentionsHelper"); 
+        await saveMentions(post.id, "post", content, user!.id); 
+      }
+      
+      toast({ 
+        title: "Publicado na Arena!", 
+        description: `Seu ${postType === 'viral_clips' ? 'ViralClip' : postType === 'photo_audio' ? 'Shorts' : 'post'} entrou em votação (60min)` 
+      }); 
+      
+      setNewPost(""); 
+      setMediaFiles([]); 
+      resetRecording();
+      setVideoDuration(null);
+      refetch();
+    } catch (e:any) { 
+      toast({ variant: "destructive", title: "Erro", description: e.message }); 
+    } finally { 
+      setUploading(false); 
+    }
   };
 
   /* Helpers de Ação */
   const handleLike = async (postId: string) => {
-      // Voto tradicional após aprovação (LIKE)
       try {
         const has = posts?.find(p => p.id === postId)?.likes?.find((l:any) => l.user_id === user?.id);
         if (has) await supabase.from("likes").delete().match({ id: has.id });
@@ -533,7 +672,6 @@ export default function Arena() {
   };
 
   const handleVote = async (postId: string, type: "heart" | "bomb") => {
-    // Votação de aprovação (POST VOTES)
     try {
       const has = posts?.find(p => p.id === postId)?.post_votes?.find((v:any) => v.user_id === user?.id);
       if (has?.vote_type === type) await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
@@ -552,9 +690,22 @@ export default function Arena() {
     onSuccess: () => { setNewCommentText(""); queryClient.invalidateQueries({ queryKey: ["post-comments"] }); refetch(); }
   });
 
-  /* Carousel & Player */
-  const stopCurrentAudio = () => { if (currentAudioRef.current) { currentAudioRef.current.pause(); currentAudioRef.current = null; } setPlayingAudio(null); };
-  const handlePhotoAudioPlay = (url: string) => { stopCurrentAudio(); setPlayingAudio(url); const a = new Audio(stripPrefix(url)); currentAudioRef.current = a; a.onended = () => setPlayingAudio(null); a.play(); };
+  const stopCurrentAudio = () => { 
+    if (currentAudioRef.current) { 
+      currentAudioRef.current.pause(); 
+      currentAudioRef.current = null; 
+    } 
+    setPlayingAudio(null); 
+  };
+  
+  const handlePhotoAudioPlay = (url: string) => { 
+    stopCurrentAudio(); 
+    setPlayingAudio(url); 
+    const a = new Audio(stripPrefix(url)); 
+    currentAudioRef.current = a; 
+    a.onended = () => setPlayingAudio(null); 
+    a.play(); 
+  };
   
   const renderPhotoAudioCarousel = () => {
     const list = posts?.filter(x => x.post_type === 'photo_audio') || [];
@@ -563,7 +714,6 @@ export default function Arena() {
     const img = curr?.media_urls?.[0] ? stripPrefix(curr.media_urls[0]) : null;
     const isPlaying = playingAudio === curr?.audio_url;
 
-    // Lógica de Votação para Flash
     const isVoting = curr.voting_period_active;
     const heartCount = curr.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
     const bombCount = curr.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
@@ -577,7 +727,6 @@ export default function Arena() {
 
     return (
       <Card className="mb-6 border-0 shadow-2xl bg-card/95 overflow-hidden max-w-sm mx-auto relative group">
-        {/* FLASH OPTIONS - Disponível sempre para o dono */}
         {curr.user_id === user?.id && (
             <div className="absolute top-4 right-4 z-50">
                 <DropdownMenu>
@@ -604,7 +753,6 @@ export default function Arena() {
 
           <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
              {isVoting ? (
-                 /* MODO VOTAÇÃO FLASH (Estilo Dark Glass) */
                  <div className="bg-black/40 backdrop-blur-md rounded-2xl p-4 border border-white/10">
                     <div className="flex items-center gap-2 mb-3 text-white">
                         <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
@@ -634,7 +782,6 @@ export default function Arena() {
                      </div>
                  </div>
              ) : (
-                 /* MODO NORMAL APROVADO */
                  <>
                     <div className="flex items-center justify-between mb-4">
                         <div className="flex items-center gap-2 text-white">
@@ -673,6 +820,14 @@ export default function Arena() {
     queryFn: async () => (await supabase.from("comments").select(`*, author:profiles!comments_user_id_fkey(username, avatar_url)`).eq("post_id", openingCommentsFor!.id).order("created_at")).data
   });
 
+  const handleVideoPlayPause = (postId: string) => {
+    if (playingVideoId === postId) {
+      setPlayingVideoId(null);
+    } else {
+      setPlayingVideoId(postId);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 pb-20">
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
@@ -680,9 +835,13 @@ export default function Arena() {
 
         <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
-            <div className="flex gap-2 mb-4 justify-center">
+            <div className="flex gap-2 mb-4 justify-center flex-wrap">
               <Button variant={postType==='standard'?"default":"outline"} onClick={()=>setPostType('standard')} className="rounded-full px-6">Feed</Button>
               <Button variant={postType==='photo_audio'?"default":"outline"} onClick={()=>setPostType('photo_audio')} className="rounded-full px-6">Flash</Button>
+              <Button variant={postType==='viral_clips'?"default":"outline"} onClick={()=>setPostType('viral_clips')} className="rounded-full px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0">
+                <Flame className="h-4 w-4 mr-2" />
+                ViralClips
+              </Button>
             </div>
 
             <div className="flex gap-3">
@@ -693,6 +852,80 @@ export default function Arena() {
                   <div className="text-center p-4 border border-dashed rounded-xl bg-muted/20">
                     <p className="text-sm text-muted-foreground mb-2">1. Tire uma foto &nbsp; 2. Grave um áudio (10s)</p>
                     {!audioBlob ? <Button variant={isRecording?"destructive":"secondary"} onClick={isRecording?stopRecording:startRecording} className="w-full">{isRecording?`Parar (${10-recordingTime}s)`:<><Mic className="mr-2 h-4 w-4"/> Gravar Áudio</>}</Button> : <div className="flex items-center justify-center gap-2 text-green-600"><Volume2 className="h-4 w-4"/> Gravado! <Button variant="ghost" size="sm" onClick={resetRecording} className="text-destructive h-6 w-6 p-0"><X className="h-4 w-4"/></Button></div>}
+                  </div>
+                )}
+                
+                {postType === 'viral_clips' && (
+                  <div className="text-center p-4 border-2 border-dashed border-purple-500/50 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <Flame className="h-5 w-5 text-purple-600" />
+                      <h3 className="font-bold text-purple-700">ViralClips</h3>
+                      <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+                        Até 30s
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Vídeos curtos que podem viralizar! Máximo 30 segundos.
+                    </p>
+                    
+                    {videoDuration && (
+                      <div className="mb-3 p-2 bg-white rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium">Duração do vídeo:</span>
+                          <span className="text-xs font-bold">{videoDuration.toFixed(1)}s</span>
+                        </div>
+                        <Progress 
+                          value={(videoDuration / 30) * 100} 
+                          className={cn(
+                            "h-2",
+                            videoDuration > 30 ? "bg-red-500" : "bg-green-500"
+                          )}
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>0s</span>
+                          <span className={cn(videoDuration > 30 ? "text-red-600 font-bold" : "text-green-600 font-bold")}>
+                            {videoDuration > 30 ? "Muito longo!" : "Duração OK"}
+                          </span>
+                          <span>30s</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex gap-2">
+                      <input 
+                        ref={viralClipCameraInputRef} 
+                        type="file" 
+                        accept="video/*" 
+                        capture="environment" 
+                        className="hidden" 
+                        onChange={(e) => onViralClipPicked(e.target.files)}
+                      />
+                      <input 
+                        ref={viralClipGalleryInputRef} 
+                        type="file" 
+                        accept="video/*" 
+                        className="hidden" 
+                        onChange={(e) => onViralClipPicked(e.target.files)}
+                      />
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={() => viralClipCameraInputRef.current?.click()}
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                      >
+                        <Camera className="mr-2 h-4 w-4" />
+                        Câmera
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={() => viralClipGalleryInputRef.current?.click()}
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                      >
+                        <Images className="mr-2 h-4 w-4" />
+                        Galeria
+                      </Button>
+                    </div>
                   </div>
                 )}
 
@@ -718,11 +951,12 @@ export default function Arena() {
                     <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
                     <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()}><Images className="h-5 w-5 text-muted-foreground"/></Button>
                     <Button variant="ghost" size="icon" onClick={()=>cameraPhotoInputRef.current?.click()}><Camera className="h-5 w-5 text-muted-foreground"/></Button>
-                    {/* Botão IA dedicado (Abre Galeria) */}
                     <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()} className="text-purple-600 bg-purple-50 hover:bg-purple-100"><Sparkles className="h-5 w-5"/></Button>
                     {postType==='standard'&&<Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}><Video className="h-5 w-5 text-muted-foreground"/></Button>}
                   </div>
-                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">{uploading?"...":"Publicar"}</Button>
+                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">
+                    {uploading ? "..." : "Publicar na Arena"}
+                  </Button>
                 </div>
               </div>
             </div>
@@ -751,8 +985,13 @@ export default function Arena() {
                       <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-sm hover:underline">{post.profiles?.username}</UserLink>
                       <div className="flex items-center gap-2">
                          <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
-                         {/* Indicador de Status */}
                          {isVoting ? <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">Em Votação</Badge> : <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">Aprovado</Badge>}
+                         {post.post_type === 'viral_clips' && (
+                           <Badge variant="outline" className="text-[10px] h-4 bg-purple-100 text-purple-700 border-purple-300">
+                             <Flame className="h-3 w-3 mr-1" />
+                             ViralClip
+                           </Badge>
+                         )}
                       </div>
                     </div>
                   </div>
@@ -775,6 +1014,28 @@ export default function Arena() {
                       const url = stripPrefix(u);
                       if (isVideoUrl(u)) {
                         const vidId = `${post.id}-${i}`;
+                        const isViralClip = post.post_type === 'viral_clips';
+                        
+                        if (isViralClip) {
+                          return (
+                            <div key={i} className="relative bg-black aspect-video">
+                              <ViralVideoPlayer
+                                src={url}
+                                isPlaying={playingVideoId === vidId}
+                                onPlayPause={() => handleVideoPlayPause(vidId)}
+                                onToggleMute={() => setVideoMuted(!videoMuted)}
+                                isMuted={videoMuted}
+                              />
+                              <div className="absolute bottom-2 right-2">
+                                <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0">
+                                  <Flame className="h-3 w-3 mr-1" />
+                                  ViralClip
+                                </Badge>
+                              </div>
+                            </div>
+                          );
+                        }
+                        
                         return (
                           <div key={i} className="relative bg-black aspect-square">
                             <video ref={el=>{if(el)registerVideo(vidId, el); else unregisterVideo(vidId);}} data-video-id={vidId} src={url} className="w-full h-full object-cover" loop muted={muted} playsInline preload="metadata" onClick={()=>playingVideo===vidId?pauseVideo(vidId):playVideo(vidId)}/>
@@ -792,7 +1053,11 @@ export default function Arena() {
                   <div className="bg-orange-50/50 p-4 border-t border-orange-100">
                      <div className="flex items-center justify-between mb-2">
                        <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">Votação da Comunidade</span>
-                       <VotingCountdown endsAt={post.voting_ends_at} onExpire={() => refetch()} />
+                       <VotingCountdown 
+                         endsAt={post.voting_ends_at} 
+                         onExpire={() => refetch()} 
+                         variant={post.post_type === 'viral_clips' ? 'viral' : 'default'}
+                       />
                      </div>
                      
                      {/* Barra de Progresso da Votação */}

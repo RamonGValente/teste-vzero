@@ -32,7 +32,7 @@ import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 
-/* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
+/* ---------- COMPONENTE: Timer de Votação ---------- */
 const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" | "viral" }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
@@ -75,7 +75,7 @@ const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: st
   );
 };
 
-/* ---------- COMPONENTE: Imagem Progressiva (Lazy + Blur-up) ---------- */
+/* ---------- COMPONENTE: Imagem Progressiva ---------- */
 const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: string, className?: string, onClick?: () => void }) => {
   const [isLoaded, setIsLoaded] = useState(false);
   
@@ -104,302 +104,6 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
   );
 };
 
-/* ---------- COMPONENTE: ViralClips Player ---------- */
-interface ViralClipsPlayerProps {
-  post: any;
-  user: any;
-  isActive: boolean;
-  onLike: (postId: string) => void;
-  onComment: (post: any) => void;
-}
-
-const ViralClipsPlayer = ({ 
-  post, 
-  user, 
-  isActive, 
-  onLike, 
-  onComment
-}: ViralClipsPlayerProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [showControls, setShowControls] = useState(false);
-  const [error, setError] = useState(false);
-  const [currentTime, setCurrentTime] = useState(0);
-  const [duration, setDuration] = useState(0);
-  const { toast } = useToast();
-  
-  const isVideo = post?.media_urls?.[0]?.startsWith("video::");
-  const videoUrl = post?.media_urls?.[0]?.replace(/^video::/, "");
-  const isLiked = post?.likes?.some((like: any) => like.user_id === user?.id);
-  
-  useEffect(() => {
-    if (!videoRef.current || !isVideo) return;
-    
-    const video = videoRef.current;
-    
-    const handleLoadedMetadata = () => {
-      setDuration(video.duration);
-      if (isActive) {
-        video.muted = isMuted;
-        video.play().then(() => setIsPlaying(true)).catch(() => {
-          setError(true);
-          toast({
-            variant: "destructive",
-            title: "Erro de reprodução",
-            description: "Não foi possível reproduzir o vídeo",
-          });
-        });
-      }
-    };
-    
-    const handleTimeUpdate = () => {
-      setCurrentTime(video.currentTime);
-    };
-    
-    const handleError = () => {
-      setError(true);
-      toast({
-        variant: "destructive",
-        title: "Erro no vídeo",
-        description: "O vídeo não pôde ser carregado",
-      });
-    };
-    
-    video.addEventListener('loadedmetadata', handleLoadedMetadata);
-    video.addEventListener('timeupdate', handleTimeUpdate);
-    video.addEventListener('error', handleError);
-    
-    if (isActive && isPlaying) {
-      video.play().catch(err => {
-        console.error("Erro ao reproduzir vídeo:", err);
-        setError(true);
-      });
-    } else {
-      video.pause();
-    }
-    
-    return () => {
-      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
-      video.removeEventListener('timeupdate', handleTimeUpdate);
-      video.removeEventListener('error', handleError);
-      video.pause();
-    };
-  }, [isActive, isPlaying, isVideo, isMuted, toast]);
-  
-  const togglePlayPause = () => {
-    if (!videoRef.current) return;
-    
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(err => {
-          console.error("Erro ao reproduzir:", err);
-          setError(true);
-        });
-    }
-  };
-  
-  const toggleMute = () => {
-    if (!videoRef.current) return;
-    setIsMuted(!isMuted);
-    videoRef.current.muted = !isMuted;
-  };
-  
-  const handleLike = () => {
-    onLike(post.id);
-  };
-  
-  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
-  
-  return (
-    <div 
-      className="relative w-[300px] h-[530px] bg-gradient-to-br from-gray-900 to-black rounded-2xl overflow-hidden flex-shrink-0 border-2 border-transparent hover:border-purple-500 transition-all duration-300"
-      onMouseEnter={() => setShowControls(true)}
-      onMouseLeave={() => setShowControls(false)}
-    >
-      {/* Badge ViralClips */}
-      <div className="absolute top-3 left-3 z-10">
-        <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 font-bold">
-          <Flame className="h-3 w-3 mr-1" />
-          ViralClip
-        </Badge>
-      </div>
-      
-      {/* Vídeo */}
-      {isVideo ? (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          className="w-full h-full object-cover"
-          loop
-          muted={isMuted}
-          playsInline
-          preload="metadata"
-          onClick={togglePlayPause}
-        />
-      ) : (
-        <div className="relative w-full h-full">
-          <img
-            src={videoUrl}
-            alt="ViralClip"
-            className="w-full h-full object-cover"
-            onClick={togglePlayPause}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-        </div>
-      )}
-      
-      {/* Erro overlay */}
-      {error && (
-        <div className="absolute inset-0 bg-red-900/80 flex items-center justify-center">
-          <div className="text-center p-6 bg-black/70 rounded-xl">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">Erro na reprodução</h3>
-            <p className="text-white/70 text-sm">Este conteúdo não pôde ser carregado</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Barra de progresso */}
-      <div className="absolute top-0 left-0 right-0 h-1 bg-gray-800">
-        <div 
-          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-100"
-          style={{ width: `${progress}%` }}
-        />
-      </div>
-      
-      {/* Controles */}
-      <div className={cn(
-        "absolute inset-0 transition-opacity duration-300",
-        showControls ? "opacity-100" : "opacity-0"
-      )}>
-        {/* Controle central de play/pause */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-16 w-16 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all transform",
-              !showControls && "scale-0"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlayPause();
-            }}
-          >
-            {isPlaying ? (
-              <Pause className="h-8 w-8" />
-            ) : (
-              <Play className="h-8 w-8 ml-1" />
-            )}
-          </Button>
-        </div>
-        
-        {/* Controles laterais (direita) */}
-        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-4">
-          <div className="flex flex-col items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70",
-                isLiked && "text-red-500"
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLike();
-              }}
-            >
-              <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
-            </Button>
-            <span className="text-white text-xs font-semibold mt-1">
-              {post.likes?.length || 0}
-            </span>
-          </div>
-          
-          <div className="flex flex-col items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70"
-              onClick={(e) => {
-                e.stopPropagation();
-                onComment(post);
-              }}
-            >
-              <MessageCircle className="h-6 w-6" />
-            </Button>
-            <span className="text-white text-xs font-semibold mt-1">
-              {post.comments?.length || 0}
-            </span>
-          </div>
-          
-          {/* Botão de som */}
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/70"
-            onClick={(e) => {
-              e.stopPropagation();
-              toggleMute();
-            }}
-          >
-            {isMuted ? (
-              <VolumeX className="h-5 w-5" />
-            ) : (
-              <Volume2 className="h-5 w-5" />
-            )}
-          </Button>
-        </div>
-        
-        {/* Controles inferiores */}
-        <div className="absolute bottom-3 left-3 right-3">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-9 w-9 border-2 border-purple-500">
-              <AvatarImage src={post.profiles?.avatar_url} />
-              <AvatarFallback className="bg-gradient-to-r from-purple-600 to-pink-600">
-                {post.profiles?.username?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <UserLink 
-                userId={post.user_id} 
-                username={post.profiles?.username || ''}
-                className="font-bold text-white text-sm hover:text-white/80"
-              >
-                {post.profiles?.username}
-              </UserLink>
-              <p className="text-white/70 text-xs truncate">
-                {post.content || "ViralClip em alta!"}
-              </p>
-            </div>
-          </div>
-        </div>
-      </div>
-      
-      {/* Indicador de mute quando controles estão ocultos */}
-      {!showControls && isMuted && (
-        <div className="absolute top-3 right-3">
-          <VolumeX className="h-4 w-4 text-white/70" />
-        </div>
-      )}
-      
-      {/* Indicador de tempo */}
-      {!showControls && duration > 0 && (
-        <div className="absolute bottom-3 right-3">
-          <Badge variant="outline" className="bg-black/50 text-white border-white/30 text-xs">
-            {Math.floor(currentTime)}s / {Math.floor(duration)}s
-          </Badge>
-        </div>
-      )}
-    </div>
-  );
-};
-
 /* ---------- COMPONENTE: Carrossel de ViralClips ---------- */
 interface ViralClipsCarouselProps {
   posts: any[];
@@ -416,35 +120,48 @@ const ViralClipsCarousel = ({
 }: ViralClipsCarouselProps) => {
   const carouselRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const { toast } = useToast();
-  
+  const [playingVideoId, setPlayingVideoId] = useState<string | null>(null);
+  const [videoMuted, setVideoMuted] = useState(true);
+
   const scrollToIndex = (index: number) => {
     if (carouselRef.current) {
-      const itemWidth = 300 + 16; // width + gap
+      const itemWidth = 300 + 16;
       carouselRef.current.scrollTo({
         left: index * itemWidth,
         behavior: 'smooth'
       });
       setCurrentIndex(index);
+      setPlayingVideoId(null);
     }
   };
-  
+
   const next = () => {
     if (currentIndex < posts.length - 1) {
       scrollToIndex(currentIndex + 1);
     }
   };
-  
+
   const prev = () => {
     if (currentIndex > 0) {
       scrollToIndex(currentIndex - 1);
     }
   };
-  
+
+  const handleVideoPlayPause = (postId: string) => {
+    if (playingVideoId === postId) {
+      setPlayingVideoId(null);
+    } else {
+      setPlayingVideoId(postId);
+    }
+  };
+
   if (posts.length === 0) return null;
-  
+
+  const currentPost = posts[currentIndex];
+  const videoUrl = currentPost?.media_urls?.[0] ? currentPost.media_urls[0].replace(/^video::/, "") : null;
+
   return (
-    <Card className="border-0 shadow-2xl bg-gradient-to-br from-gray-900 via-purple-900/20 to-black overflow-hidden">
+    <Card className="border-0 shadow-2xl bg-gradient-to-br from-gray-900 via-purple-900/20 to-black overflow-hidden mb-6">
       <CardContent className="p-4">
         {/* Header do carrossel */}
         <div className="flex items-center justify-between mb-4">
@@ -461,7 +178,7 @@ const ViralClipsCarousel = ({
                 </Badge>
               </h3>
               <p className="text-sm text-white/70">
-                Vídeos curtos de até 30s que podem viralizar!
+                Vídeos curtos de até 30s que viralizaram!
               </p>
             </div>
           </div>
@@ -491,366 +208,194 @@ const ViralClipsCarousel = ({
           </div>
         </div>
         
-        {/* Carrossel horizontal */}
-        <div className="relative">
-          <div 
-            ref={carouselRef}
-            className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide scroll-smooth"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {posts.map((post, index) => (
-              <ViralClipsPlayer
-                key={post.id}
-                post={post}
-                user={user}
-                isActive={index === currentIndex}
-                onLike={handleLike}
-                onComment={onComment}
+        {/* Player de ViralClip */}
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-[9/16]">
+          {videoUrl ? (
+            <>
+              <video
+                src={videoUrl}
+                className="w-full h-full object-cover"
+                loop
+                muted={videoMuted}
+                playsInline
+                autoPlay={playingVideoId === currentPost.id}
               />
-            ))}
-          </div>
-          
-          {/* Indicadores */}
-          <div className="flex justify-center gap-2 mt-4">
-            {posts.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => scrollToIndex(index)}
-                className={cn(
-                  "h-2 rounded-full transition-all",
-                  index === currentIndex ? "bg-gradient-to-r from-purple-500 to-pink-500 w-8" : "bg-white/30 w-2 hover:bg-white/50"
-                )}
-              />
-            ))}
-          </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+              
+              {/* Controles */}
+              <div className="absolute bottom-4 left-4 right-4 z-20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-white">
+                    <Avatar className="h-8 w-8 ring-2 ring-white/50">
+                      <AvatarImage src={currentPost.profiles?.avatar_url}/>
+                      <AvatarFallback className="bg-gradient-to-r from-purple-600 to-pink-600">
+                        {currentPost.profiles?.username?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <UserLink 
+                        userId={currentPost.user_id} 
+                        username={currentPost.profiles?.username || ''}
+                        className="font-bold text-white text-sm hover:text-white/80"
+                      >
+                        {currentPost.profiles?.username}
+                      </UserLink>
+                      <p className="text-white/70 text-xs">
+                        {currentPost.content || "ViralClip em alta!"}
+                      </p>
+                    </div>
+                  </div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+                    onClick={() => setVideoMuted(!videoMuted)}
+                  >
+                    {videoMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+                  </Button>
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className={cn(
+                      "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
+                      currentPost.likes?.some((l:any) => l.user_id === user?.id) && "bg-red-500/50 hover:bg-red-500/60"
+                    )}
+                    onClick={() => handleLike(currentPost.id)}
+                  >
+                    <Heart className={cn("h-4 w-4 mr-2", currentPost.likes?.some((l:any) => l.user_id === user?.id) && "fill-current")} />
+                    {currentPost.likes?.length || 0}
+                  </Button>
+                  
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm"
+                    onClick={() => onComment(currentPost)}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    {currentPost.comments?.length || 0}
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm"
+                    onClick={() => handleVideoPlayPause(currentPost.id)}
+                  >
+                    {playingVideoId === currentPost.id ? (
+                      <Pause className="h-4 w-4" />
+                    ) : (
+                      <Play className="h-4 w-4 ml-0.5" />
+                    )}
+                  </Button>
+                </div>
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-pink-900">
+              <Flame className="h-16 w-16 text-white/50" />
+            </div>
+          )}
         </div>
         
-        {/* Estatísticas */}
-        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
-          <div className="bg-white/5 rounded-lg p-2">
-            <div className="text-white font-bold">{posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0)}</div>
-            <div className="text-white/70 text-xs">Curtidas</div>
-          </div>
-          <div className="bg-white/5 rounded-lg p-2">
-            <div className="text-white font-bold">{posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0)}</div>
-            <div className="text-white/70 text-xs">Comentários</div>
-          </div>
-          <div className="bg-white/5 rounded-lg p-2">
-            <div className="text-white font-bold">{posts.length}</div>
-            <div className="text-white/70 text-xs">Clips</div>
-          </div>
+        {/* Indicadores */}
+        <div className="flex justify-center gap-2 mt-4">
+          {posts.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => scrollToIndex(index)}
+              className={cn(
+                "h-2 rounded-full transition-all",
+                index === currentIndex ? "bg-gradient-to-r from-purple-500 to-pink-500 w-8" : "bg-white/30 w-2 hover:bg-white/50"
+              )}
+            />
+          ))}
         </div>
       </CardContent>
     </Card>
   );
 };
 
-/* ---------- COMPONENTE: Horizontal Shorts Player (Mantido) ---------- */
-interface HorizontalShortsPlayerProps {
-  post: any;
-  user: any;
-  isActive: boolean;
-  onLike: (postId: string) => void;
-  onComment: (post: any) => void;
-}
-
-const HorizontalShortsPlayer = ({ 
-  post, 
-  user, 
-  isActive, 
-  onLike, 
-  onComment
-}: HorizontalShortsPlayerProps) => {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isMuted, setIsMuted] = useState(true);
-  const [showControls, setShowControls] = useState(false);
-  const [error, setError] = useState(false);
-  const { toast } = useToast();
-  
-  const isVideo = post?.media_urls?.[0]?.startsWith("video::");
-  const videoUrl = post?.media_urls?.[0]?.replace(/^video::/, "");
-  const imageUrl = post?.media_urls?.[0]?.replace(/^image::/, "");
-  const audioUrl = post?.audio_url?.replace(/^audio::/, "");
-  const isLiked = post?.likes?.some((like: any) => like.user_id === user?.id);
-  
-  useEffect(() => {
-    if (!videoRef.current || !isVideo) return;
-    
-    if (isActive && isPlaying) {
-      videoRef.current.play().catch(err => {
-        console.error("Erro ao reproduzir vídeo:", err);
-        setError(true);
-      });
-    } else {
-      videoRef.current.pause();
-    }
-  }, [isActive, isPlaying, isVideo]);
-  
-  const togglePlayPause = () => {
-    if (!videoRef.current) return;
-    
-    if (isPlaying) {
-      videoRef.current.pause();
-      setIsPlaying(false);
-    } else {
-      videoRef.current.play()
-        .then(() => setIsPlaying(true))
-        .catch(err => {
-          console.error("Erro ao reproduzir:", err);
-          setError(true);
-        });
-    }
-  };
-  
-  const toggleMute = () => {
-    if (!videoRef.current) return;
-    setIsMuted(!isMuted);
-    videoRef.current.muted = !isMuted;
-  };
-  
-  const handleLike = () => {
-    onLike(post.id);
-  };
-  
-  return (
-    <div 
-      className="relative w-[280px] h-[500px] bg-black rounded-2xl overflow-hidden flex-shrink-0"
-      onMouseEnter={() => setShowControls(true)}
-      onMouseLeave={() => setShowControls(false)}
-    >
-      {/* Vídeo ou Imagem */}
-      {isVideo ? (
-        <video
-          ref={videoRef}
-          src={videoUrl}
-          className="w-full h-full object-cover"
-          loop
-          muted={isMuted}
-          playsInline
-          preload="metadata"
-          onClick={togglePlayPause}
-        />
-      ) : (
-        <div className="relative w-full h-full">
-          <img
-            src={imageUrl}
-            alt="Post"
-            className="w-full h-full object-cover"
-            onClick={togglePlayPause}
-          />
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
-        </div>
-      )}
-      
-      {/* Áudio player (para posts com áudio) */}
-      {audioUrl && !isVideo && (
-        <audio
-          ref={videoRef as any}
-          src={audioUrl}
-          loop
-          muted={isMuted}
-          className="hidden"
-        />
-      )}
-      
-      {/* Erro overlay */}
-      {error && (
-        <div className="absolute inset-0 bg-red-900/80 flex items-center justify-center">
-          <div className="text-center p-6 bg-black/70 rounded-xl">
-            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
-            <h3 className="text-lg font-bold text-white mb-2">Erro na reprodução</h3>
-            <p className="text-white/70 text-sm">Este conteúdo não pôde ser carregado</p>
-          </div>
-        </div>
-      )}
-      
-      {/* Controles */}
-      <div className={cn(
-        "absolute inset-0 transition-opacity duration-300",
-        showControls ? "opacity-100" : "opacity-0"
-      )}>
-        {/* Controle central de play/pause */}
-        <div className="absolute inset-0 flex items-center justify-center">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-16 w-16 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all transform",
-              !showControls && "scale-0"
-            )}
-            onClick={(e) => {
-              e.stopPropagation();
-              togglePlayPause();
-            }}
-          >
-            {isPlaying ? (
-              <Pause className="h-8 w-8" />
-            ) : (
-              <Play className="h-8 w-8 ml-1" />
-            )}
-          </Button>
-        </div>
-        
-        {/* Controles laterais (direita) */}
-        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-4">
-          <div className="flex flex-col items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className={cn(
-                "h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70",
-                isLiked && "text-red-500"
-              )}
-              onClick={(e) => {
-                e.stopPropagation();
-                handleLike();
-              }}
-            >
-              <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
-            </Button>
-            <span className="text-white text-xs font-semibold mt-1">
-              {post.likes?.length || 0}
-            </span>
-          </div>
-          
-          <div className="flex flex-col items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70"
-              onClick={(e) => {
-                e.stopPropagation();
-                onComment(post);
-              }}
-            >
-              <MessageCircle className="h-6 w-6" />
-            </Button>
-            <span className="text-white text-xs font-semibold mt-1">
-              {post.comments?.length || 0}
-            </span>
-          </div>
-        </div>
-        
-        {/* Controles inferiores */}
-        <div className="absolute bottom-3 left-3 right-3">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-8 w-8 border-2 border-white">
-              <AvatarImage src={post.profiles?.avatar_url} />
-              <AvatarFallback className="bg-primary">
-                {post.profiles?.username?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex-1">
-              <UserLink 
-                userId={post.user_id} 
-                username={post.profiles?.username || ''}
-                className="font-bold text-white text-sm hover:text-white/80"
-              >
-                {post.profiles?.username}
-              </UserLink>
-            </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
-              onClick={(e) => {
-                e.stopPropagation();
-                toggleMute();
-              }}
-            >
-              {isMuted ? (
-                <VolumeX className="h-4 w-4" />
-              ) : (
-                <Volume2 className="h-4 w-4" />
-              )}
-            </Button>
-          </div>
-        </div>
-      </div>
-      
-      {/* Indicador de mute quando controles estão ocultos */}
-      {!showControls && isMuted && (
-        <div className="absolute top-3 right-3">
-          <VolumeX className="h-4 w-4 text-white/70" />
-        </div>
-      )}
-      
-      {/* Indicador de play quando controles estão ocultos */}
-      {!showControls && !isPlaying && (
-        <div className="absolute top-3 left-3">
-          <Play className="h-4 w-4 text-white/70" />
-        </div>
-      )}
-    </div>
-  );
-};
-
-/* ---------- COMPONENTE: Carrossel Horizontal de Shorts ---------- */
-interface HorizontalShortsCarouselProps {
+/* ---------- COMPONENTE: Carrossel de Shorts ---------- */
+interface ShortsCarouselProps {
   posts: any[];
   user: any;
   handleLike: (postId: string) => void;
   onComment: (post: any) => void;
 }
 
-const HorizontalShortsCarousel = ({ 
+const ShortsCarousel = ({ 
   posts, 
   user,
   handleLike,
   onComment
-}: HorizontalShortsCarouselProps) => {
+}: ShortsCarouselProps) => {
   const carouselRef = useRef<HTMLDivElement>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
-  const { toast } = useToast();
-  
+  const [playingAudioId, setPlayingAudioId] = useState<string | null>(null);
+  const audioRefs = useRef<Map<string, HTMLAudioElement>>(new Map());
+
   const scrollToIndex = (index: number) => {
     if (carouselRef.current) {
-      const itemWidth = 280 + 16; // width + gap
+      const itemWidth = 280 + 16;
       carouselRef.current.scrollTo({
         left: index * itemWidth,
         behavior: 'smooth'
       });
       setCurrentIndex(index);
+      stopAllAudio();
     }
   };
-  
+
+  const stopAllAudio = () => {
+    audioRefs.current.forEach(audio => {
+      audio.pause();
+      audio.currentTime = 0;
+    });
+    setPlayingAudioId(null);
+  };
+
+  const handleAudioPlay = (postId: string, audioUrl: string) => {
+    if (playingAudioId === postId) {
+      const audio = audioRefs.current.get(postId);
+      if (audio) {
+        audio.pause();
+        setPlayingAudioId(null);
+      }
+    } else {
+      stopAllAudio();
+      const audio = new Audio(audioUrl.replace(/^audio::/, ""));
+      audioRefs.current.set(postId, audio);
+      audio.play();
+      audio.onended = () => setPlayingAudioId(null);
+      setPlayingAudioId(postId);
+    }
+  };
+
   const next = () => {
     if (currentIndex < posts.length - 1) {
       scrollToIndex(currentIndex + 1);
     }
   };
-  
+
   const prev = () => {
     if (currentIndex > 0) {
       scrollToIndex(currentIndex - 1);
     }
   };
-  
-  const handleShare = async (post: any) => {
-    try {
-      if (navigator.share) {
-        await navigator.share({
-          title: `Confira este post de ${post.profiles?.username}`,
-          text: post.content || 'Confira este conteúdo incrível!',
-          url: window.location.href,
-        });
-      } else {
-        await navigator.clipboard.writeText(window.location.href);
-        toast({
-          title: "Link copiado!",
-          description: "O link foi copiado para a área de transferência",
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao compartilhar:', error);
-    }
-  };
-  
+
   if (posts.length === 0) return null;
-  
+
+  const currentPost = posts[currentIndex];
+  const imageUrl = currentPost?.media_urls?.[0] ? currentPost.media_urls[0].replace(/^image::/, "") : null;
+  const audioUrl = currentPost?.audio_url;
+
   return (
-    <Card className="border-0 shadow-lg bg-gradient-to-br from-gray-900 to-black overflow-hidden">
+    <Card className="border-0 shadow-lg bg-gradient-to-br from-gray-900 to-black overflow-hidden mb-6">
       <CardContent className="p-4">
         {/* Header do carrossel */}
         <div className="flex items-center justify-between mb-4">
@@ -861,7 +406,7 @@ const HorizontalShortsCarousel = ({
             <div>
               <h3 className="text-xl font-bold text-white">Shorts</h3>
               <p className="text-sm text-white/70">
-                Vídeos curtos para você assistir agora
+                Fotos com áudio curtos
               </p>
             </div>
           </div>
@@ -891,45 +436,107 @@ const HorizontalShortsCarousel = ({
           </div>
         </div>
         
-        {/* Carrossel horizontal */}
-        <div className="relative">
-          <div 
-            ref={carouselRef}
-            className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide scroll-smooth"
-            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
-          >
-            {posts.map((post, index) => (
-              <HorizontalShortsPlayer
-                key={post.id}
-                post={post}
-                user={user}
-                isActive={index === currentIndex}
-                onLike={handleLike}
-                onComment={onComment}
+        {/* Player de Short */}
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-[9/16]">
+          {imageUrl && (
+            <>
+              <img
+                src={imageUrl}
+                alt="Shorts"
+                className="w-full h-full object-cover"
               />
-            ))}
-          </div>
-          
-          {/* Indicadores */}
-          <div className="flex justify-center gap-2 mt-4">
-            {posts.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => scrollToIndex(index)}
-                className={cn(
-                  "h-2 rounded-full transition-all",
-                  index === currentIndex ? "bg-white w-8" : "bg-white/30 w-2 hover:bg-white/50"
-                )}
-              />
-            ))}
-          </div>
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+              
+              {/* Controles */}
+              <div className="absolute bottom-4 left-4 right-4 z-20">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-2 text-white">
+                    <Avatar className="h-8 w-8 ring-2 ring-white/50">
+                      <AvatarImage src={currentPost.profiles?.avatar_url}/>
+                      <AvatarFallback className="bg-primary">
+                        {currentPost.profiles?.username?.[0]}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div>
+                      <UserLink 
+                        userId={currentPost.user_id} 
+                        username={currentPost.profiles?.username || ''}
+                        className="font-bold text-white text-sm hover:text-white/80"
+                      >
+                        {currentPost.profiles?.username}
+                      </UserLink>
+                    </div>
+                  </div>
+                  
+                  {audioUrl && (
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className={cn(
+                        "h-12 w-12 rounded-full shadow-xl transition-transform",
+                        playingAudioId === currentPost.id 
+                          ? "bg-white text-primary scale-110" 
+                          : "bg-white/20 backdrop-blur-md text-white"
+                      )}
+                      onClick={() => handleAudioPlay(currentPost.id, audioUrl)}
+                    >
+                      {playingAudioId === currentPost.id ? (
+                        <Volume2 className="h-6 w-6 animate-pulse" />
+                      ) : (
+                        <Play className="h-6 w-6 ml-1" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+                
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className={cn(
+                      "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
+                      currentPost.likes?.some((l:any) => l.user_id === user?.id) && "bg-red-500/50 hover:bg-red-500/60"
+                    )}
+                    onClick={() => handleLike(currentPost.id)}
+                  >
+                    <Heart className={cn("h-4 w-4 mr-2", currentPost.likes?.some((l:any) => l.user_id === user?.id) && "fill-current")} />
+                    {currentPost.likes?.length || 0}
+                  </Button>
+                  
+                  <Button 
+                    variant="ghost" 
+                    size="sm"
+                    className="flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm"
+                    onClick={() => onComment(currentPost)}
+                  >
+                    <MessageCircle className="h-4 w-4 mr-2" />
+                    {currentPost.comments?.length || 0}
+                  </Button>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+        
+        {/* Indicadores */}
+        <div className="flex justify-center gap-2 mt-4">
+          {posts.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => scrollToIndex(index)}
+              className={cn(
+                "h-2 rounded-full transition-all",
+                index === currentIndex ? "bg-white w-8" : "bg-white/30 w-2 hover:bg-white/50"
+              )}
+            />
+          ))}
         </div>
       </CardContent>
     </Card>
   );
 };
 
-/* ---------- Configurações de Estilo IA (Presets Otimizados) ---------- */
+/* ---------- Configurações de Estilo IA ---------- */
 const AI_STYLES = [
   { id: 'rejuvenate', label: 'Rejuvenescer', icon: Baby, color: 'bg-green-100 text-green-600', prompt: 'make them look 20 years younger, remove deep wrinkles, face lift, glowing youthful skin, high fidelity, 8k, soft studio lighting', filter: 'rejuvenate' },
   { id: 'beauty', label: 'Embelezar', icon: Sparkles, color: 'bg-pink-100 text-pink-600', prompt: 'high quality, beautified, perfect lighting, 8k, smooth skin, makeup, glamour', filter: 'beauty' },
@@ -965,51 +572,6 @@ async function getMediaDurationSafe(file: File, timeoutMs = 4000): Promise<numbe
     media.onloadedmetadata = () => { clearTimeout(timer); done(isFinite(media.duration) ? media.duration : 0); };
     media.onerror = () => { clearTimeout(timer); done(0); };
     media.src = url;
-  });
-}
-
-async function compressVideo(file: File, maxSize = 720): Promise<File> {
-  if (!file.type.startsWith("video/")) return file;
-  
-  return new Promise((resolve, reject) => {
-    const video = document.createElement('video');
-    video.preload = 'metadata';
-    
-    video.onloadedmetadata = () => {
-      URL.revokeObjectURL(video.src);
-      
-      const scale = maxSize / Math.max(video.videoWidth, video.videoHeight);
-      const width = Math.floor(video.videoWidth * scale);
-      const height = Math.floor(video.videoHeight * scale);
-      
-      const canvas = document.createElement('canvas');
-      canvas.width = width;
-      canvas.height = height;
-      const ctx = canvas.getContext('2d');
-      
-      video.currentTime = 0.1; // Pega um frame
-      
-      video.onseeked = () => {
-        if (ctx) {
-          ctx.drawImage(video, 0, 0, width, height);
-          canvas.toBlob((blob) => {
-            if (blob) {
-              // Para vídeos, retornamos o arquivo original (compressão real seria mais complexa)
-              resolve(file);
-            } else {
-              resolve(file);
-            }
-          }, 'image/jpeg', 0.8);
-        }
-      };
-    };
-    
-    video.onerror = () => {
-      URL.revokeObjectURL(video.src);
-      resolve(file); // Fallback para arquivo original
-    };
-    
-    video.src = URL.createObjectURL(file);
   });
 }
 
@@ -1183,7 +745,8 @@ export default function Feed() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
-  const viralClipInputRef = useRef<HTMLInputElement>(null);
+  const viralClipCameraInputRef = useRef<HTMLInputElement>(null);
+  const viralClipGalleryInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -1203,7 +766,11 @@ export default function Feed() {
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).eq("is_community_approved", true).order("created_at", { ascending: false });
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`)
+        .eq("is_community_approved", true)
+        .order("created_at", { ascending: false });
       if (error) throw error;
       return data as PostRow[];
     },
@@ -1248,7 +815,6 @@ export default function Feed() {
         } else if (f.type.startsWith("video/")) {
           const dur = await getMediaDurationSafe(f).catch(() => 0);
           
-          // Verifica duração baseada no tipo de post
           if (postType === 'viral_clips') {
             if (dur <= 30.3) {
               accepted.push(f);
@@ -1260,13 +826,7 @@ export default function Feed() {
                 description: "ViralClips devem ter no máximo 30 segundos" 
               });
             }
-          } else if (postType === 'photo_audio') {
-            if (dur <= 15.3) {
-              accepted.push(f);
-            } else {
-              toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
-            }
-          } else if (postType === 'standard') {
+          } else if (postType === 'photo_audio' || postType === 'standard') {
             if (dur <= 15.3) {
               accepted.push(f);
             } else {
@@ -1286,12 +846,48 @@ export default function Feed() {
     if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
   };
   
+  const onViralClipPicked = async (files?: FileList | null) => {
+    const list = Array.from(files || []);
+    if (list.length === 0) return;
+    setProcessing(true);
+    const accepted: File[] = [];
+    
+    for (const f of list) {
+      try {
+        if (f.type.startsWith("video/")) {
+          const dur = await getMediaDurationSafe(f).catch(() => 0);
+          setVideoDuration(dur);
+          if (dur <= 30.3) {
+            accepted.push(f);
+            toast({
+              title: "Vídeo selecionado!",
+              description: `Duração: ${dur.toFixed(1)}s`
+            });
+          } else {
+            toast({ 
+              variant: "destructive", 
+              title: "Vídeo muito longo", 
+              description: "ViralClips devem ter no máximo 30 segundos" 
+            });
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao processar arquivo:", error);
+      }
+    }
+    
+    setProcessing(false);
+    if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
+  };
+  
   const removeFile = (idx: number) => {
     setMediaFiles(prev => prev.filter((_, i) => i !== idx));
-    setVideoDuration(null);
+    if (postType === 'viral_clips') {
+      setVideoDuration(null);
+    }
   };
 
-  /* IA Logic (Com Rejuvenescer Avançado) */
+  /* IA Logic */
   const fileToBase64 = (file: File): Promise<string> => {
     return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result as string); r.onerror = rej; r.readAsDataURL(file); });
   };
@@ -1388,7 +984,6 @@ export default function Feed() {
 
   /* Post Creation */
   const handleCreatePost = async () => {
-    // Validações específicas por tipo
     if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { 
       toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); 
       return; 
@@ -1409,14 +1004,12 @@ export default function Feed() {
       const mediaUrls: string[] = [];
       let audioUrl: string | null = null;
       
-      // Upload de mídias
       for (const file of mediaFiles) {
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
         await supabase.storage.from("media").upload(path, file);
         const { data } = supabase.storage.from("media").getPublicUrl(path);
         
-        // Adiciona prefixo correto baseado no tipo de arquivo
         if (file.type.startsWith("video/")) {
           mediaUrls.push(MEDIA_PREFIX.video + data.publicUrl);
         } else if (file.type.startsWith("image/")) {
@@ -1426,7 +1019,6 @@ export default function Feed() {
         }
       }
       
-      // Upload de áudio se existir (para photo_audio)
       if (audioBlob && postType === 'photo_audio') {
         const path = `${user?.id}/${Date.now()}-audio.wav`;
         await supabase.storage.from("media").upload(path, audioBlob);
@@ -1434,7 +1026,6 @@ export default function Feed() {
         audioUrl = MEDIA_PREFIX.audio + data.publicUrl;
       }
       
-      // Define 60 minutos para votação
       const ends = new Date(); 
       ends.setMinutes(ends.getMinutes() + 60);
 
@@ -1451,13 +1042,11 @@ export default function Feed() {
       
       if (error) throw error;
       
-      // Salva menções se houver conteúdo
       if (content) { 
         const { saveMentions } = await import("@/utils/mentionsHelper"); 
         await saveMentions(post.id, "post", content, user!.id); 
       }
       
-      // Mensagem personalizada por tipo de post
       let successMessage = "Post publicado! 🎉";
       let successDescription = "Seu post foi enviado para a Arena. Boa sorte na votação!";
       
@@ -1474,14 +1063,12 @@ export default function Feed() {
         description: successDescription 
       });
       
-      // Limpa o formulário
       setNewPost(""); 
       setMediaFiles([]); 
       resetRecording();
       setVideoDuration(null);
       refetch();
       
-      // Redireciona para a tela de Arena após 2 segundos
       setTimeout(() => {
         navigate("/arena");
       }, 2000);
@@ -1586,7 +1173,6 @@ export default function Feed() {
                 <AvatarFallback>{user?.email?.[0]}</AvatarFallback>
               </Avatar>
               <div className="flex-1 space-y-3">
-                {/* Texto para Feed padrão */}
                 {postType === 'standard' && (
                   <MentionTextarea 
                     value={newPost} 
@@ -1596,7 +1182,6 @@ export default function Feed() {
                   />
                 )}
                 
-                {/* Área para Shorts */}
                 {postType === 'photo_audio' && (
                   <div className="text-center p-4 border border-dashed rounded-xl bg-muted/20">
                     <p className="text-sm text-muted-foreground mb-2">1. Tire uma foto &nbsp; 2. Grave um áudio (10s)</p>
@@ -1630,7 +1215,6 @@ export default function Feed() {
                   </div>
                 )}
                 
-                {/* Área para ViralClips */}
                 {postType === 'viral_clips' && (
                   <div className="text-center p-4 border-2 border-dashed border-purple-500/50 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
                     <div className="flex items-center justify-center gap-2 mb-3">
@@ -1667,40 +1251,41 @@ export default function Feed() {
                       </div>
                     )}
                     
-                    <input 
-                      ref={viralClipInputRef} 
-                      type="file" 
-                      accept="video/*" 
-                      className="hidden" 
-                      onChange={async (e) => {
-                        const files = e.target.files;
-                        if (files && files[0]) {
-                          const file = files[0];
-                          if (file.type.startsWith("video/")) {
-                            const duration = await getMediaDurationSafe(file);
-                            setVideoDuration(duration);
-                            if (duration <= 30.3) {
-                              setMediaFiles([file]);
-                            } else {
-                              toast({
-                                variant: "destructive",
-                                title: "Vídeo muito longo",
-                                description: "ViralClips devem ter no máximo 30 segundos"
-                              });
-                            }
-                          }
-                        }
-                      }}
-                    />
-                    
-                    <Button 
-                      variant="outline" 
-                      onClick={() => viralClipInputRef.current?.click()}
-                      className="w-full border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
-                    >
-                      <Video className="mr-2 h-4 w-4" />
-                      {mediaFiles.length > 0 ? "Trocar Vídeo" : "Selecionar Vídeo"}
-                    </Button>
+                    <div className="flex gap-2">
+                      <input 
+                        ref={viralClipCameraInputRef} 
+                        type="file" 
+                        accept="video/*" 
+                        capture="environment" 
+                        className="hidden" 
+                        onChange={(e) => onViralClipPicked(e.target.files)}
+                      />
+                      <input 
+                        ref={viralClipGalleryInputRef} 
+                        type="file" 
+                        accept="video/*" 
+                        className="hidden" 
+                        onChange={(e) => onViralClipPicked(e.target.files)}
+                      />
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={() => viralClipCameraInputRef.current?.click()}
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                      >
+                        <Camera className="mr-2 h-4 w-4" />
+                        Câmera
+                      </Button>
+                      
+                      <Button 
+                        variant="outline" 
+                        onClick={() => viralClipGalleryInputRef.current?.click()}
+                        className="flex-1 border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                      >
+                        <Images className="mr-2 h-4 w-4" />
+                        Galeria
+                      </Button>
+                    </div>
                   </div>
                 )}
 
@@ -1770,7 +1355,6 @@ export default function Feed() {
 
                 <div className="flex items-center justify-between">
                   <div className="flex gap-1">
-                    {/* Botão galeria (imagens/vídeos) */}
                     <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
                     <Button 
                       variant="ghost" 
@@ -1781,7 +1365,6 @@ export default function Feed() {
                       <Images className="h-5 w-5 text-muted-foreground"/>
                     </Button>
                     
-                    {/* Botão câmera foto */}
                     <input ref={cameraPhotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
                     <Button 
                       variant="ghost" 
@@ -1792,7 +1375,6 @@ export default function Feed() {
                       <Camera className="h-5 w-5 text-muted-foreground"/>
                     </Button>
                     
-                    {/* Botão IA dedicado */}
                     <Button 
                       variant="ghost" 
                       size="icon" 
@@ -1803,7 +1385,6 @@ export default function Feed() {
                       <Sparkles className="h-5 w-5"/>
                     </Button>
                     
-                    {/* Botão câmera vídeo (apenas para feed padrão) */}
                     {postType === 'standard' && (
                       <>
                         <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
@@ -1846,18 +1427,24 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Lista de posts com carrosseis estratégicos */}
+        {/* Exibir ViralClips aprovados no topo */}
+        {viralClips.length > 0 && (
+          <ViralClipsCarousel
+            posts={viralClips}
+            user={user}
+            handleLike={handleLike}
+            onComment={setOpeningCommentsFor}
+          />
+        )}
+
+        {/* Exibir postagens normais */}
         {standardPosts?.map((post, index) => {
-          const isVoting = post.voting_period_active;
-          const heartCount = post.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
-          const bombCount = post.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
-          const totalVotes = heartCount + bombCount;
-          const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+          const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
           return (
             <div key={post.id}>
               {/* Post normal */}
-              <Card className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
+              <Card className="border-0 shadow-md overflow-hidden transition-all hover:shadow-lg mb-6">
                 <CardContent className="p-0">
                   {/* Cabeçalho do Post */}
                   <div className="p-4 flex items-center justify-between">
@@ -1872,16 +1459,9 @@ export default function Feed() {
                         </UserLink>
                         <div className="flex items-center gap-2">
                            <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
-                           {/* Indicador de Status */}
-                           {isVoting ? (
-                             <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">
-                               Em Votação
-                             </Badge>
-                           ) : (
-                             <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">
-                               Aprovado
-                             </Badge>
-                           )}
+                           <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">
+                             Aprovado
+                           </Badge>
                         </div>
                       </div>
                     </div>
@@ -1953,100 +1533,45 @@ export default function Feed() {
                     </div>
                   )}
 
-                  {/* ÁREA DE AÇÃO - LÓGICA CONDICIONAL */}
-                  {isVoting ? (
-                    <div className="bg-orange-50/50 p-4 border-t border-orange-100">
-                       <div className="flex items-center justify-between mb-2">
-                         <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">
-                           Votação da Comunidade
-                         </span>
-                         <VotingCountdown endsAt={post.voting_ends_at} onExpire={() => refetch()} />
-                       </div>
-                       
-                       {/* Barra de Progresso da Votação */}
-                       <div className="flex items-center gap-2 mb-3">
-                          <Bomb className="h-4 w-4 text-red-500" />
-                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden flex">
-                             <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500" />
-                             <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
-                          </div>
-                          <Heart className="h-4 w-4 text-green-500 fill-green-500" />
-                       </div>
-
-                       <div className="flex gap-2">
-                          <Button className={cn(
-                            "flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700", 
-                            post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-100 ring-1 ring-red-400"
-                          )} onClick={()=>handleVote(post.id, "bomb")}>
-                            <Bomb className="mr-2 h-4 w-4"/> Rejeitar ({bombCount})
-                          </Button>
-                          <Button className={cn(
-                            "flex-1 bg-white border border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700", 
-                            post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-100 ring-1 ring-green-400"
-                          )} onClick={()=>handleVote(post.id, "heart")}>
-                            <Heart className="mr-2 h-4 w-4 fill-current"/> Aprovar ({heartCount})
-                          </Button>
-                       </div>
-                    </div>
-                  ) : (
-                    // MODO FEED NORMAL (APÓS APROVAÇÃO)
-                    <div className="p-3 flex items-center gap-2 border-t">
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={()=>handleLike(post.id)} 
-                        className={cn(
-                          "rounded-full transition-colors", 
-                          post.likes?.some((l:any)=>l.user_id===user?.id) && "text-red-500 bg-red-50"
-                        )}
-                      >
-                        <Heart className={cn(
-                          "h-5 w-5 mr-1", 
-                          post.likes?.some((l:any)=>l.user_id===user?.id)&&"fill-current"
-                        )}/> 
-                        {post.likes?.length||0}
+                  <div className="p-3 flex items-center gap-2 border-t">
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={()=>handleLike(post.id)} 
+                      className={cn(
+                        "rounded-full transition-colors", 
+                        isLiked && "text-red-500 bg-red-50"
+                      )}
+                    >
+                      <Heart className={cn("h-5 w-5 mr-1", isLiked && "fill-current")}/> 
+                      {post.likes?.length||0}
+                    </Button>
+                    <Button 
+                      variant="ghost" 
+                      size="sm" 
+                      onClick={()=>setOpeningCommentsFor(post)} 
+                      className="rounded-full"
+                    >
+                      <MessageCircle className="h-5 w-5 mr-1"/> 
+                      {post.comments?.length||0}
+                    </Button>
+                    <div className="ml-auto">
+                      <Button variant="ghost" size="icon" className="rounded-full">
+                        <Bookmark className="h-5 w-5"/>
                       </Button>
-                      <Button 
-                        variant="ghost" 
-                        size="sm" 
-                        onClick={()=>setOpeningCommentsFor(post)} 
-                        className="rounded-full"
-                      >
-                        <MessageCircle className="h-5 w-5 mr-1"/> 
-                        {post.comments?.length||0}
-                      </Button>
-                      <div className="ml-auto">
-                        <Button variant="ghost" size="icon" className="rounded-full">
-                          <Bookmark className="h-5 w-5"/>
-                        </Button>
-                      </div>
                     </div>
-                  )}
+                  </div>
                 </CardContent>
               </Card>
 
-              {/* Exibe Shorts após a 2ª postagem */}
-              {index === 1 && flashPosts.length > 0 && (
-                <div className="my-6">
-                  <HorizontalShortsCarousel
-                    posts={flashPosts}
-                    user={user}
-                    handleLike={handleLike}
-                    onComment={setOpeningCommentsFor}
-                  />
-                </div>
-              )}
-              
-              {/* Exibe ViralClips após a 4ª postagem */}
-              {index === 3 && viralClips.length > 0 && (
-                <div className="my-6">
-                  <ViralClipsCarousel
-                    posts={viralClips}
-                    user={user}
-                    handleLike={handleLike}
-                    onComment={setOpeningCommentsFor}
-                  />
-                </div>
+              {/* Exibir Shorts após a 3ª postagem normal */}
+              {index === 2 && flashPosts.length > 0 && (
+                <ShortsCarousel
+                  posts={flashPosts}
+                  user={user}
+                  handleLike={handleLike}
+                  onComment={setOpeningCommentsFor}
+                />
               )}
             </div>
           );
