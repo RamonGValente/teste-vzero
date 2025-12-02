@@ -11,6 +11,15 @@ import {
   Check,
   Heart,
   Bomb,
+  MessageCircle,
+  Bookmark,
+  MoreVertical,
+  Play,
+  Pause,
+  Volume2,
+  VolumeX,
+  Video,
+  Image,
 } from "lucide-react";
 import { useParams, useNavigate } from "react-router-dom";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
@@ -24,12 +33,250 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { MovementStatusToggle } from "@/components/movement/MovementStatusToggle";
+import { Badge } from "@/components/ui/badge";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { cn } from "@/lib/utils";
 
 type MiniProfile = {
   id: string;
   username: string;
   full_name: string | null;
   avatar_url: string | null;
+};
+
+// Helper functions
+const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
+const isVideoUrl = (u: string) => u.startsWith(MEDIA_PREFIX.video) || /\.(mp4|webm|ogg|mov|m4v)$/i.test(u.split("::").pop() || u);
+const stripPrefix = (u: string) => u.replace(/^image::|^video::|^audio::/, "");
+const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
+
+// Componente para exibir vídeos com controles
+const VideoPlayer = ({ src, className, onClick }: { src: string; className?: string; onClick?: () => void }) => {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [muted, setMuted] = useState(true);
+  const videoRef = useRef<HTMLVideoElement>(null);
+
+  const togglePlay = () => {
+    if (videoRef.current) {
+      if (isPlaying) {
+        videoRef.current.pause();
+      } else {
+        videoRef.current.play();
+      }
+      setIsPlaying(!isPlaying);
+    }
+    onClick?.();
+  };
+
+  const toggleMute = () => {
+    if (videoRef.current) {
+      videoRef.current.muted = !muted;
+      setMuted(!muted);
+    }
+  };
+
+  return (
+    <div className={cn("relative bg-black aspect-square group", className)}>
+      <video
+        ref={videoRef}
+        src={src}
+        className="w-full h-full object-cover"
+        loop
+        muted={muted}
+        playsInline
+        preload="metadata"
+        onEnded={() => setIsPlaying(false)}
+      />
+      <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity">
+        <div className="absolute bottom-2 left-2 flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+            onClick={togglePlay}
+          >
+            {isPlaying ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+            onClick={toggleMute}
+          >
+            {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          </Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+// Componente para exibir posts
+const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerIsVideo, setViewerIsVideo] = useState(false);
+
+  const isLiked = post.likes?.some((like: any) => like.user_id === user?.id);
+  const isVoting = post.voting_period_active;
+  const heartCount = post.post_votes?.filter((v: any) => v.vote_type === 'heart').length || 0;
+  const bombCount = post.post_votes?.filter((v: any) => v.vote_type === 'bomb').length || 0;
+  const totalVotes = heartCount + bombCount;
+  const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+
+  const handleMediaClick = (url: string) => {
+    const cleanUrl = stripPrefix(url);
+    if (isVideoUrl(url)) {
+      setViewerIsVideo(true);
+      setViewerUrl(cleanUrl);
+    } else {
+      setViewerIsVideo(false);
+      setViewerUrl(cleanUrl);
+    }
+    setViewerOpen(true);
+  };
+
+  return (
+    <>
+      <Card key={post.id} className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
+        <CardContent className="p-0">
+          {/* Cabeçalho do Post */}
+          <div className="p-4 flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Avatar>
+                <AvatarImage src={post.profiles?.avatar_url} />
+                <AvatarFallback>{post.profiles?.username?.[0]}</AvatarFallback>
+              </Avatar>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-bold text-sm hover:underline">{post.profiles?.username}</span>
+                  {isVoting && (
+                    <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700">
+                      Em Votação
+                    </Badge>
+                  )}
+                </div>
+                <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
+              </div>
+            </div>
+            {post.user_id === user?.id && (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="ghost" size="icon">
+                    <MoreVertical className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => onEdit(post)}>
+                    <Settings className="mr-2 h-4 w-4" /> Editar
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => onDelete(post.id)} className="text-red-600">
+                    <MoreVertical className="mr-2 h-4 w-4" /> Excluir
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            )}
+          </div>
+
+          {/* Conteúdo do Post */}
+          {post.content && (
+            <div className="px-4 pb-3 text-sm">
+              {post.content}
+            </div>
+          )}
+
+          {/* Mídias do Post */}
+          {post.media_urls?.length > 0 && (
+            <div className={cn("grid gap-0.5", post.media_urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+              {post.media_urls.map((u: string, i: number) => {
+                const url = stripPrefix(u);
+                if (isVideoUrl(u)) {
+                  return (
+                    <VideoPlayer
+                      key={i}
+                      src={url}
+                      className="aspect-square cursor-pointer"
+                      onClick={() => handleMediaClick(u)}
+                    />
+                  );
+                }
+                return (
+                  <div
+                    key={i}
+                    className="relative aspect-square overflow-hidden bg-muted cursor-pointer group"
+                    onClick={() => handleMediaClick(u)}
+                  >
+                    <img
+                      src={url}
+                      alt="Post media"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Área de Interações */}
+          <div className="p-3 flex items-center gap-2 border-t">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => onLike(post.id)}
+              className={cn(
+                "rounded-full transition-colors",
+                isLiked && "text-red-500 bg-red-50"
+              )}
+            >
+              <Heart className={cn("h-5 w-5 mr-1", isLiked && "fill-current")} />
+              {post.likes?.length || 0}
+            </Button>
+            <Button variant="ghost" size="sm" className="rounded-full">
+              <MessageCircle className="h-5 w-5 mr-1" />
+              {post.comments?.length || 0}
+            </Button>
+            <div className="ml-auto">
+              <Button variant="ghost" size="icon" className="rounded-full">
+                <Bookmark className="h-5 w-5" />
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Dialog para visualizar mídia */}
+      <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
+        <DialogContent className="max-w-4xl p-0 bg-black/90 border-0">
+          <div className="relative h-[80vh] flex items-center justify-center">
+            {viewerIsVideo ? (
+              <video
+                src={viewerUrl || ""}
+                className="max-h-full max-w-full object-contain"
+                controls
+                autoPlay
+              />
+            ) : (
+              <img
+                src={viewerUrl || ""}
+                className="max-h-full max-w-full object-contain"
+                alt="Visualização ampliada"
+              />
+            )}
+            <Button
+              variant="secondary"
+              size="icon"
+              className="absolute top-4 right-4 rounded-full"
+              onClick={() => setViewerOpen(false)}
+            >
+              <MoreVertical className="h-4 w-4" />
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
 };
 
 export default function Profile() {
@@ -41,6 +288,8 @@ export default function Profile() {
 
   const [isEditing, setIsEditing] = useState(false);
   const [editData, setEditData] = useState({ username: "", full_name: "", bio: "" });
+  const [editingPost, setEditingPost] = useState<any>(null);
+  const [editPostContent, setEditPostContent] = useState("");
 
   const profileId = userId || user?.id;
   const isOwnProfile = !userId || userId === user?.id;
@@ -74,16 +323,82 @@ export default function Profile() {
     enabled: !!profileId,
   });
 
+  // Query para posts do usuário
   const { data: userPosts } = useQuery({
     queryKey: ["userPosts", profileId],
     queryFn: async () => {
       const { data, error } = await supabase
         .from("posts")
-        .select(`*, likes(id), comments(id)`)
+        .select(`
+          *,
+          profiles:user_id (id, username, avatar_url, full_name),
+          likes (id, user_id),
+          comments (id),
+          post_votes (id, user_id, vote_type)
+        `)
         .eq("user_id", profileId)
+        .eq("is_community_approved", true)
         .order("created_at", { ascending: false });
       if (error) throw error;
       return data;
+    },
+    enabled: !!profileId,
+  });
+
+  // Query para mídias do usuário
+  const { data: userMedia } = useQuery({
+    queryKey: ["userMedia", profileId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (id, username, avatar_url, full_name),
+          likes (id, user_id),
+          comments (id)
+        `)
+        .eq("user_id", profileId)
+        .eq("is_community_approved", true)
+        .not("media_urls", "is", null)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data;
+    },
+    enabled: !!profileId,
+  });
+
+  // Query para posts curtidos pelo usuário
+  const { data: likedPosts } = useQuery({
+    queryKey: ["likedPosts", profileId],
+    queryFn: async () => {
+      // Primeiro, pega os IDs dos posts que o usuário curtiu
+      const { data: likesData, error: likesError } = await supabase
+        .from("likes")
+        .select("post_id")
+        .eq("user_id", profileId);
+
+      if (likesError) throw likesError;
+
+      if (!likesData || likesData.length === 0) return [];
+
+      const postIds = likesData.map(like => like.post_id);
+
+      // Agora busca os posts completos
+      const { data: postsData, error: postsError } = await supabase
+        .from("posts")
+        .select(`
+          *,
+          profiles:user_id (id, username, avatar_url, full_name),
+          likes (id, user_id),
+          comments (id),
+          post_votes (id, user_id, vote_type)
+        `)
+        .in("id", postIds)
+        .eq("is_community_approved", true)
+        .order("created_at", { ascending: false });
+
+      if (postsError) throw postsError;
+      return postsData;
     },
     enabled: !!profileId,
   });
@@ -407,7 +722,82 @@ export default function Profile() {
       await navigator.clipboard.writeText(profile.friend_code);
       setCopied(true);
       setTimeout(() => setCopied(false), 1500);
-    } catch {}
+    } catch { }
+  };
+
+  // ===== Ações nos posts =====
+  const handleLike = async (postId: string) => {
+    try {
+      const post = [...(userPosts || []), ...(likedPosts || [])].find(p => p.id === postId);
+      const has = post?.likes?.find((l: any) => l.user_id === user?.id);
+      if (has) {
+        await supabase.from("likes").delete().match({ id: has.id });
+      } else {
+        await supabase.from("likes").insert({ post_id: postId, user_id: user?.id });
+      }
+      // Invalida todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: ["userPosts", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["userMedia", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["likedPosts", profileId] });
+    } catch (error) {
+      toast({
+        variant: "destructive",
+        title: "Erro ao curtir",
+        description: "Não foi possível processar sua ação."
+      });
+    }
+  };
+
+  const deletePost = useMutation({
+    mutationFn: async (postId: string) => {
+      const { error } = await supabase.from("posts").delete().eq("id", postId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Post excluído" });
+      // Invalida todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: ["userPosts", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["userMedia", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["likedPosts", profileId] });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erro ao excluir",
+        description: "Não foi possível excluir o post."
+      });
+    }
+  });
+
+  const updatePost = useMutation({
+    mutationFn: async ({ postId, content }: { postId: string; content: string }) => {
+      const { error } = await supabase
+        .from("posts")
+        .update({ content })
+        .eq("id", postId);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      toast({ title: "Post atualizado" });
+      setEditingPost(null);
+      setEditPostContent("");
+      // Invalida todas as queries relacionadas
+      queryClient.invalidateQueries({ queryKey: ["userPosts", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["userMedia", profileId] });
+      queryClient.invalidateQueries({ queryKey: ["likedPosts", profileId] });
+    },
+    onError: () => {
+      toast({
+        variant: "destructive",
+        title: "Erro ao atualizar",
+        description: "Não foi possível atualizar o post."
+      });
+    }
+  });
+
+  const handleEditPost = (post: any) => {
+    setEditingPost(post);
+    setEditPostContent(post.content || "");
   };
 
   return (
@@ -608,36 +998,128 @@ export default function Profile() {
             </TabsTrigger>
           </TabsList>
 
+          {/* ABA: POSTS */}
           <TabsContent value="posts" className="mt-6 space-y-4">
-            {userPosts?.map((post: any) => (
-              <Card key={post.id} className="border shadow-sm bg-card">
-                <CardContent className="pt-6">
-                  <p className="mb-4">{post.content}</p>
-                  <div className="flex gap-4 text-sm text-muted-foreground">
-                    <span>{post.likes?.length || 0} curtidas</span>
-                    <span>{post.comments?.length || 0} comentários</span>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-
-            {userPosts?.length === 0 && (
+            {userPosts?.length === 0 ? (
               <div className="text-center py-12 text-muted-foreground">
                 <p>Nenhum post ainda</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[calc(100vh-400px)]">
+                <div className="space-y-4 pr-4">
+                  {userPosts?.map((post: any) => (
+                    <PostItem
+                      key={post.id}
+                      post={post}
+                      user={user}
+                      onLike={handleLike}
+                      onDelete={deletePost.mutate}
+                      onEdit={handleEditPost}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
+          </TabsContent>
+
+          {/* ABA: MÍDIA */}
+          <TabsContent value="media" className="mt-6">
+            {userMedia?.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>Nenhuma mídia ainda</p>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {userMedia?.flatMap((post: any) =>
+                  post.media_urls?.map((mediaUrl: string, index: number) => {
+                    const url = stripPrefix(mediaUrl);
+                    const isVideo = isVideoUrl(mediaUrl);
+                    
+                    return (
+                      <div
+                        key={`${post.id}-${index}`}
+                        className="relative aspect-square overflow-hidden rounded-lg bg-muted cursor-pointer group"
+                        onClick={() => {
+                          if (isVideo) {
+                            // Abrir vídeo em modal
+                          } else {
+                            // Abrir imagem em modal
+                          }
+                        }}
+                      >
+                        {isVideo ? (
+                          <>
+                            <video
+                              src={url}
+                              className="w-full h-full object-cover"
+                              preload="metadata"
+                            />
+                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                              <Play className="h-12 w-12 text-white/80" />
+                            </div>
+                            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+                              <Video className="h-4 w-4 text-white" />
+                            </div>
+                          </>
+                        ) : (
+                          <>
+                            <img
+                              src={url}
+                              alt={`Mídia do post ${post.id}`}
+                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                            />
+                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+                              <Image className="h-4 w-4 text-white" />
+                            </div>
+                          </>
+                        )}
+                        <div className="absolute bottom-2 left-2 flex items-center gap-2">
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6 rounded-full bg-black/50 text-white hover:bg-black/70"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleLike(post.id);
+                            }}
+                          >
+                            <Heart className={cn("h-3 w-3", post.likes?.some((l: any) => l.user_id === user?.id) && "fill-current")} />
+                          </Button>
+                          <span className="text-xs text-white bg-black/50 px-2 py-1 rounded-full">
+                            {post.likes?.length || 0}
+                          </span>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
               </div>
             )}
           </TabsContent>
 
-          <TabsContent value="media" className="mt-6">
-            <div className="text-center py-12 text-muted-foreground">
-              <p>Nenhuma mídia ainda</p>
-            </div>
-          </TabsContent>
-
-          <TabsContent value="likes" className="mt-6">
-            <div className="text-center py-12 text-muted-foreground">
-              <p>Nenhuma curtida ainda</p>
-            </div>
+          {/* ABA: CURTIDAS */}
+          <TabsContent value="likes" className="mt-6 space-y-4">
+            {likedPosts?.length === 0 ? (
+              <div className="text-center py-12 text-muted-foreground">
+                <p>Nenhuma curtida ainda</p>
+              </div>
+            ) : (
+              <ScrollArea className="h-[calc(100vh-400px)]">
+                <div className="space-y-4 pr-4">
+                  {likedPosts?.map((post: any) => (
+                    <PostItem
+                      key={post.id}
+                      post={post}
+                      user={user}
+                      onLike={handleLike}
+                      onDelete={deletePost.mutate}
+                      onEdit={handleEditPost}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
+            )}
           </TabsContent>
         </Tabs>
       </div>
@@ -703,6 +1185,36 @@ export default function Profile() {
                 </button>
               ))
             )}
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Modal de edição de post */}
+      <Dialog open={!!editingPost} onOpenChange={(open) => !open && setEditingPost(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Editar Post</DialogTitle>
+          </DialogHeader>
+          <Textarea
+            value={editPostContent}
+            onChange={(e) => setEditPostContent(e.target.value)}
+            placeholder="Edite seu post..."
+            className="min-h-[100px]"
+          />
+          <div className="flex justify-end gap-2">
+            <Button variant="outline" onClick={() => setEditingPost(null)}>
+              Cancelar
+            </Button>
+            <Button
+              onClick={() => {
+                if (editingPost) {
+                  updatePost.mutate({ postId: editingPost.id, content: editPostContent });
+                }
+              }}
+              disabled={updatePost.isPending}
+            >
+              {updatePost.isPending ? "Salvando..." : "Salvar"}
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
