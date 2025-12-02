@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, Bomb, X, Pencil, Trash2,
@@ -114,6 +115,467 @@ const AI_STYLES = [
   { id: 'terror', label: 'Terror', icon: Skull, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
   { id: 'cold', label: 'Frio / Inverno', icon: Music, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
 ];
+
+/* ---------- NOVO COMPONENTE: Carrossel Flash ---------- */
+interface FlashCarouselProps {
+  posts: any[];
+  currentIndex: number;
+  setCurrentIndex: (index: number) => void;
+  user: any;
+  handleLike: (postId: string) => void;
+  handleVote: (postId: string, type: "heart" | "bomb") => void;
+}
+
+const FlashCarousel = ({ 
+  posts, 
+  currentIndex, 
+  setCurrentIndex, 
+  user,
+  handleLike,
+  handleVote
+}: FlashCarouselProps) => {
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
+  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const [isVisible, setIsVisible] = useState(false);
+  const visibilityObserverRef = useRef<IntersectionObserver | null>(null);
+  const { toast } = useToast();
+
+  // Configura Intersection Observer para verificar visibilidade
+  useEffect(() => {
+    if (!carouselRef.current) return;
+
+    visibilityObserverRef.current = new IntersectionObserver(
+      ([entry]) => {
+        setIsVisible(entry.isIntersecting);
+        
+        // Se o carrossel saiu da tela, pausa o áudio
+        if (!entry.isIntersecting && currentAudioRef.current && !currentAudioRef.current.paused) {
+          currentAudioRef.current.pause();
+        }
+        
+        // Se o carrossel voltou para a tela e o áudio está habilitado, retoma
+        if (entry.isIntersecting && isAudioEnabled && currentAudioRef.current) {
+          const currentPost = posts[currentIndex];
+          if (currentPost?.audio_url) {
+            currentAudioRef.current.play().catch(console.error);
+          }
+        }
+      },
+      {
+        threshold: 0.5, // Quando 50% do elemento está visível
+        rootMargin: '0px'
+      }
+    );
+
+    visibilityObserverRef.current.observe(carouselRef.current);
+
+    return () => {
+      if (visibilityObserverRef.current) {
+        visibilityObserverRef.current.disconnect();
+      }
+    };
+  }, [posts, currentIndex, isAudioEnabled]);
+
+  // Configura autoplay para passar os posts a cada 5 segundos
+  useEffect(() => {
+    if (posts.length <= 1 || !isVisible) return;
+    
+    autoPlayRef.current = setInterval(() => {
+      setCurrentIndex((prevIndex) => (prevIndex + 1) % posts.length);
+    }, 5000);
+
+    return () => {
+      if (autoPlayRef.current) {
+        clearInterval(autoPlayRef.current);
+      }
+    };
+  }, [posts.length, setCurrentIndex, isVisible]);
+
+  // Para o áudio quando o componente é desmontado
+  useEffect(() => {
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current = null;
+      }
+      if (autoPlayRef.current) {
+        clearInterval(autoPlayRef.current);
+      }
+    };
+  }, []);
+
+  const nextPost = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+    }
+    setCurrentIndex((currentIndex + 1) % posts.length);
+    resetAutoPlay();
+  };
+
+  const prevPost = () => {
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+    }
+    setCurrentIndex((currentIndex - 1 + posts.length) % posts.length);
+    resetAutoPlay();
+  };
+
+  const resetAutoPlay = () => {
+    if (autoPlayRef.current) {
+      clearInterval(autoPlayRef.current);
+    }
+    if (isVisible) {
+      autoPlayRef.current = setInterval(() => {
+        setCurrentIndex((prevIndex) => (prevIndex + 1) % posts.length);
+      }, 5000);
+    }
+  };
+
+  const handleFlashAudio = (audioUrl: string) => {
+    const cleanUrl = audioUrl.replace(/^audio::/, "");
+    
+    if (!isAudioEnabled) {
+      // Se áudio está desabilitado, apenas habilita
+      setIsAudioEnabled(true);
+      toast({
+        title: "Áudio habilitado",
+        description: "O áudio será reproduzido automaticamente nos posts visíveis",
+      });
+      
+      // Se o carrossel está visível, inicia a reprodução
+      if (isVisible) {
+        const currentPost = posts[currentIndex];
+        if (currentPost?.audio_url === audioUrl) {
+          const audio = new Audio(cleanUrl);
+          currentAudioRef.current = audio;
+          
+          audio.play().catch(error => {
+            console.error("Erro ao reproduzir áudio:", error);
+            toast({
+              variant: "destructive",
+              title: "Erro no áudio",
+              description: "Não foi possível reproduzir o áudio",
+            });
+          });
+          
+          audio.onended = () => {
+            currentAudioRef.current = null;
+          };
+        }
+      }
+      return;
+    }
+
+    // Se áudio já está tocando, pausa
+    if (currentAudioRef.current && !currentAudioRef.current.paused) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current = null;
+      setIsAudioEnabled(false);
+      toast({
+        title: "Áudio desabilitado",
+        description: "O áudio foi pausado em todos os posts",
+      });
+    } else {
+      // Inicia novo áudio apenas se estiver visível
+      if (!isVisible) {
+        toast({
+          title: "Áudio não disponível",
+          description: "O post precisa estar visível para reproduzir áudio",
+        });
+        return;
+      }
+      
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+      }
+      
+      const audio = new Audio(cleanUrl);
+      currentAudioRef.current = audio;
+      
+      audio.play().catch(error => {
+        console.error("Erro ao reproduzir áudio:", error);
+        toast({
+          variant: "destructive",
+          title: "Erro no áudio",
+          description: "Não foi possível reproduzir o áudio",
+        });
+      });
+      
+      audio.onended = () => {
+        currentAudioRef.current = null;
+      };
+    }
+  };
+
+  // Reproduz áudio automaticamente quando habilitado, mudar de post e estiver visível
+  useEffect(() => {
+    if (isAudioEnabled && isVisible) {
+      const currentPost = posts[currentIndex];
+      if (currentPost?.audio_url) {
+        const cleanUrl = currentPost.audio_url.replace(/^audio::/, "");
+        
+        // Pausa áudio anterior
+        if (currentAudioRef.current) {
+          currentAudioRef.current.pause();
+        }
+        
+        // Inicia novo áudio
+        const audio = new Audio(cleanUrl);
+        currentAudioRef.current = audio;
+        
+        audio.play().catch(error => {
+          console.error("Erro ao reproduzir áudio automaticamente:", error);
+        });
+        
+        audio.onended = () => {
+          currentAudioRef.current = null;
+        };
+      }
+    }
+    
+    // Limpeza ao mudar de post
+    return () => {
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+      }
+    };
+  }, [currentIndex, posts, isAudioEnabled, isVisible]);
+
+  const currentPost = posts[currentIndex];
+  const img = currentPost?.media_urls?.[0] ? currentPost.media_urls[0].replace(/^image::|^video::|^audio::/, "") : null;
+  const isVoting = currentPost?.voting_period_active;
+  const heartCount = currentPost?.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
+  const bombCount = currentPost?.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
+  const totalVotes = heartCount + bombCount;
+  const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+  const isLiked = currentPost?.likes?.some((like: any) => like.user_id === user?.id);
+  const userVote = currentPost?.post_votes?.find((v:any) => v.user_id === user?.id);
+
+  return (
+    <div ref={carouselRef} className="relative mb-6">
+      {/* Título da seção Flash */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-2">
+          <div className="bg-primary/10 p-2 rounded-lg">
+            <Volume2 className="h-5 w-5 text-primary" />
+          </div>
+          <h3 className="text-xl font-bold">Flash Posts</h3>
+          {/* Indicador de status do áudio */}
+          <Badge variant={isAudioEnabled ? "default" : "outline"} className="ml-2">
+            {isAudioEnabled ? (
+              <>
+                <Volume2 className="h-3 w-3 mr-1" />
+                Áudio Ativo
+              </>
+            ) : (
+              <>
+                <VolumeX className="h-3 w-3 mr-1" />
+                Áudio Inativo
+              </>
+            )}
+          </Badge>
+          {/* Indicador de visibilidade (apenas para debug) */}
+          <Badge variant="outline" className="ml-2">
+            {isVisible ? "🟢 Visível" : "🔴 Fora da tela"}
+          </Badge>
+        </div>
+        
+        {/* Indicador de posts */}
+        <div className="flex items-center gap-2">
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={prevPost}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <span className="text-sm font-medium">
+            {currentIndex + 1} / {posts.length}
+          </span>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={nextPost}
+            className="h-8 w-8 rounded-full"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Carrossel principal */}
+      <div className="relative">
+        <Card className="border-0 shadow-xl overflow-hidden bg-gradient-to-br from-gray-900 to-black">
+          <div className="aspect-[4/5] max-h-[500px] relative">
+            {/* Imagem do post */}
+            {img && (
+              <img
+                src={img}
+                alt="Flash post"
+                className="w-full h-full object-cover"
+              />
+            )}
+            
+            {/* Overlay gradiente */}
+            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
+            
+            {/* Controles superiores */}
+            <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
+              <div className="flex items-center gap-2">
+                <Avatar className="h-8 w-8 border-2 border-white/50">
+                  <AvatarImage src={currentPost?.profiles?.avatar_url} />
+                  <AvatarFallback className="bg-primary">
+                    {currentPost?.profiles?.username?.[0]}
+                  </AvatarFallback>
+                </Avatar>
+                <div>
+                  <UserLink 
+                    userId={currentPost?.user_id} 
+                    username={currentPost?.profiles?.username || ''}
+                    className="font-bold text-white text-sm"
+                  >
+                    {currentPost?.profiles?.username}
+                  </UserLink>
+                  <p className="text-xs text-white/70">
+                    {new Date(currentPost?.created_at).toLocaleDateString('pt-BR')}
+                  </p>
+                </div>
+              </div>
+              
+              {isVoting && <VotingCountdown endsAt={currentPost.voting_ends_at} variant="flash" />}
+            </div>
+
+            {/* Controles inferiores */}
+            <div className="absolute bottom-0 left-0 right-0 p-4">
+              {/* Área de votação (se estiver em votação) */}
+              {isVoting ? (
+                <div className="bg-black/40 backdrop-blur-md rounded-xl p-4 border border-white/10">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Bomb className="h-4 w-4 text-red-500" />
+                    <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden flex">
+                      <div 
+                        style={{ width: `${approvalRate}%` }} 
+                        className="h-full bg-green-500 transition-all duration-500" 
+                      />
+                      <div 
+                        style={{ width: `${100 - approvalRate}%` }} 
+                        className="h-full bg-red-500 transition-all duration-500" 
+                      />
+                    </div>
+                    <Heart className="h-4 w-4 text-green-500 fill-green-500" />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      className={cn(
+                        "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
+                        userVote?.vote_type === 'bomb' && 
+                        "bg-red-500/50 hover:bg-red-500/60"
+                      )}
+                      onClick={() => handleVote(currentPost.id, "bomb")}
+                    >
+                      <Bomb className="mr-2 h-4 w-4" />
+                      Bomb ({bombCount})
+                    </Button>
+                    <Button
+                      size="sm"
+                      className={cn(
+                        "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
+                        userVote?.vote_type === 'heart' && 
+                        "bg-green-500/50 hover:bg-green-500/60"
+                      )}
+                      onClick={() => handleVote(currentPost.id, "heart")}
+                    >
+                      <Heart className="mr-2 h-4 w-4 fill-current" />
+                      Heart ({heartCount})
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                /* Área normal com interações */
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={() => handleLike(currentPost?.id)}
+                      className={cn(
+                        "rounded-full text-white hover:bg-white/20",
+                        isLiked && "text-red-500"
+                      )}
+                    >
+                      <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="rounded-full text-white hover:bg-white/20"
+                    >
+                      <MessageCircle className="h-6 w-6" />
+                    </Button>
+                    
+                    {/* Botão de áudio */}
+                    {currentPost?.audio_url && (
+                      <Button
+                        variant={isAudioEnabled ? "default" : "ghost"}
+                        size="icon"
+                        onClick={() => handleFlashAudio(currentPost.audio_url)}
+                        className={cn(
+                          "rounded-full",
+                          isAudioEnabled ? "bg-primary text-white" : "text-white hover:bg-white/20"
+                        )}
+                      >
+                        {isAudioEnabled ? (
+                          <Volume2 className="h-6 w-6" />
+                        ) : (
+                          <VolumeX className="h-6 w-6" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
+                  
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="rounded-full text-white hover:bg-white/20"
+                  >
+                    <Bookmark className="h-6 w-6" />
+                  </Button>
+                </div>
+              )}
+            </div>
+          </div>
+        </Card>
+
+        {/* Miniaturas dos próximos posts */}
+        {posts.length > 1 && (
+          <div className="flex justify-center gap-2 mt-4">
+            {posts.slice(0, 5).map((_, index) => (
+              <button
+                key={index}
+                onClick={() => {
+                  if (currentAudioRef.current) {
+                    currentAudioRef.current.pause();
+                  }
+                  setCurrentIndex(index);
+                  resetAutoPlay();
+                }}
+                className={cn(
+                  "h-2 rounded-full transition-all",
+                  index === currentIndex ? "bg-primary w-8" : "bg-gray-300 w-2 hover:bg-gray-400"
+                )}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+};
 
 /* ---------- Helpers ---------- */
 const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
@@ -286,6 +748,7 @@ export default function Feed() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   /* States */
   const [newPost, setNewPost] = useState("");
@@ -314,13 +777,8 @@ export default function Feed() {
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
   const [voteUsersDialog, setVoteUsersDialog] = useState<{open: boolean; postId: string | null; voteType: "heart" | "bomb" | null}>({ open: false, postId: null, voteType: null });
 
-  const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
-  const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [currentTranslate, setCurrentTranslate] = useState(0);
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  // Estados para o carrossel Flash
+  const [currentFlashIndex, setCurrentFlashIndex] = useState(0);
 
   /* Data */
   useEffect(() => {
@@ -331,7 +789,6 @@ export default function Feed() {
   const { data: posts, refetch } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
-      // Nota: Fetching posts. Importante: Estamos pegando também o post_votes para calcular a aprovação
       const { data, error } = await supabase.from("posts").select(`*, profiles:user_id (id, username, avatar_url, full_name), likes (id, user_id), comments (id), post_votes (id, user_id, vote_type)`).eq("is_community_approved", true).order("created_at", { ascending: false });
       if (error) throw error;
       return data as PostRow[];
@@ -360,7 +817,6 @@ export default function Feed() {
 
   useEffect(() => {
     const f = async () => { try { await supabase.functions.invoke("process-votes"); } catch {} };
-    // Check para processar votos expirados a cada minuto
     const i = setInterval(f, 60000); f(); return () => clearInterval(i);
   }, []);
 
@@ -405,31 +861,26 @@ export default function Feed() {
         ctx.drawImage(img, 0, 0);
 
         if (filterType === 'rejuvenate') {
-          // 1. Criar camada desfocada (Pele de Bebê)
           const tempCanvas = document.createElement('canvas');
           tempCanvas.width = canvas.width; tempCanvas.height = canvas.height;
           const tempCtx = tempCanvas.getContext('2d')!;
           tempCtx.filter = 'blur(12px)'; 
           tempCtx.drawImage(img, 0, 0);
 
-          // 2. High-Key Glow (Screen) - Esconde imperfeições com luz
           ctx.globalCompositeOperation = 'screen';
-          ctx.globalAlpha = 0.6; // Ajustável
+          ctx.globalAlpha = 0.6;
           ctx.drawImage(tempCanvas, 0, 0);
 
-          // 3. Devolver nitidez aos traços (Overlay do Original)
           ctx.globalCompositeOperation = 'overlay';
           ctx.globalAlpha = 0.4;
           ctx.filter = 'contrast(1.2)';
           ctx.drawImage(img, 0, 0);
 
-          // 4. Color Grading (Tom Pêssego Saudável)
           ctx.globalCompositeOperation = 'soft-light';
           ctx.globalAlpha = 0.3;
-          ctx.fillStyle = '#ffb7a5'; // Pêssego quente
+          ctx.fillStyle = '#ffb7a5';
           ctx.fillRect(0, 0, canvas.width, canvas.height);
 
-          // Final
           ctx.globalCompositeOperation = 'source-over';
           ctx.globalAlpha = 1.0;
           ctx.filter = 'saturate(1.1)';
@@ -489,12 +940,21 @@ export default function Feed() {
 
   /* Post Creation */
   const handleCreatePost = async () => {
-    if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); return; }
-    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { toast({ variant: "destructive", title: "Conteúdo vazio" }); return; }
+    if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { 
+      toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); 
+      return; 
+    }
+    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { 
+      toast({ variant: "destructive", title: "Conteúdo vazio" }); 
+      return; 
+    }
+    
     setUploading(true);
     try {
       const mediaUrls: string[] = [];
       let audioUrl: string | null = null;
+      
+      // Upload de mídias
       for (const file of mediaFiles) {
         const ext = file.name.split(".").pop() || "jpg";
         const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
@@ -502,6 +962,8 @@ export default function Feed() {
         const { data } = supabase.storage.from("media").getPublicUrl(path);
         mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + data.publicUrl);
       }
+      
+      // Upload de áudio se existir
       if (audioBlob) {
         const path = `${user?.id}/${Date.now()}-audio.wav`;
         await supabase.storage.from("media").upload(path, audioBlob);
@@ -514,16 +976,50 @@ export default function Feed() {
       ends.setMinutes(ends.getMinutes() + 60);
 
       const content = postType === 'photo_audio' ? '' : newPost;
-      const { data: post, error } = await supabase.from("posts").insert({ user_id: user?.id, content, media_urls: mediaUrls.length ? mediaUrls : null, audio_url: audioUrl, post_type: postType, voting_ends_at: ends.toISOString(), voting_period_active: true }).select().single();
+      const { data: post, error } = await supabase.from("posts").insert({ 
+        user_id: user?.id, 
+        content, 
+        media_urls: mediaUrls.length ? mediaUrls : null, 
+        audio_url: audioUrl, 
+        post_type: postType, 
+        voting_ends_at: ends.toISOString(), 
+        voting_period_active: true 
+      }).select().single();
+      
       if (error) throw error;
-      if (content) { const { saveMentions } = await import("@/utils/mentionsHelper"); await saveMentions(post.id, "post", content, user!.id); }
-      toast({ title: "Publicado!", description: "Seu post entrou em votação (60min)" }); setNewPost(""); setMediaFiles([]); resetRecording(); refetch();
-    } catch (e:any) { toast({ variant: "destructive", title: "Erro", description: e.message }); } finally { setUploading(false); }
+      
+      // Salva menções se houver conteúdo
+      if (content) { 
+        const { saveMentions } = await import("@/utils/mentionsHelper"); 
+        await saveMentions(post.id, "post", content, user!.id); 
+      }
+      
+      // Mostra notificação e redireciona para Arena
+      toast({ 
+        title: "Post publicado! 🎉", 
+        description: "Seu post foi enviado para a Arena. Boa sorte na votação!" 
+      });
+      
+      // Limpa o formulário
+      setNewPost(""); 
+      setMediaFiles([]); 
+      resetRecording();
+      refetch();
+      
+      // Redireciona para a tela de Arena após 2 segundos
+      setTimeout(() => {
+        navigate("/arena");
+      }, 2000);
+      
+    } catch (e:any) { 
+      toast({ variant: "destructive", title: "Erro ao publicar", description: e.message }); 
+    } finally { 
+      setUploading(false); 
+    }
   };
 
   /* Helpers de Ação */
   const handleLike = async (postId: string) => {
-      // Voto tradicional após aprovação (LIKE)
       try {
         const has = posts?.find(p => p.id === postId)?.likes?.find((l:any) => l.user_id === user?.id);
         if (has) await supabase.from("likes").delete().match({ id: has.id });
@@ -533,7 +1029,6 @@ export default function Feed() {
   };
 
   const handleVote = async (postId: string, type: "heart" | "bomb") => {
-    // Votação de aprovação (POST VOTES)
     try {
       const has = posts?.find(p => p.id === postId)?.post_votes?.find((v:any) => v.user_id === user?.id);
       if (has?.vote_type === type) await supabase.from("post_votes").delete().match({ post_id: postId, user_id: user?.id });
@@ -552,121 +1047,7 @@ export default function Feed() {
     onSuccess: () => { setNewCommentText(""); queryClient.invalidateQueries({ queryKey: ["post-comments"] }); refetch(); }
   });
 
-  /* Carousel & Player */
-  const stopCurrentAudio = () => { if (currentAudioRef.current) { currentAudioRef.current.pause(); currentAudioRef.current = null; } setPlayingAudio(null); };
-  const handlePhotoAudioPlay = (url: string) => { stopCurrentAudio(); setPlayingAudio(url); const a = new Audio(stripPrefix(url)); currentAudioRef.current = a; a.onended = () => setPlayingAudio(null); a.play(); };
-  
-  const renderPhotoAudioCarousel = () => {
-    const list = posts?.filter(x => x.post_type === 'photo_audio') || [];
-    if (!list.length) return null;
-    const curr = list[currentCarouselIndex];
-    const img = curr?.media_urls?.[0] ? stripPrefix(curr.media_urls[0]) : null;
-    const isPlaying = playingAudio === curr?.audio_url;
-
-    // Lógica de Votação para Flash
-    const isVoting = curr.voting_period_active;
-    const heartCount = curr.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
-    const bombCount = curr.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
-    const totalVotes = heartCount + bombCount;
-    const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
-
-    const next = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex + 1) % list.length); };
-    const prev = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex - 1 + list.length) % list.length); };
-    const onTouchStart = (e: React.TouchEvent) => { setIsDragging(true); setStartX(e.touches[0].clientX); };
-    const onTouchEnd = (e: React.TouchEvent) => { setIsDragging(false); const diff = e.changedTouches[0].clientX - startX; if (diff > 50) prev(); else if (diff < -50) next(); setCurrentTranslate(0); };
-
-    return (
-      <Card className="mb-6 border-0 shadow-2xl bg-card/95 overflow-hidden max-w-sm mx-auto relative group">
-        {/* FLASH OPTIONS - Disponível sempre para o dono */}
-        {curr.user_id === user?.id && (
-            <div className="absolute top-4 right-4 z-50">
-                <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                    <Button variant="secondary" size="icon" className="rounded-full h-8 w-8 bg-black/40 text-white hover:bg-black/60 backdrop-blur-md border-0"><MoreVertical className="h-4 w-4"/></Button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-40">
-                    <DropdownMenuItem onClick={() => { setEditingPost(curr); setEditContent(curr.content||""); }}><Pencil className="mr-2 h-4 w-4"/> Editar</DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => deleteMutation.mutate(curr.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4"/> Excluir</DropdownMenuItem>
-                </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-        )}
-
-        <div className="relative aspect-[9/16] bg-black" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
-          {img && <ProgressiveImage src={img} alt="Flash" className="w-full h-full" />}
-          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"/>
-          
-          <div className="absolute top-4 left-4 flex items-center gap-2 z-10">
-            <div className="bg-primary/20 backdrop-blur-md p-1.5 rounded-full"><Volume2 className="h-4 w-4 text-white"/></div>
-            <span className="text-white text-sm font-bold drop-shadow-md">Flash</span>
-            {isVoting && <VotingCountdown endsAt={curr.voting_ends_at} onExpire={refetch} variant="flash" />}
-          </div>
-
-          <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
-             {isVoting ? (
-                 /* MODO VOTAÇÃO FLASH (Estilo Dark Glass) */
-                 <div className="bg-black/40 backdrop-blur-md rounded-2xl p-4 border border-white/10">
-                    <div className="flex items-center gap-2 mb-3 text-white">
-                        <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
-                        <span className="font-bold text-sm drop-shadow-md">{curr.profiles?.username}</span>
-                    </div>
-
-                     <div className="flex items-center gap-2 mb-3">
-                        <Bomb className="h-4 w-4 text-red-500" />
-                        <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden flex">
-                           <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                           <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
-                        </div>
-                        <Heart className="h-4 w-4 text-green-500 fill-green-500" />
-                     </div>
-                     <div className="flex gap-2">
-                        <Button size="sm" className={cn("flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm", curr.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-500/50 hover:bg-red-500/60")} onClick={()=>handleVote(curr.id, "bomb")}>
-                          <Bomb className="mr-2 h-4 w-4"/>
-                        </Button>
-                        <Button size="sm" className={cn("flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm", curr.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-500/50 hover:bg-green-500/60")} onClick={()=>handleVote(curr.id, "heart")}>
-                          <Heart className="mr-2 h-4 w-4 fill-current"/>
-                        </Button>
-                        {curr.audio_url && (
-                            <Button size="sm" variant="secondary" onClick={() => isPlaying ? stopCurrentAudio() : handlePhotoAudioPlay(curr.audio_url)} className="rounded-full w-10 p-0 bg-white text-black hover:bg-white/90">
-                                {isPlaying ? <Pause className="h-4 w-4"/> : <Play className="h-4 w-4 ml-0.5"/>}
-                            </Button>
-                        )}
-                     </div>
-                 </div>
-             ) : (
-                 /* MODO NORMAL APROVADO */
-                 <>
-                    <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center gap-2 text-white">
-                        <Avatar className="h-8 w-8 ring-2 ring-white/50"><AvatarImage src={curr.profiles?.avatar_url}/><AvatarFallback>{curr.profiles?.username?.[0]}</AvatarFallback></Avatar>
-                        <span className="font-bold text-sm drop-shadow-md">{curr.profiles?.username}</span>
-                        </div>
-                        {curr.audio_url && (
-                        <Button size="icon" onClick={() => isPlaying ? stopCurrentAudio() : handlePhotoAudioPlay(curr.audio_url)} className={cn("rounded-full h-12 w-12 shadow-xl transition-transform", isPlaying ? "bg-white text-primary scale-110" : "bg-white/20 backdrop-blur-md text-white")}>
-                            {isPlaying ? <Volume2 className="h-6 w-6 animate-pulse"/> : <Play className="h-6 w-6 ml-1"/>}
-                        </Button>
-                        )}
-                    </div>
-                 </>
-             )}
-
-             {list.length > 1 && (
-               <div className="flex justify-center gap-1 mt-4">
-                 {list.map((_, i) => <div key={i} className={cn("h-1 rounded-full transition-all", i===currentCarouselIndex ? "bg-white w-6" : "bg-white/30 w-2")}/>)}
-               </div>
-             )}
-          </div>
-          
-          {list.length > 1 && (
-            <>
-              <Button variant="ghost" className="absolute left-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={prev}><ChevronLeft/></Button>
-              <Button variant="ghost" className="absolute right-2 top-1/2 -translate-y-1/2 text-white/50 hover:text-white hover:bg-black/20 rounded-full h-10 w-10 p-0 hidden sm:flex" onClick={next}><ChevronRight/></Button>
-            </>
-          )}
-        </div>
-      </Card>
-    );
-  };
+  const flashPosts = posts?.filter(x => x.post_type === 'photo_audio') || [];
 
   const { data: comments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id], enabled: !!openingCommentsFor,
@@ -722,14 +1103,26 @@ export default function Feed() {
                     <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()} className="text-purple-600 bg-purple-50 hover:bg-purple-100"><Sparkles className="h-5 w-5"/></Button>
                     {postType==='standard'&&<Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}><Video className="h-5 w-5 text-muted-foreground"/></Button>}
                   </div>
-                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">{uploading?"...":"Publicar"}</Button>
+                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">
+                    {uploading?"Publicando...":"Publicar na Arena"}
+                  </Button>
                 </div>
               </div>
             </div>
           </CardContent>
         </Card>
 
-        {renderPhotoAudioCarousel()}
+        {/* Carrossel Flash */}
+        {flashPosts.length > 0 && (
+          <FlashCarousel
+            posts={flashPosts}
+            currentIndex={currentFlashIndex}
+            setCurrentIndex={setCurrentFlashIndex}
+            user={user}
+            handleLike={handleLike}
+            handleVote={handleVote}
+          />
+        )}
 
         {posts?.map((post) => {
           if (post.post_type === 'photo_audio') return null;

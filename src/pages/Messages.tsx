@@ -31,6 +31,7 @@ import {
 import AttentionButton from "@/components/realtime/AttentionButton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
+import { MovementStatusBadge } from "@/components/movement/MovementStatusBadge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -1029,7 +1030,16 @@ export default function Messages() {
                       <div className="leading-tight">
                         <h3 className="font-semibold flex items-center gap-2">
                           {conv?.name || peer?.profiles?.username || "Chat"}
-                          {peer?.user_id && <UserLink userId={peer.user_id} username={peer.profiles?.username || ""} className="opacity-0 w-0 h-0 overflow-hidden" />}
+                          {peer?.user_id && (
+                            <>
+                              <UserLink
+                                userId={peer.user_id}
+                                username={peer.profiles?.username || ""}
+                                className="opacity-0 w-0 h-0 overflow-hidden"
+                              />
+                              <MovementStatusBadge userId={peer.user_id} />
+                            </>
+                          )}
                         </h3>
                         <p className="text-xs text-green-600 font-medium flex items-center gap-1">
                           <span className="block w-2 h-2 bg-green-500 rounded-full animate-pulse" />

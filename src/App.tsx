@@ -1,5 +1,5 @@
-import { RealtimeAttentionListener } from '@/components/realtime/RealtimeAttentionListener';
-import '@/styles/attention.css';
+import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
+import "@/styles/attention.css";
 import React, { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
 import { Toaster as Sonner } from "@/components/ui/sonner";
@@ -19,7 +19,8 @@ import ResetPassword from "./pages/ResetPassword";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
-import Rankings from "@/pages/Rankings"; // ✅ usando alias @
+import Rankings from "@/pages/Rankings";
+import { MovementStatusProvider } from "@/contexts/MovementStatusContext";
 
 const queryClient = new QueryClient();
 
@@ -29,7 +30,9 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="animate-pulse text-lg text-muted-foreground">Carregando...</div>
+        <div className="animate-pulse text-lg text-muted-foreground">
+          Carregando...
+        </div>
       </div>
     );
   }
@@ -39,10 +42,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <>
+    <MovementStatusProvider>
       <RealtimeAttentionListener />
       {children}
-    </>
+    </MovementStatusProvider>
   );
 }
 
@@ -81,12 +84,18 @@ const App = () => (
       <BrowserRouter>
         <TutorialGuard>
           <Routes>
-            {/* Auth + recuperação de senha NÃO ficam atrás do ProtectedRoute */}
+            {/* Auth + recuperação */}
             <Route path="/auth" element={<Auth />} />
             <Route path="/auth/reset-password" element={<ResetPassword />} />
 
             {/* Rotas protegidas */}
-            <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>
+            <Route
+              element={
+                <ProtectedRoute>
+                  <AppLayout />
+                </ProtectedRoute>
+              }
+            >
               <Route path="/" element={<Feed />} />
               <Route path="/arena" element={<Arena />} />
               <Route path="/explore" element={<Explore />} />
@@ -97,7 +106,7 @@ const App = () => (
               <Route path="/rankings" element={<Rankings />} />
             </Route>
 
-            {/* 404 interna */}
+            {/* 404 */}
             <Route path="*" element={<NotFound />} />
           </Routes>
         </TutorialGuard>

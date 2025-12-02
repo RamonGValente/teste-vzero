@@ -23,6 +23,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { MovementStatusToggle } from "@/components/movement/MovementStatusToggle";
 
 type MiniProfile = {
   id: string;
@@ -586,6 +587,12 @@ export default function Profile() {
             </div>
           </div>
         </div>
+
+        {isOwnProfile && (
+          <div className="mt-4 px-4">
+            <MovementStatusToggle />
+          </div>
+        )}
 
         {/* TABS */}
         <Tabs defaultValue="posts" className="mt-8">
