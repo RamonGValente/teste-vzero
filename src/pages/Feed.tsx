@@ -7,7 +7,10 @@ import {
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles, Wand2,
   Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile,
-  Clock, CheckCircle2, AlertCircle
+  Clock, CheckCircle2, AlertCircle, Share2, MoreHorizontal, Home, Search, User, PlusCircle,
+  ThumbsUp, ThumbsDown, Flag, Eye, EyeOff, SkipForward, SkipBack, RotateCw,
+  Flame, TrendingUp, Zap as ZapIcon, Rocket, Lightning, Crown, Target, Star,
+  Timer, Check, AlertTriangle, Loader2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -24,10 +27,13 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { Progress } from "@/components/ui/progress"; 
+import { Progress } from "@/components/ui/progress";
+import { Slider } from "@/components/ui/slider";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
 
 /* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
-const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" }) => {
+const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" | "viral" }) => {
   const [timeLeft, setTimeLeft] = useState("");
   const [isExpired, setIsExpired] = useState(false);
 
@@ -59,7 +65,9 @@ const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: st
   return (
     <div className={cn(
       "flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold animate-pulse",
-      variant === "flash" ? "bg-black/50 text-white border border-white/20" : "bg-orange-100 text-orange-700"
+      variant === "flash" ? "bg-black/50 text-white border border-white/20" : 
+      variant === "viral" ? "bg-gradient-to-r from-purple-600 to-pink-600 text-white border border-white/20" :
+      "bg-orange-100 text-orange-700"
     )}>
       <Clock className="h-3 w-3" />
       <span>{timeLeft}</span>
@@ -73,7 +81,6 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
   
   return (
     <div className={cn("relative overflow-hidden bg-muted/30", className)} onClick={onClick}>
-      {/* Placeholder borrado para UX imediata */}
       <img 
         src={src} 
         alt={alt}
@@ -83,7 +90,6 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
         )}
         aria-hidden="true"
       />
-      {/* Imagem Real com Lazy Loading */}
       <img
         src={src}
         alt={alt}
@@ -95,6 +101,831 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
         onLoad={() => setIsLoaded(true)}
       />
     </div>
+  );
+};
+
+/* ---------- COMPONENTE: ViralClips Player ---------- */
+interface ViralClipsPlayerProps {
+  post: any;
+  user: any;
+  isActive: boolean;
+  onLike: (postId: string) => void;
+  onComment: (post: any) => void;
+}
+
+const ViralClipsPlayer = ({ 
+  post, 
+  user, 
+  isActive, 
+  onLike, 
+  onComment
+}: ViralClipsPlayerProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [showControls, setShowControls] = useState(false);
+  const [error, setError] = useState(false);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+  const { toast } = useToast();
+  
+  const isVideo = post?.media_urls?.[0]?.startsWith("video::");
+  const videoUrl = post?.media_urls?.[0]?.replace(/^video::/, "");
+  const isLiked = post?.likes?.some((like: any) => like.user_id === user?.id);
+  
+  useEffect(() => {
+    if (!videoRef.current || !isVideo) return;
+    
+    const video = videoRef.current;
+    
+    const handleLoadedMetadata = () => {
+      setDuration(video.duration);
+      if (isActive) {
+        video.muted = isMuted;
+        video.play().then(() => setIsPlaying(true)).catch(() => {
+          setError(true);
+          toast({
+            variant: "destructive",
+            title: "Erro de reprodução",
+            description: "Não foi possível reproduzir o vídeo",
+          });
+        });
+      }
+    };
+    
+    const handleTimeUpdate = () => {
+      setCurrentTime(video.currentTime);
+    };
+    
+    const handleError = () => {
+      setError(true);
+      toast({
+        variant: "destructive",
+        title: "Erro no vídeo",
+        description: "O vídeo não pôde ser carregado",
+      });
+    };
+    
+    video.addEventListener('loadedmetadata', handleLoadedMetadata);
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    video.addEventListener('error', handleError);
+    
+    if (isActive && isPlaying) {
+      video.play().catch(err => {
+        console.error("Erro ao reproduzir vídeo:", err);
+        setError(true);
+      });
+    } else {
+      video.pause();
+    }
+    
+    return () => {
+      video.removeEventListener('loadedmetadata', handleLoadedMetadata);
+      video.removeEventListener('timeupdate', handleTimeUpdate);
+      video.removeEventListener('error', handleError);
+      video.pause();
+    };
+  }, [isActive, isPlaying, isVideo, isMuted, toast]);
+  
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(err => {
+          console.error("Erro ao reproduzir:", err);
+          setError(true);
+        });
+    }
+  };
+  
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    setIsMuted(!isMuted);
+    videoRef.current.muted = !isMuted;
+  };
+  
+  const handleLike = () => {
+    onLike(post.id);
+  };
+  
+  const progress = duration > 0 ? (currentTime / duration) * 100 : 0;
+  
+  return (
+    <div 
+      className="relative w-[300px] h-[530px] bg-gradient-to-br from-gray-900 to-black rounded-2xl overflow-hidden flex-shrink-0 border-2 border-transparent hover:border-purple-500 transition-all duration-300"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {/* Badge ViralClips */}
+      <div className="absolute top-3 left-3 z-10">
+        <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 font-bold">
+          <Flame className="h-3 w-3 mr-1" />
+          ViralClip
+        </Badge>
+      </div>
+      
+      {/* Vídeo */}
+      {isVideo ? (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          loop
+          muted={isMuted}
+          playsInline
+          preload="metadata"
+          onClick={togglePlayPause}
+        />
+      ) : (
+        <div className="relative w-full h-full">
+          <img
+            src={videoUrl}
+            alt="ViralClip"
+            className="w-full h-full object-cover"
+            onClick={togglePlayPause}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+        </div>
+      )}
+      
+      {/* Erro overlay */}
+      {error && (
+        <div className="absolute inset-0 bg-red-900/80 flex items-center justify-center">
+          <div className="text-center p-6 bg-black/70 rounded-xl">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-white mb-2">Erro na reprodução</h3>
+            <p className="text-white/70 text-sm">Este conteúdo não pôde ser carregado</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Barra de progresso */}
+      <div className="absolute top-0 left-0 right-0 h-1 bg-gray-800">
+        <div 
+          className="h-full bg-gradient-to-r from-purple-500 to-pink-500 transition-all duration-100"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      
+      {/* Controles */}
+      <div className={cn(
+        "absolute inset-0 transition-opacity duration-300",
+        showControls ? "opacity-100" : "opacity-0"
+      )}>
+        {/* Controle central de play/pause */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-16 w-16 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all transform",
+              !showControls && "scale-0"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlayPause();
+            }}
+          >
+            {isPlaying ? (
+              <Pause className="h-8 w-8" />
+            ) : (
+              <Play className="h-8 w-8 ml-1" />
+            )}
+          </Button>
+        </div>
+        
+        {/* Controles laterais (direita) */}
+        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70",
+                isLiked && "text-red-500"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike();
+              }}
+            >
+              <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
+            </Button>
+            <span className="text-white text-xs font-semibold mt-1">
+              {post.likes?.length || 0}
+            </span>
+          </div>
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70"
+              onClick={(e) => {
+                e.stopPropagation();
+                onComment(post);
+              }}
+            >
+              <MessageCircle className="h-6 w-6" />
+            </Button>
+            <span className="text-white text-xs font-semibold mt-1">
+              {post.comments?.length || 0}
+            </span>
+          </div>
+          
+          {/* Botão de som */}
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 rounded-full bg-black/50 text-white hover:bg-black/70"
+            onClick={(e) => {
+              e.stopPropagation();
+              toggleMute();
+            }}
+          >
+            {isMuted ? (
+              <VolumeX className="h-5 w-5" />
+            ) : (
+              <Volume2 className="h-5 w-5" />
+            )}
+          </Button>
+        </div>
+        
+        {/* Controles inferiores */}
+        <div className="absolute bottom-3 left-3 right-3">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-9 w-9 border-2 border-purple-500">
+              <AvatarImage src={post.profiles?.avatar_url} />
+              <AvatarFallback className="bg-gradient-to-r from-purple-600 to-pink-600">
+                {post.profiles?.username?.[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <UserLink 
+                userId={post.user_id} 
+                username={post.profiles?.username || ''}
+                className="font-bold text-white text-sm hover:text-white/80"
+              >
+                {post.profiles?.username}
+              </UserLink>
+              <p className="text-white/70 text-xs truncate">
+                {post.content || "ViralClip em alta!"}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+      
+      {/* Indicador de mute quando controles estão ocultos */}
+      {!showControls && isMuted && (
+        <div className="absolute top-3 right-3">
+          <VolumeX className="h-4 w-4 text-white/70" />
+        </div>
+      )}
+      
+      {/* Indicador de tempo */}
+      {!showControls && duration > 0 && (
+        <div className="absolute bottom-3 right-3">
+          <Badge variant="outline" className="bg-black/50 text-white border-white/30 text-xs">
+            {Math.floor(currentTime)}s / {Math.floor(duration)}s
+          </Badge>
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ---------- COMPONENTE: Carrossel de ViralClips ---------- */
+interface ViralClipsCarouselProps {
+  posts: any[];
+  user: any;
+  handleLike: (postId: string) => void;
+  onComment: (post: any) => void;
+}
+
+const ViralClipsCarousel = ({ 
+  posts, 
+  user,
+  handleLike,
+  onComment
+}: ViralClipsCarouselProps) => {
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const { toast } = useToast();
+  
+  const scrollToIndex = (index: number) => {
+    if (carouselRef.current) {
+      const itemWidth = 300 + 16; // width + gap
+      carouselRef.current.scrollTo({
+        left: index * itemWidth,
+        behavior: 'smooth'
+      });
+      setCurrentIndex(index);
+    }
+  };
+  
+  const next = () => {
+    if (currentIndex < posts.length - 1) {
+      scrollToIndex(currentIndex + 1);
+    }
+  };
+  
+  const prev = () => {
+    if (currentIndex > 0) {
+      scrollToIndex(currentIndex - 1);
+    }
+  };
+  
+  if (posts.length === 0) return null;
+  
+  return (
+    <Card className="border-0 shadow-2xl bg-gradient-to-br from-gray-900 via-purple-900/20 to-black overflow-hidden">
+      <CardContent className="p-4">
+        {/* Header do carrossel */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-purple-600 to-pink-600 p-2 rounded-xl">
+              <Flame className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                ViralClips 
+                <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 text-white border-0">
+                  <TrendingUp className="h-3 w-3 mr-1" />
+                  Viral
+                </Badge>
+              </h3>
+              <p className="text-sm text-white/70">
+                Vídeos curtos de até 30s que podem viralizar!
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={prev}
+              disabled={currentIndex === 0}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium text-white">
+              {currentIndex + 1} / {posts.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={next}
+              disabled={currentIndex === posts.length - 1}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Carrossel horizontal */}
+        <div className="relative">
+          <div 
+            ref={carouselRef}
+            className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide scroll-smooth"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {posts.map((post, index) => (
+              <ViralClipsPlayer
+                key={post.id}
+                post={post}
+                user={user}
+                isActive={index === currentIndex}
+                onLike={handleLike}
+                onComment={onComment}
+              />
+            ))}
+          </div>
+          
+          {/* Indicadores */}
+          <div className="flex justify-center gap-2 mt-4">
+            {posts.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => scrollToIndex(index)}
+                className={cn(
+                  "h-2 rounded-full transition-all",
+                  index === currentIndex ? "bg-gradient-to-r from-purple-500 to-pink-500 w-8" : "bg-white/30 w-2 hover:bg-white/50"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+        
+        {/* Estatísticas */}
+        <div className="mt-4 grid grid-cols-3 gap-2 text-center">
+          <div className="bg-white/5 rounded-lg p-2">
+            <div className="text-white font-bold">{posts.reduce((sum, post) => sum + (post.likes?.length || 0), 0)}</div>
+            <div className="text-white/70 text-xs">Curtidas</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2">
+            <div className="text-white font-bold">{posts.reduce((sum, post) => sum + (post.comments?.length || 0), 0)}</div>
+            <div className="text-white/70 text-xs">Comentários</div>
+          </div>
+          <div className="bg-white/5 rounded-lg p-2">
+            <div className="text-white font-bold">{posts.length}</div>
+            <div className="text-white/70 text-xs">Clips</div>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
+};
+
+/* ---------- COMPONENTE: Horizontal Shorts Player (Mantido) ---------- */
+interface HorizontalShortsPlayerProps {
+  post: any;
+  user: any;
+  isActive: boolean;
+  onLike: (postId: string) => void;
+  onComment: (post: any) => void;
+}
+
+const HorizontalShortsPlayer = ({ 
+  post, 
+  user, 
+  isActive, 
+  onLike, 
+  onComment
+}: HorizontalShortsPlayerProps) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [isPlaying, setIsPlaying] = useState(false);
+  const [isMuted, setIsMuted] = useState(true);
+  const [showControls, setShowControls] = useState(false);
+  const [error, setError] = useState(false);
+  const { toast } = useToast();
+  
+  const isVideo = post?.media_urls?.[0]?.startsWith("video::");
+  const videoUrl = post?.media_urls?.[0]?.replace(/^video::/, "");
+  const imageUrl = post?.media_urls?.[0]?.replace(/^image::/, "");
+  const audioUrl = post?.audio_url?.replace(/^audio::/, "");
+  const isLiked = post?.likes?.some((like: any) => like.user_id === user?.id);
+  
+  useEffect(() => {
+    if (!videoRef.current || !isVideo) return;
+    
+    if (isActive && isPlaying) {
+      videoRef.current.play().catch(err => {
+        console.error("Erro ao reproduzir vídeo:", err);
+        setError(true);
+      });
+    } else {
+      videoRef.current.pause();
+    }
+  }, [isActive, isPlaying, isVideo]);
+  
+  const togglePlayPause = () => {
+    if (!videoRef.current) return;
+    
+    if (isPlaying) {
+      videoRef.current.pause();
+      setIsPlaying(false);
+    } else {
+      videoRef.current.play()
+        .then(() => setIsPlaying(true))
+        .catch(err => {
+          console.error("Erro ao reproduzir:", err);
+          setError(true);
+        });
+    }
+  };
+  
+  const toggleMute = () => {
+    if (!videoRef.current) return;
+    setIsMuted(!isMuted);
+    videoRef.current.muted = !isMuted;
+  };
+  
+  const handleLike = () => {
+    onLike(post.id);
+  };
+  
+  return (
+    <div 
+      className="relative w-[280px] h-[500px] bg-black rounded-2xl overflow-hidden flex-shrink-0"
+      onMouseEnter={() => setShowControls(true)}
+      onMouseLeave={() => setShowControls(false)}
+    >
+      {/* Vídeo ou Imagem */}
+      {isVideo ? (
+        <video
+          ref={videoRef}
+          src={videoUrl}
+          className="w-full h-full object-cover"
+          loop
+          muted={isMuted}
+          playsInline
+          preload="metadata"
+          onClick={togglePlayPause}
+        />
+      ) : (
+        <div className="relative w-full h-full">
+          <img
+            src={imageUrl}
+            alt="Post"
+            className="w-full h-full object-cover"
+            onClick={togglePlayPause}
+          />
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+        </div>
+      )}
+      
+      {/* Áudio player (para posts com áudio) */}
+      {audioUrl && !isVideo && (
+        <audio
+          ref={videoRef as any}
+          src={audioUrl}
+          loop
+          muted={isMuted}
+          className="hidden"
+        />
+      )}
+      
+      {/* Erro overlay */}
+      {error && (
+        <div className="absolute inset-0 bg-red-900/80 flex items-center justify-center">
+          <div className="text-center p-6 bg-black/70 rounded-xl">
+            <AlertCircle className="h-12 w-12 text-red-500 mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-white mb-2">Erro na reprodução</h3>
+            <p className="text-white/70 text-sm">Este conteúdo não pôde ser carregado</p>
+          </div>
+        </div>
+      )}
+      
+      {/* Controles */}
+      <div className={cn(
+        "absolute inset-0 transition-opacity duration-300",
+        showControls ? "opacity-100" : "opacity-0"
+      )}>
+        {/* Controle central de play/pause */}
+        <div className="absolute inset-0 flex items-center justify-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-16 w-16 rounded-full bg-black/50 text-white hover:bg-black/70 transition-all transform",
+              !showControls && "scale-0"
+            )}
+            onClick={(e) => {
+              e.stopPropagation();
+              togglePlayPause();
+            }}
+          >
+            {isPlaying ? (
+              <Pause className="h-8 w-8" />
+            ) : (
+              <Play className="h-8 w-8 ml-1" />
+            )}
+          </Button>
+        </div>
+        
+        {/* Controles laterais (direita) */}
+        <div className="absolute right-3 bottom-24 flex flex-col items-center gap-4">
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className={cn(
+                "h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70",
+                isLiked && "text-red-500"
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                handleLike();
+              }}
+            >
+              <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
+            </Button>
+            <span className="text-white text-xs font-semibold mt-1">
+              {post.likes?.length || 0}
+            </span>
+          </div>
+          
+          <div className="flex flex-col items-center">
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-12 w-12 rounded-full bg-black/50 text-white hover:bg-black/70"
+              onClick={(e) => {
+                e.stopPropagation();
+                onComment(post);
+              }}
+            >
+              <MessageCircle className="h-6 w-6" />
+            </Button>
+            <span className="text-white text-xs font-semibold mt-1">
+              {post.comments?.length || 0}
+            </span>
+          </div>
+        </div>
+        
+        {/* Controles inferiores */}
+        <div className="absolute bottom-3 left-3 right-3">
+          <div className="flex items-center gap-3">
+            <Avatar className="h-8 w-8 border-2 border-white">
+              <AvatarImage src={post.profiles?.avatar_url} />
+              <AvatarFallback className="bg-primary">
+                {post.profiles?.username?.[0]}
+              </AvatarFallback>
+            </Avatar>
+            <div className="flex-1">
+              <UserLink 
+                userId={post.user_id} 
+                username={post.profiles?.username || ''}
+                className="font-bold text-white text-sm hover:text-white/80"
+              >
+                {post.profiles?.username}
+              </UserLink>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+              onClick={(e) => {
+                e.stopPropagation();
+                toggleMute();
+              }}
+            >
+              {isMuted ? (
+                <VolumeX className="h-4 w-4" />
+              ) : (
+                <Volume2 className="h-4 w-4" />
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+      
+      {/* Indicador de mute quando controles estão ocultos */}
+      {!showControls && isMuted && (
+        <div className="absolute top-3 right-3">
+          <VolumeX className="h-4 w-4 text-white/70" />
+        </div>
+      )}
+      
+      {/* Indicador de play quando controles estão ocultos */}
+      {!showControls && !isPlaying && (
+        <div className="absolute top-3 left-3">
+          <Play className="h-4 w-4 text-white/70" />
+        </div>
+      )}
+    </div>
+  );
+};
+
+/* ---------- COMPONENTE: Carrossel Horizontal de Shorts ---------- */
+interface HorizontalShortsCarouselProps {
+  posts: any[];
+  user: any;
+  handleLike: (postId: string) => void;
+  onComment: (post: any) => void;
+}
+
+const HorizontalShortsCarousel = ({ 
+  posts, 
+  user,
+  handleLike,
+  onComment
+}: HorizontalShortsCarouselProps) => {
+  const carouselRef = useRef<HTMLDivElement>(null);
+  const [currentIndex, setCurrentIndex] = useState(0);
+  const { toast } = useToast();
+  
+  const scrollToIndex = (index: number) => {
+    if (carouselRef.current) {
+      const itemWidth = 280 + 16; // width + gap
+      carouselRef.current.scrollTo({
+        left: index * itemWidth,
+        behavior: 'smooth'
+      });
+      setCurrentIndex(index);
+    }
+  };
+  
+  const next = () => {
+    if (currentIndex < posts.length - 1) {
+      scrollToIndex(currentIndex + 1);
+    }
+  };
+  
+  const prev = () => {
+    if (currentIndex > 0) {
+      scrollToIndex(currentIndex - 1);
+    }
+  };
+  
+  const handleShare = async (post: any) => {
+    try {
+      if (navigator.share) {
+        await navigator.share({
+          title: `Confira este post de ${post.profiles?.username}`,
+          text: post.content || 'Confira este conteúdo incrível!',
+          url: window.location.href,
+        });
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        toast({
+          title: "Link copiado!",
+          description: "O link foi copiado para a área de transferência",
+        });
+      }
+    } catch (error) {
+      console.error('Erro ao compartilhar:', error);
+    }
+  };
+  
+  if (posts.length === 0) return null;
+  
+  return (
+    <Card className="border-0 shadow-lg bg-gradient-to-br from-gray-900 to-black overflow-hidden">
+      <CardContent className="p-4">
+        {/* Header do carrossel */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-red-500 to-orange-500 p-2 rounded-xl">
+              <Video className="h-5 w-5 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white">Shorts</h3>
+              <p className="text-sm text-white/70">
+                Vídeos curtos para você assistir agora
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={prev}
+              disabled={currentIndex === 0}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium text-white">
+              {currentIndex + 1} / {posts.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={next}
+              disabled={currentIndex === posts.length - 1}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Carrossel horizontal */}
+        <div className="relative">
+          <div 
+            ref={carouselRef}
+            className="flex gap-4 overflow-x-auto pb-4 scrollbar-hide scroll-smooth"
+            style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+          >
+            {posts.map((post, index) => (
+              <HorizontalShortsPlayer
+                key={post.id}
+                post={post}
+                user={user}
+                isActive={index === currentIndex}
+                onLike={handleLike}
+                onComment={onComment}
+              />
+            ))}
+          </div>
+          
+          {/* Indicadores */}
+          <div className="flex justify-center gap-2 mt-4">
+            {posts.map((_, index) => (
+              <button
+                key={index}
+                onClick={() => scrollToIndex(index)}
+                className={cn(
+                  "h-2 rounded-full transition-all",
+                  index === currentIndex ? "bg-white w-8" : "bg-white/30 w-2 hover:bg-white/50"
+                )}
+              />
+            ))}
+          </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -116,467 +947,6 @@ const AI_STYLES = [
   { id: 'cold', label: 'Frio / Inverno', icon: Music, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
 ];
 
-/* ---------- NOVO COMPONENTE: Carrossel Flash ---------- */
-interface FlashCarouselProps {
-  posts: any[];
-  currentIndex: number;
-  setCurrentIndex: (index: number) => void;
-  user: any;
-  handleLike: (postId: string) => void;
-  handleVote: (postId: string, type: "heart" | "bomb") => void;
-}
-
-const FlashCarousel = ({ 
-  posts, 
-  currentIndex, 
-  setCurrentIndex, 
-  user,
-  handleLike,
-  handleVote
-}: FlashCarouselProps) => {
-  const carouselRef = useRef<HTMLDivElement>(null);
-  const autoPlayRef = useRef<NodeJS.Timeout | null>(null);
-  const [isAudioEnabled, setIsAudioEnabled] = useState(false);
-  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
-  const [isVisible, setIsVisible] = useState(false);
-  const visibilityObserverRef = useRef<IntersectionObserver | null>(null);
-  const { toast } = useToast();
-
-  // Configura Intersection Observer para verificar visibilidade
-  useEffect(() => {
-    if (!carouselRef.current) return;
-
-    visibilityObserverRef.current = new IntersectionObserver(
-      ([entry]) => {
-        setIsVisible(entry.isIntersecting);
-        
-        // Se o carrossel saiu da tela, pausa o áudio
-        if (!entry.isIntersecting && currentAudioRef.current && !currentAudioRef.current.paused) {
-          currentAudioRef.current.pause();
-        }
-        
-        // Se o carrossel voltou para a tela e o áudio está habilitado, retoma
-        if (entry.isIntersecting && isAudioEnabled && currentAudioRef.current) {
-          const currentPost = posts[currentIndex];
-          if (currentPost?.audio_url) {
-            currentAudioRef.current.play().catch(console.error);
-          }
-        }
-      },
-      {
-        threshold: 0.5, // Quando 50% do elemento está visível
-        rootMargin: '0px'
-      }
-    );
-
-    visibilityObserverRef.current.observe(carouselRef.current);
-
-    return () => {
-      if (visibilityObserverRef.current) {
-        visibilityObserverRef.current.disconnect();
-      }
-    };
-  }, [posts, currentIndex, isAudioEnabled]);
-
-  // Configura autoplay para passar os posts a cada 5 segundos
-  useEffect(() => {
-    if (posts.length <= 1 || !isVisible) return;
-    
-    autoPlayRef.current = setInterval(() => {
-      setCurrentIndex((prevIndex) => (prevIndex + 1) % posts.length);
-    }, 5000);
-
-    return () => {
-      if (autoPlayRef.current) {
-        clearInterval(autoPlayRef.current);
-      }
-    };
-  }, [posts.length, setCurrentIndex, isVisible]);
-
-  // Para o áudio quando o componente é desmontado
-  useEffect(() => {
-    return () => {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-        currentAudioRef.current = null;
-      }
-      if (autoPlayRef.current) {
-        clearInterval(autoPlayRef.current);
-      }
-    };
-  }, []);
-
-  const nextPost = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-    }
-    setCurrentIndex((currentIndex + 1) % posts.length);
-    resetAutoPlay();
-  };
-
-  const prevPost = () => {
-    if (currentAudioRef.current) {
-      currentAudioRef.current.pause();
-    }
-    setCurrentIndex((currentIndex - 1 + posts.length) % posts.length);
-    resetAutoPlay();
-  };
-
-  const resetAutoPlay = () => {
-    if (autoPlayRef.current) {
-      clearInterval(autoPlayRef.current);
-    }
-    if (isVisible) {
-      autoPlayRef.current = setInterval(() => {
-        setCurrentIndex((prevIndex) => (prevIndex + 1) % posts.length);
-      }, 5000);
-    }
-  };
-
-  const handleFlashAudio = (audioUrl: string) => {
-    const cleanUrl = audioUrl.replace(/^audio::/, "");
-    
-    if (!isAudioEnabled) {
-      // Se áudio está desabilitado, apenas habilita
-      setIsAudioEnabled(true);
-      toast({
-        title: "Áudio habilitado",
-        description: "O áudio será reproduzido automaticamente nos posts visíveis",
-      });
-      
-      // Se o carrossel está visível, inicia a reprodução
-      if (isVisible) {
-        const currentPost = posts[currentIndex];
-        if (currentPost?.audio_url === audioUrl) {
-          const audio = new Audio(cleanUrl);
-          currentAudioRef.current = audio;
-          
-          audio.play().catch(error => {
-            console.error("Erro ao reproduzir áudio:", error);
-            toast({
-              variant: "destructive",
-              title: "Erro no áudio",
-              description: "Não foi possível reproduzir o áudio",
-            });
-          });
-          
-          audio.onended = () => {
-            currentAudioRef.current = null;
-          };
-        }
-      }
-      return;
-    }
-
-    // Se áudio já está tocando, pausa
-    if (currentAudioRef.current && !currentAudioRef.current.paused) {
-      currentAudioRef.current.pause();
-      currentAudioRef.current = null;
-      setIsAudioEnabled(false);
-      toast({
-        title: "Áudio desabilitado",
-        description: "O áudio foi pausado em todos os posts",
-      });
-    } else {
-      // Inicia novo áudio apenas se estiver visível
-      if (!isVisible) {
-        toast({
-          title: "Áudio não disponível",
-          description: "O post precisa estar visível para reproduzir áudio",
-        });
-        return;
-      }
-      
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-      }
-      
-      const audio = new Audio(cleanUrl);
-      currentAudioRef.current = audio;
-      
-      audio.play().catch(error => {
-        console.error("Erro ao reproduzir áudio:", error);
-        toast({
-          variant: "destructive",
-          title: "Erro no áudio",
-          description: "Não foi possível reproduzir o áudio",
-        });
-      });
-      
-      audio.onended = () => {
-        currentAudioRef.current = null;
-      };
-    }
-  };
-
-  // Reproduz áudio automaticamente quando habilitado, mudar de post e estiver visível
-  useEffect(() => {
-    if (isAudioEnabled && isVisible) {
-      const currentPost = posts[currentIndex];
-      if (currentPost?.audio_url) {
-        const cleanUrl = currentPost.audio_url.replace(/^audio::/, "");
-        
-        // Pausa áudio anterior
-        if (currentAudioRef.current) {
-          currentAudioRef.current.pause();
-        }
-        
-        // Inicia novo áudio
-        const audio = new Audio(cleanUrl);
-        currentAudioRef.current = audio;
-        
-        audio.play().catch(error => {
-          console.error("Erro ao reproduzir áudio automaticamente:", error);
-        });
-        
-        audio.onended = () => {
-          currentAudioRef.current = null;
-        };
-      }
-    }
-    
-    // Limpeza ao mudar de post
-    return () => {
-      if (currentAudioRef.current) {
-        currentAudioRef.current.pause();
-      }
-    };
-  }, [currentIndex, posts, isAudioEnabled, isVisible]);
-
-  const currentPost = posts[currentIndex];
-  const img = currentPost?.media_urls?.[0] ? currentPost.media_urls[0].replace(/^image::|^video::|^audio::/, "") : null;
-  const isVoting = currentPost?.voting_period_active;
-  const heartCount = currentPost?.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
-  const bombCount = currentPost?.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
-  const totalVotes = heartCount + bombCount;
-  const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
-  const isLiked = currentPost?.likes?.some((like: any) => like.user_id === user?.id);
-  const userVote = currentPost?.post_votes?.find((v:any) => v.user_id === user?.id);
-
-  return (
-    <div ref={carouselRef} className="relative mb-6">
-      {/* Título da seção Flash */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-2">
-          <div className="bg-primary/10 p-2 rounded-lg">
-            <Volume2 className="h-5 w-5 text-primary" />
-          </div>
-          <h3 className="text-xl font-bold">Flash Posts</h3>
-          {/* Indicador de status do áudio */}
-          <Badge variant={isAudioEnabled ? "default" : "outline"} className="ml-2">
-            {isAudioEnabled ? (
-              <>
-                <Volume2 className="h-3 w-3 mr-1" />
-                Áudio Ativo
-              </>
-            ) : (
-              <>
-                <VolumeX className="h-3 w-3 mr-1" />
-                Áudio Inativo
-              </>
-            )}
-          </Badge>
-          {/* Indicador de visibilidade (apenas para debug) */}
-          <Badge variant="outline" className="ml-2">
-            {isVisible ? "🟢 Visível" : "🔴 Fora da tela"}
-          </Badge>
-        </div>
-        
-        {/* Indicador de posts */}
-        <div className="flex items-center gap-2">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={prevPost}
-            className="h-8 w-8 rounded-full"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm font-medium">
-            {currentIndex + 1} / {posts.length}
-          </span>
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={nextPost}
-            className="h-8 w-8 rounded-full"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Carrossel principal */}
-      <div className="relative">
-        <Card className="border-0 shadow-xl overflow-hidden bg-gradient-to-br from-gray-900 to-black">
-          <div className="aspect-[4/5] max-h-[500px] relative">
-            {/* Imagem do post */}
-            {img && (
-              <img
-                src={img}
-                alt="Flash post"
-                className="w-full h-full object-cover"
-              />
-            )}
-            
-            {/* Overlay gradiente */}
-            <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-transparent" />
-            
-            {/* Controles superiores */}
-            <div className="absolute top-4 left-4 right-4 flex items-center justify-between z-10">
-              <div className="flex items-center gap-2">
-                <Avatar className="h-8 w-8 border-2 border-white/50">
-                  <AvatarImage src={currentPost?.profiles?.avatar_url} />
-                  <AvatarFallback className="bg-primary">
-                    {currentPost?.profiles?.username?.[0]}
-                  </AvatarFallback>
-                </Avatar>
-                <div>
-                  <UserLink 
-                    userId={currentPost?.user_id} 
-                    username={currentPost?.profiles?.username || ''}
-                    className="font-bold text-white text-sm"
-                  >
-                    {currentPost?.profiles?.username}
-                  </UserLink>
-                  <p className="text-xs text-white/70">
-                    {new Date(currentPost?.created_at).toLocaleDateString('pt-BR')}
-                  </p>
-                </div>
-              </div>
-              
-              {isVoting && <VotingCountdown endsAt={currentPost.voting_ends_at} variant="flash" />}
-            </div>
-
-            {/* Controles inferiores */}
-            <div className="absolute bottom-0 left-0 right-0 p-4">
-              {/* Área de votação (se estiver em votação) */}
-              {isVoting ? (
-                <div className="bg-black/40 backdrop-blur-md rounded-xl p-4 border border-white/10">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Bomb className="h-4 w-4 text-red-500" />
-                    <div className="flex-1 h-2 bg-white/20 rounded-full overflow-hidden flex">
-                      <div 
-                        style={{ width: `${approvalRate}%` }} 
-                        className="h-full bg-green-500 transition-all duration-500" 
-                      />
-                      <div 
-                        style={{ width: `${100 - approvalRate}%` }} 
-                        className="h-full bg-red-500 transition-all duration-500" 
-                      />
-                    </div>
-                    <Heart className="h-4 w-4 text-green-500 fill-green-500" />
-                  </div>
-                  <div className="flex gap-2">
-                    <Button
-                      size="sm"
-                      className={cn(
-                        "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
-                        userVote?.vote_type === 'bomb' && 
-                        "bg-red-500/50 hover:bg-red-500/60"
-                      )}
-                      onClick={() => handleVote(currentPost.id, "bomb")}
-                    >
-                      <Bomb className="mr-2 h-4 w-4" />
-                      Bomb ({bombCount})
-                    </Button>
-                    <Button
-                      size="sm"
-                      className={cn(
-                        "flex-1 bg-white/10 hover:bg-white/20 text-white border-0 backdrop-blur-sm",
-                        userVote?.vote_type === 'heart' && 
-                        "bg-green-500/50 hover:bg-green-500/60"
-                      )}
-                      onClick={() => handleVote(currentPost.id, "heart")}
-                    >
-                      <Heart className="mr-2 h-4 w-4 fill-current" />
-                      Heart ({heartCount})
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                /* Área normal com interações */
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-4">
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      onClick={() => handleLike(currentPost?.id)}
-                      className={cn(
-                        "rounded-full text-white hover:bg-white/20",
-                        isLiked && "text-red-500"
-                      )}
-                    >
-                      <Heart className={cn("h-6 w-6", isLiked && "fill-current")} />
-                    </Button>
-                    
-                    <Button
-                      variant="ghost"
-                      size="icon"
-                      className="rounded-full text-white hover:bg-white/20"
-                    >
-                      <MessageCircle className="h-6 w-6" />
-                    </Button>
-                    
-                    {/* Botão de áudio */}
-                    {currentPost?.audio_url && (
-                      <Button
-                        variant={isAudioEnabled ? "default" : "ghost"}
-                        size="icon"
-                        onClick={() => handleFlashAudio(currentPost.audio_url)}
-                        className={cn(
-                          "rounded-full",
-                          isAudioEnabled ? "bg-primary text-white" : "text-white hover:bg-white/20"
-                        )}
-                      >
-                        {isAudioEnabled ? (
-                          <Volume2 className="h-6 w-6" />
-                        ) : (
-                          <VolumeX className="h-6 w-6" />
-                        )}
-                      </Button>
-                    )}
-                  </div>
-                  
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="rounded-full text-white hover:bg-white/20"
-                  >
-                    <Bookmark className="h-6 w-6" />
-                  </Button>
-                </div>
-              )}
-            </div>
-          </div>
-        </Card>
-
-        {/* Miniaturas dos próximos posts */}
-        {posts.length > 1 && (
-          <div className="flex justify-center gap-2 mt-4">
-            {posts.slice(0, 5).map((_, index) => (
-              <button
-                key={index}
-                onClick={() => {
-                  if (currentAudioRef.current) {
-                    currentAudioRef.current.pause();
-                  }
-                  setCurrentIndex(index);
-                  resetAutoPlay();
-                }}
-                className={cn(
-                  "h-2 rounded-full transition-all",
-                  index === currentIndex ? "bg-primary w-8" : "bg-gray-300 w-2 hover:bg-gray-400"
-                )}
-              />
-            ))}
-          </div>
-        )}
-      </div>
-    </div>
-  );
-};
-
 /* ---------- Helpers ---------- */
 const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
 const isVideoUrl = (u: string) => u.startsWith(MEDIA_PREFIX.video) || /\.(mp4|webm|ogg|mov|m4v)$/i.test(u.split("::").pop() || u);
@@ -595,6 +965,51 @@ async function getMediaDurationSafe(file: File, timeoutMs = 4000): Promise<numbe
     media.onloadedmetadata = () => { clearTimeout(timer); done(isFinite(media.duration) ? media.duration : 0); };
     media.onerror = () => { clearTimeout(timer); done(0); };
     media.src = url;
+  });
+}
+
+async function compressVideo(file: File, maxSize = 720): Promise<File> {
+  if (!file.type.startsWith("video/")) return file;
+  
+  return new Promise((resolve, reject) => {
+    const video = document.createElement('video');
+    video.preload = 'metadata';
+    
+    video.onloadedmetadata = () => {
+      URL.revokeObjectURL(video.src);
+      
+      const scale = maxSize / Math.max(video.videoWidth, video.videoHeight);
+      const width = Math.floor(video.videoWidth * scale);
+      const height = Math.floor(video.videoHeight * scale);
+      
+      const canvas = document.createElement('canvas');
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      
+      video.currentTime = 0.1; // Pega um frame
+      
+      video.onseeked = () => {
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, width, height);
+          canvas.toBlob((blob) => {
+            if (blob) {
+              // Para vídeos, retornamos o arquivo original (compressão real seria mais complexa)
+              resolve(file);
+            } else {
+              resolve(file);
+            }
+          }, 'image/jpeg', 0.8);
+        }
+      };
+    };
+    
+    video.onerror = () => {
+      URL.revokeObjectURL(video.src);
+      resolve(file); // Fallback para arquivo original
+    };
+    
+    video.src = URL.createObjectURL(file);
   });
 }
 
@@ -755,7 +1170,8 @@ export default function Feed() {
   const [mediaFiles, setMediaFiles] = useState<File[]>([]);
   const [uploading, setUploading] = useState(false);
   const [processing, setProcessing] = useState(false);
-  const [postType, setPostType] = useState<'standard' | 'photo_audio'>('standard');
+  const [postType, setPostType] = useState<'standard' | 'photo_audio' | 'viral_clips'>('standard');
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
   const { isRecording, audioBlob, recordingTime, startRecording, stopRecording, resetRecording } = useAudioRecorder();
   const { playingVideo, muted, playVideo, pauseVideo, toggleMute, registerVideo, unregisterVideo } = useVideoAutoPlayer();
@@ -767,6 +1183,7 @@ export default function Feed() {
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
+  const viralClipInputRef = useRef<HTMLInputElement>(null);
 
   const [editingPost, setEditingPost] = useState<PostRow | null>(null);
   const [editContent, setEditContent] = useState("");
@@ -776,9 +1193,6 @@ export default function Feed() {
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
   const [viewerIsVideo, setViewerIsVideo] = useState(false);
   const [voteUsersDialog, setVoteUsersDialog] = useState<{open: boolean; postId: string | null; voteType: "heart" | "bomb" | null}>({ open: false, postId: null, voteType: null });
-
-  // Estados para o carrossel Flash
-  const [currentFlashIndex, setCurrentFlashIndex] = useState(0);
 
   /* Data */
   useEffect(() => {
@@ -826,22 +1240,56 @@ export default function Feed() {
     if (list.length === 0) return;
     setProcessing(true);
     const accepted: File[] = [];
+    
     for (const f of list) {
       try {
-        if (f.type.startsWith("image/")) accepted.push(await compressImage(f, 1440, 0.8));
-        else if (f.type.startsWith("video/")) {
+        if (f.type.startsWith("image/")) {
+          accepted.push(await compressImage(f, 1440, 0.8));
+        } else if (f.type.startsWith("video/")) {
           const dur = await getMediaDurationSafe(f).catch(() => 0);
-          if (dur <= 15.3) accepted.push(f); else toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
+          
+          // Verifica duração baseada no tipo de post
+          if (postType === 'viral_clips') {
+            if (dur <= 30.3) {
+              accepted.push(f);
+              setVideoDuration(dur);
+            } else {
+              toast({ 
+                variant: "destructive", 
+                title: "Vídeo muito longo", 
+                description: "ViralClips devem ter no máximo 30 segundos" 
+              });
+            }
+          } else if (postType === 'photo_audio') {
+            if (dur <= 15.3) {
+              accepted.push(f);
+            } else {
+              toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
+            }
+          } else if (postType === 'standard') {
+            if (dur <= 15.3) {
+              accepted.push(f);
+            } else {
+              toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
+            }
+          }
         } else if (f.type.startsWith("audio/")) {
           const dur = await getMediaDurationSafe(f).catch(() => 0);
           if (dur <= 10) accepted.push(f); else toast({ variant: "destructive", title: "Áudio longo (Max 10s)" });
         }
-      } catch {}
+      } catch (error) {
+        console.error("Erro ao processar arquivo:", error);
+      }
     }
+    
     setProcessing(false);
     if (accepted.length) setMediaFiles(prev => [...prev, ...accepted]);
   };
-  const removeFile = (idx: number) => setMediaFiles(prev => prev.filter((_, i) => i !== idx));
+  
+  const removeFile = (idx: number) => {
+    setMediaFiles(prev => prev.filter((_, i) => i !== idx));
+    setVideoDuration(null);
+  };
 
   /* IA Logic (Com Rejuvenescer Avançado) */
   const fileToBase64 = (file: File): Promise<string> => {
@@ -940,10 +1388,17 @@ export default function Feed() {
 
   /* Post Creation */
   const handleCreatePost = async () => {
+    // Validações específicas por tipo
     if (postType === 'photo_audio' && (!audioBlob || mediaFiles.length === 0)) { 
       toast({ variant: "destructive", title: "Foto + Áudio obrigatórios" }); 
       return; 
     }
+    
+    if (postType === 'viral_clips' && mediaFiles.length === 0) { 
+      toast({ variant: "destructive", title: "Selecione um vídeo para ViralClip" }); 
+      return; 
+    }
+    
     if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { 
       toast({ variant: "destructive", title: "Conteúdo vazio" }); 
       return; 
@@ -960,11 +1415,19 @@ export default function Feed() {
         const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
         await supabase.storage.from("media").upload(path, file);
         const { data } = supabase.storage.from("media").getPublicUrl(path);
-        mediaUrls.push((file.type.startsWith("video/") ? MEDIA_PREFIX.video : MEDIA_PREFIX.image) + data.publicUrl);
+        
+        // Adiciona prefixo correto baseado no tipo de arquivo
+        if (file.type.startsWith("video/")) {
+          mediaUrls.push(MEDIA_PREFIX.video + data.publicUrl);
+        } else if (file.type.startsWith("image/")) {
+          mediaUrls.push(MEDIA_PREFIX.image + data.publicUrl);
+        } else if (file.type.startsWith("audio/")) {
+          mediaUrls.push(MEDIA_PREFIX.audio + data.publicUrl);
+        }
       }
       
-      // Upload de áudio se existir
-      if (audioBlob) {
+      // Upload de áudio se existir (para photo_audio)
+      if (audioBlob && postType === 'photo_audio') {
         const path = `${user?.id}/${Date.now()}-audio.wav`;
         await supabase.storage.from("media").upload(path, audioBlob);
         const { data } = supabase.storage.from("media").getPublicUrl(path);
@@ -994,16 +1457,28 @@ export default function Feed() {
         await saveMentions(post.id, "post", content, user!.id); 
       }
       
-      // Mostra notificação e redireciona para Arena
+      // Mensagem personalizada por tipo de post
+      let successMessage = "Post publicado! 🎉";
+      let successDescription = "Seu post foi enviado para a Arena. Boa sorte na votação!";
+      
+      if (postType === 'viral_clips') {
+        successMessage = "ViralClip publicado! 🔥";
+        successDescription = "Seu ViralClip foi enviado para a Arena. Torcemos para que viralize!";
+      } else if (postType === 'photo_audio') {
+        successMessage = "Shorts publicado! 🎬";
+        successDescription = "Seu Shorts foi enviado para a Arena. Boa sorte na votação!";
+      }
+      
       toast({ 
-        title: "Post publicado! 🎉", 
-        description: "Seu post foi enviado para a Arena. Boa sorte na votação!" 
+        title: successMessage, 
+        description: successDescription 
       });
       
       // Limpa o formulário
       setNewPost(""); 
       setMediaFiles([]); 
       resetRecording();
+      setVideoDuration(null);
       refetch();
       
       // Redireciona para a tela de Arena após 2 segundos
@@ -1048,6 +1523,8 @@ export default function Feed() {
   });
 
   const flashPosts = posts?.filter(x => x.post_type === 'photo_audio') || [];
+  const viralClips = posts?.filter(x => x.post_type === 'viral_clips') || [];
+  const standardPosts = posts?.filter(x => x.post_type === 'standard') || [];
 
   const { data: comments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id], enabled: !!openingCommentsFor,
@@ -1057,54 +1534,311 @@ export default function Feed() {
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 pb-20">
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
-        <div className="flex justify-center"><img src="https://sistemaapp.netlify.app/assets/logo-wTbWaudN.png" alt="Logo" className="w-32 h-32 object-contain"/></div>
+        <div className="flex justify-center">
+          <img src="https://sistemaapp.netlify.app/assets/logo-wTbWaudN.png" alt="Logo" className="w-32 h-32 object-contain"/>
+        </div>
 
+        {/* Card de criação de post */}
         <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
-            <div className="flex gap-2 mb-4 justify-center">
-              <Button variant={postType==='standard'?"default":"outline"} onClick={()=>setPostType('standard')} className="rounded-full px-6">Feed</Button>
-              <Button variant={postType==='photo_audio'?"default":"outline"} onClick={()=>setPostType('photo_audio')} className="rounded-full px-6">Flash</Button>
+            <div className="flex gap-2 mb-4 justify-center flex-wrap">
+              <Button 
+                variant={postType==='standard'?"default":"outline"} 
+                onClick={()=>{
+                  setPostType('standard');
+                  setMediaFiles([]);
+                  setVideoDuration(null);
+                }} 
+                className="rounded-full px-6"
+              >
+                <MessageCircle className="h-4 w-4 mr-2" />
+                Feed
+              </Button>
+              <Button 
+                variant={postType==='photo_audio'?"default":"outline"} 
+                onClick={()=>{
+                  setPostType('photo_audio');
+                  setMediaFiles([]);
+                  setVideoDuration(null);
+                }} 
+                className="rounded-full px-6"
+              >
+                <Video className="h-4 w-4 mr-2" />
+                Shorts
+              </Button>
+              <Button 
+                variant={postType==='viral_clips'?"default":"outline"} 
+                onClick={()=>{
+                  setPostType('viral_clips');
+                  setMediaFiles([]);
+                  setVideoDuration(null);
+                }} 
+                className="rounded-full px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0"
+              >
+                <Flame className="h-4 w-4 mr-2" />
+                ViralClips
+              </Button>
             </div>
 
             <div className="flex gap-3">
-              <Avatar><AvatarImage src={user?.user_metadata?.avatar_url}/><AvatarFallback>{user?.email?.[0]}</AvatarFallback></Avatar>
+              <Avatar>
+                <AvatarImage src={user?.user_metadata?.avatar_url}/>
+                <AvatarFallback>{user?.email?.[0]}</AvatarFallback>
+              </Avatar>
               <div className="flex-1 space-y-3">
-                {postType === 'standard' && <MentionTextarea value={newPost} onChange={(e)=>setNewPost(e.target.value)} placeholder="No que está pensando? @menção #tag" className="bg-muted/30 border-0 min-h-[100px] rounded-xl"/>}
+                {/* Texto para Feed padrão */}
+                {postType === 'standard' && (
+                  <MentionTextarea 
+                    value={newPost} 
+                    onChange={(e)=>setNewPost(e.target.value)} 
+                    placeholder="No que está pensando? @menção #tag" 
+                    className="bg-muted/30 border-0 min-h-[100px] rounded-xl"
+                  />
+                )}
+                
+                {/* Área para Shorts */}
                 {postType === 'photo_audio' && (
                   <div className="text-center p-4 border border-dashed rounded-xl bg-muted/20">
                     <p className="text-sm text-muted-foreground mb-2">1. Tire uma foto &nbsp; 2. Grave um áudio (10s)</p>
-                    {!audioBlob ? <Button variant={isRecording?"destructive":"secondary"} onClick={isRecording?stopRecording:startRecording} className="w-full">{isRecording?`Parar (${10-recordingTime}s)`:<><Mic className="mr-2 h-4 w-4"/> Gravar Áudio</>}</Button> : <div className="flex items-center justify-center gap-2 text-green-600"><Volume2 className="h-4 w-4"/> Gravado! <Button variant="ghost" size="sm" onClick={resetRecording} className="text-destructive h-6 w-6 p-0"><X className="h-4 w-4"/></Button></div>}
+                    {!audioBlob ? (
+                      <Button 
+                        variant={isRecording?"destructive":"secondary"} 
+                        onClick={isRecording?stopRecording:startRecording} 
+                        className="w-full"
+                      >
+                        {isRecording ? (
+                          <>
+                            <Square className="mr-2 h-4 w-4" />
+                            Parar ({10-recordingTime}s)
+                          </>
+                        ) : (
+                          <>
+                            <Mic className="mr-2 h-4 w-4" /> 
+                            Gravar Áudio
+                          </>
+                        )}
+                      </Button>
+                    ) : (
+                      <div className="flex items-center justify-center gap-2 text-green-600">
+                        <Volume2 className="h-4 w-4" /> 
+                        Gravado! 
+                        <Button variant="ghost" size="sm" onClick={resetRecording} className="text-destructive h-6 w-6 p-0">
+                          <X className="h-4 w-4"/>
+                        </Button>
+                      </div>
+                    )}
+                  </div>
+                )}
+                
+                {/* Área para ViralClips */}
+                {postType === 'viral_clips' && (
+                  <div className="text-center p-4 border-2 border-dashed border-purple-500/50 rounded-xl bg-gradient-to-br from-purple-50 to-pink-50">
+                    <div className="flex items-center justify-center gap-2 mb-3">
+                      <Flame className="h-5 w-5 text-purple-600" />
+                      <h3 className="font-bold text-purple-700">ViralClips</h3>
+                      <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white">
+                        Até 30s
+                      </Badge>
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">
+                      Vídeos curtos que podem viralizar! Máximo 30 segundos.
+                    </p>
+                    
+                    {videoDuration && (
+                      <div className="mb-3 p-2 bg-white rounded-lg">
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-xs font-medium">Duração do vídeo:</span>
+                          <span className="text-xs font-bold">{videoDuration.toFixed(1)}s</span>
+                        </div>
+                        <Progress 
+                          value={(videoDuration / 30) * 100} 
+                          className={cn(
+                            "h-2",
+                            videoDuration > 30 ? "bg-red-500" : "bg-green-500"
+                          )}
+                        />
+                        <div className="flex justify-between text-xs text-muted-foreground mt-1">
+                          <span>0s</span>
+                          <span className={cn(videoDuration > 30 ? "text-red-600 font-bold" : "text-green-600 font-bold")}>
+                            {videoDuration > 30 ? "Muito longo!" : "Duração OK"}
+                          </span>
+                          <span>30s</span>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <input 
+                      ref={viralClipInputRef} 
+                      type="file" 
+                      accept="video/*" 
+                      className="hidden" 
+                      onChange={async (e) => {
+                        const files = e.target.files;
+                        if (files && files[0]) {
+                          const file = files[0];
+                          if (file.type.startsWith("video/")) {
+                            const duration = await getMediaDurationSafe(file);
+                            setVideoDuration(duration);
+                            if (duration <= 30.3) {
+                              setMediaFiles([file]);
+                            } else {
+                              toast({
+                                variant: "destructive",
+                                title: "Vídeo muito longo",
+                                description: "ViralClips devem ter no máximo 30 segundos"
+                              });
+                            }
+                          }
+                        }
+                      }}
+                    />
+                    
+                    <Button 
+                      variant="outline" 
+                      onClick={() => viralClipInputRef.current?.click()}
+                      className="w-full border-purple-500 text-purple-600 hover:bg-purple-50 hover:text-purple-700"
+                    >
+                      <Video className="mr-2 h-4 w-4" />
+                      {mediaFiles.length > 0 ? "Trocar Vídeo" : "Selecionar Vídeo"}
+                    </Button>
                   </div>
                 )}
 
                 {/* Multi-Media Preview Carousel */}
                 {mediaFiles.length > 0 && (
-                  <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                    <div className="flex w-max space-x-2 p-2">
-                      {mediaFiles.map((file, i) => (
-                        <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden group shrink-0">
-                          {file.type.startsWith("image/") ? <img src={URL.createObjectURL(file)} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-black flex items-center justify-center"><Video className="text-white"/></div>}
-                          <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" onClick={()=>removeFile(i)}><X className="h-3 w-3"/></Button>
-                          {file.type.startsWith("image/") && <Button size="icon" className="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-purple-600 hover:bg-purple-700" onClick={()=>setAiEditing({open: true, imageIndex: i, selectedStyle: null, loading: false})}><Wand2 className="h-3 w-3"/></Button>}
-                        </div>
-                      ))}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {postType === 'viral_clips' ? 'Vídeo selecionado:' : 'Mídias:'}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setMediaFiles([]);
+                          setVideoDuration(null);
+                        }}
+                        className="h-6 text-xs"
+                      >
+                        Limpar tudo
+                      </Button>
                     </div>
-                  </ScrollArea>
+                    
+                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                      <div className="flex w-max space-x-2 p-2">
+                        {mediaFiles.map((file, i) => (
+                          <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden group shrink-0">
+                            {file.type.startsWith("image/") ? (
+                              <img src={URL.createObjectURL(file)} className="w-full h-full object-cover"/>
+                            ) : file.type.startsWith("video/") ? (
+                              <div className="w-full h-full bg-black flex items-center justify-center relative">
+                                <Video className="text-white h-8 w-8" />
+                                {postType === 'viral_clips' && videoDuration && (
+                                  <div className="absolute bottom-1 left-1 right-1 bg-black/70 rounded text-xs text-white text-center py-0.5">
+                                    {videoDuration.toFixed(1)}s
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="w-full h-full bg-black flex items-center justify-center">
+                                <Volume2 className="text-white h-8 w-8" />
+                              </div>
+                            )}
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="absolute top-1 right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                              onClick={()=>removeFile(i)}
+                            >
+                              <X className="h-3 w-3"/>
+                            </Button>
+                            {file.type.startsWith("image/") && (
+                              <Button 
+                                size="icon" 
+                                className="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-purple-600 hover:bg-purple-700" 
+                                onClick={()=>setAiEditing({open: true, imageIndex: i, selectedStyle: null, loading: false})}
+                              >
+                                <Wand2 className="h-3 w-3"/>
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between">
                   <div className="flex gap-1">
+                    {/* Botão galeria (imagens/vídeos) */}
                     <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={()=>galleryInputRef.current?.click()} 
+                      disabled={postType === 'viral_clips'}
+                    >
+                      <Images className="h-5 w-5 text-muted-foreground"/>
+                    </Button>
+                    
+                    {/* Botão câmera foto */}
                     <input ref={cameraPhotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
-                    <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
-                    <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()}><Images className="h-5 w-5 text-muted-foreground"/></Button>
-                    <Button variant="ghost" size="icon" onClick={()=>cameraPhotoInputRef.current?.click()}><Camera className="h-5 w-5 text-muted-foreground"/></Button>
-                    {/* Botão IA dedicado (Abre Galeria) */}
-                    <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()} className="text-purple-600 bg-purple-50 hover:bg-purple-100"><Sparkles className="h-5 w-5"/></Button>
-                    {postType==='standard'&&<Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}><Video className="h-5 w-5 text-muted-foreground"/></Button>}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={()=>cameraPhotoInputRef.current?.click()}
+                      disabled={postType === 'viral_clips'}
+                    >
+                      <Camera className="h-5 w-5 text-muted-foreground"/>
+                    </Button>
+                    
+                    {/* Botão IA dedicado */}
+                    <Button 
+                      variant="ghost" 
+                      size="icon" 
+                      onClick={()=>galleryInputRef.current?.click()} 
+                      className="text-purple-600 bg-purple-50 hover:bg-purple-100"
+                      disabled={postType === 'viral_clips'}
+                    >
+                      <Sparkles className="h-5 w-5"/>
+                    </Button>
+                    
+                    {/* Botão câmera vídeo (apenas para feed padrão) */}
+                    {postType === 'standard' && (
+                      <>
+                        <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
+                        <Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}>
+                          <Video className="h-5 w-5 text-muted-foreground"/>
+                        </Button>
+                      </>
+                    )}
                   </div>
-                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">
-                    {uploading?"Publicando...":"Publicar na Arena"}
+                  
+                  <Button 
+                    onClick={handleCreatePost} 
+                    disabled={uploading || processing} 
+                    className={cn(
+                      "rounded-full px-6 font-bold",
+                      postType === 'viral_clips' 
+                        ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700" 
+                        : "bg-gradient-to-r from-primary to-purple-600"
+                    )}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Publicando...
+                      </>
+                    ) : processing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processando...
+                      </>
+                    ) : postType === 'viral_clips' ? (
+                      "Publicar ViralClip"
+                    ) : (
+                      "Publicar na Arena"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -1112,21 +1846,8 @@ export default function Feed() {
           </CardContent>
         </Card>
 
-        {/* Carrossel Flash */}
-        {flashPosts.length > 0 && (
-          <FlashCarousel
-            posts={flashPosts}
-            currentIndex={currentFlashIndex}
-            setCurrentIndex={setCurrentFlashIndex}
-            user={user}
-            handleLike={handleLike}
-            handleVote={handleVote}
-          />
-        )}
-
-        {posts?.map((post) => {
-          if (post.post_type === 'photo_audio') return null;
-          
+        {/* Lista de posts com carrosseis estratégicos */}
+        {standardPosts?.map((post, index) => {
           const isVoting = post.voting_period_active;
           const heartCount = post.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
           const bombCount = post.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
@@ -1134,97 +1855,200 @@ export default function Feed() {
           const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
 
           return (
-            <Card key={post.id} className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
-              <CardContent className="p-0">
-                {/* Cabeçalho do Post */}
-                <div className="p-4 flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <Avatar><AvatarImage src={post.profiles?.avatar_url}/><AvatarFallback>{post.profiles?.username?.[0]}</AvatarFallback></Avatar>
-                    <div>
-                      <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-sm hover:underline">{post.profiles?.username}</UserLink>
-                      <div className="flex items-center gap-2">
-                         <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
-                         {/* Indicador de Status */}
-                         {isVoting ? <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">Em Votação</Badge> : <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">Aprovado</Badge>}
+            <div key={post.id}>
+              {/* Post normal */}
+              <Card className={cn("border-0 shadow-md overflow-hidden transition-all", isVoting ? "ring-2 ring-orange-400/50" : "hover:shadow-lg")}>
+                <CardContent className="p-0">
+                  {/* Cabeçalho do Post */}
+                  <div className="p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-3">
+                      <Avatar>
+                        <AvatarImage src={post.profiles?.avatar_url}/>
+                        <AvatarFallback>{post.profiles?.username?.[0]}</AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-sm hover:underline">
+                          {post.profiles?.username}
+                        </UserLink>
+                        <div className="flex items-center gap-2">
+                           <p className="text-xs text-muted-foreground">{fmtDateTime(post.created_at)}</p>
+                           {/* Indicador de Status */}
+                           {isVoting ? (
+                             <Badge variant="secondary" className="text-[10px] h-4 bg-orange-100 text-orange-700 hover:bg-orange-100">
+                               Em Votação
+                             </Badge>
+                           ) : (
+                             <Badge variant="outline" className="text-[10px] h-4 border-green-200 text-green-700">
+                               Aprovado
+                             </Badge>
+                           )}
+                        </div>
                       </div>
                     </div>
+                    {post.user_id === user?.id && (
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button variant="ghost" size="icon">
+                            <MoreVertical className="h-4 w-4"/>
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          <DropdownMenuItem onClick={() => { setEditingPost(post); setEditContent(post.content||""); }}>
+                            <Pencil className="mr-2 h-4 w-4"/> Editar
+                          </DropdownMenuItem>
+                          <DropdownMenuItem onClick={() => deleteMutation.mutate(post.id)} className="text-red-600">
+                            <Trash2 className="mr-2 h-4 w-4"/> Excluir
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    )}
                   </div>
-                  {post.user_id === user?.id && (
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild><Button variant="ghost" size="icon"><MoreVertical className="h-4 w-4"/></Button></DropdownMenuTrigger>
-                      <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => { setEditingPost(post); setEditContent(post.content||""); }}><Pencil className="mr-2 h-4 w-4"/> Editar</DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => deleteMutation.mutate(post.id)} className="text-red-600"><Trash2 className="mr-2 h-4 w-4"/> Excluir</DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  )}
-                </div>
-                
-                {post.content && <div className="px-4 pb-3 text-sm"><MentionText text={post.content}/></div>}
-                
-                {post.media_urls?.length > 0 && (
-                  <div className={cn("grid gap-0.5", post.media_urls.length===1 ? "grid-cols-1" : "grid-cols-2")}>
-                    {post.media_urls.map((u:string, i:number) => {
-                      const url = stripPrefix(u);
-                      if (isVideoUrl(u)) {
-                        const vidId = `${post.id}-${i}`;
-                        return (
-                          <div key={i} className="relative bg-black aspect-square">
-                            <video ref={el=>{if(el)registerVideo(vidId, el); else unregisterVideo(vidId);}} data-video-id={vidId} src={url} className="w-full h-full object-cover" loop muted={muted} playsInline preload="metadata" onClick={()=>playingVideo===vidId?pauseVideo(vidId):playVideo(vidId)}/>
-                            <Button variant="ghost" size="icon" className="absolute bottom-2 left-2 text-white bg-black/50 rounded-full h-8 w-8" onClick={(e)=>{e.stopPropagation(); toggleMute();}}>{muted?<VolumeX className="h-4 w-4"/>:<Volume2 className="h-4 w-4"/>}</Button>
-                          </div>
-                        );
-                      }
-                      return <ProgressiveImage key={i} src={url} alt="Post" className="aspect-square cursor-pointer" onClick={()=>{setViewerUrl(url); setViewerOpen(true);}}/>;
-                    })}
-                  </div>
-                )}
-
-                {/* ÁREA DE AÇÃO - LÓGICA CONDICIONAL */}
-                {isVoting ? (
-                  <div className="bg-orange-50/50 p-4 border-t border-orange-100">
-                     <div className="flex items-center justify-between mb-2">
-                       <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">Votação da Comunidade</span>
-                       <VotingCountdown endsAt={post.voting_ends_at} onExpire={() => refetch()} />
-                     </div>
-                     
-                     {/* Barra de Progresso da Votação */}
-                     <div className="flex items-center gap-2 mb-3">
-                        <Bomb className="h-4 w-4 text-red-500" />
-                        <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden flex">
-                           <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500" />
-                           <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
-                        </div>
-                        <Heart className="h-4 w-4 text-green-500 fill-green-500" />
-                     </div>
-
-                     <div className="flex gap-2">
-                        <Button className={cn("flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700", post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-100 ring-1 ring-red-400")} onClick={()=>handleVote(post.id, "bomb")}>
-                          <Bomb className="mr-2 h-4 w-4"/> Rejeitar ({bombCount})
-                        </Button>
-                        <Button className={cn("flex-1 bg-white border border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700", post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-100 ring-1 ring-green-400")} onClick={()=>handleVote(post.id, "heart")}>
-                          <Heart className="mr-2 h-4 w-4 fill-current"/> Aprovar ({heartCount})
-                        </Button>
-                     </div>
-                  </div>
-                ) : (
-                  // MODO FEED NORMAL (APÓS APROVAÇÃO)
-                  <div className="p-3 flex items-center gap-2 border-t">
-                    <Button variant="ghost" size="sm" onClick={()=>handleLike(post.id)} className={cn("rounded-full transition-colors", post.likes?.some((l:any)=>l.user_id===user?.id) && "text-red-500 bg-red-50")}>
-                      <Heart className={cn("h-5 w-5 mr-1", post.likes?.some((l:any)=>l.user_id===user?.id)&&"fill-current")}/> 
-                      {post.likes?.length||0}
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={()=>setOpeningCommentsFor(post)} className="rounded-full">
-                      <MessageCircle className="h-5 w-5 mr-1"/> 
-                      {post.comments?.length||0}
-                    </Button>
-                    <div className="ml-auto">
-                      <Button variant="ghost" size="icon" className="rounded-full"><Bookmark className="h-5 w-5"/></Button>
+                  
+                  {post.content && (
+                    <div className="px-4 pb-3 text-sm">
+                      <MentionText text={post.content}/>
                     </div>
-                  </div>
-                )}
-              </CardContent>
-            </Card>
+                  )}
+                  
+                  {post.media_urls?.length > 0 && (
+                    <div className={cn("grid gap-0.5", post.media_urls.length===1 ? "grid-cols-1" : "grid-cols-2")}>
+                      {post.media_urls.map((u:string, i:number) => {
+                        const url = stripPrefix(u);
+                        if (isVideoUrl(u)) {
+                          const vidId = `${post.id}-${i}`;
+                          return (
+                            <div key={i} className="relative bg-black aspect-square">
+                              <video 
+                                ref={el=>{if(el)registerVideo(vidId, el); else unregisterVideo(vidId);}} 
+                                data-video-id={vidId} 
+                                src={url} 
+                                className="w-full h-full object-cover" 
+                                loop 
+                                muted={muted} 
+                                playsInline 
+                                preload="metadata" 
+                                onClick={()=>playingVideo===vidId?pauseVideo(vidId):playVideo(vidId)}
+                              />
+                              <Button 
+                                variant="ghost" 
+                                size="icon" 
+                                className="absolute bottom-2 left-2 text-white bg-black/50 rounded-full h-8 w-8" 
+                                onClick={(e)=>{e.stopPropagation(); toggleMute();}}
+                              >
+                                {muted?<VolumeX className="h-4 w-4"/>:<Volume2 className="h-4 w-4"/>}
+                              </Button>
+                            </div>
+                          );
+                        }
+                        return (
+                          <ProgressiveImage 
+                            key={i} 
+                            src={url} 
+                            alt="Post" 
+                            className="aspect-square cursor-pointer" 
+                            onClick={()=>{setViewerUrl(url); setViewerOpen(true);}}
+                          />
+                        );
+                      })}
+                    </div>
+                  )}
+
+                  {/* ÁREA DE AÇÃO - LÓGICA CONDICIONAL */}
+                  {isVoting ? (
+                    <div className="bg-orange-50/50 p-4 border-t border-orange-100">
+                       <div className="flex items-center justify-between mb-2">
+                         <span className="text-xs font-bold text-orange-800 uppercase tracking-wide">
+                           Votação da Comunidade
+                         </span>
+                         <VotingCountdown endsAt={post.voting_ends_at} onExpire={() => refetch()} />
+                       </div>
+                       
+                       {/* Barra de Progresso da Votação */}
+                       <div className="flex items-center gap-2 mb-3">
+                          <Bomb className="h-4 w-4 text-red-500" />
+                          <div className="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden flex">
+                             <div style={{ width: `${approvalRate}%` }} className="h-full bg-green-500 transition-all duration-500" />
+                             <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-red-500 transition-all duration-500" />
+                          </div>
+                          <Heart className="h-4 w-4 text-green-500 fill-green-500" />
+                       </div>
+
+                       <div className="flex gap-2">
+                          <Button className={cn(
+                            "flex-1 bg-white border border-red-200 text-red-600 hover:bg-red-50 hover:text-red-700", 
+                            post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "bg-red-100 ring-1 ring-red-400"
+                          )} onClick={()=>handleVote(post.id, "bomb")}>
+                            <Bomb className="mr-2 h-4 w-4"/> Rejeitar ({bombCount})
+                          </Button>
+                          <Button className={cn(
+                            "flex-1 bg-white border border-green-200 text-green-600 hover:bg-green-50 hover:text-green-700", 
+                            post.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "bg-green-100 ring-1 ring-green-400"
+                          )} onClick={()=>handleVote(post.id, "heart")}>
+                            <Heart className="mr-2 h-4 w-4 fill-current"/> Aprovar ({heartCount})
+                          </Button>
+                       </div>
+                    </div>
+                  ) : (
+                    // MODO FEED NORMAL (APÓS APROVAÇÃO)
+                    <div className="p-3 flex items-center gap-2 border-t">
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={()=>handleLike(post.id)} 
+                        className={cn(
+                          "rounded-full transition-colors", 
+                          post.likes?.some((l:any)=>l.user_id===user?.id) && "text-red-500 bg-red-50"
+                        )}
+                      >
+                        <Heart className={cn(
+                          "h-5 w-5 mr-1", 
+                          post.likes?.some((l:any)=>l.user_id===user?.id)&&"fill-current"
+                        )}/> 
+                        {post.likes?.length||0}
+                      </Button>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={()=>setOpeningCommentsFor(post)} 
+                        className="rounded-full"
+                      >
+                        <MessageCircle className="h-5 w-5 mr-1"/> 
+                        {post.comments?.length||0}
+                      </Button>
+                      <div className="ml-auto">
+                        <Button variant="ghost" size="icon" className="rounded-full">
+                          <Bookmark className="h-5 w-5"/>
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+
+              {/* Exibe Shorts após a 2ª postagem */}
+              {index === 1 && flashPosts.length > 0 && (
+                <div className="my-6">
+                  <HorizontalShortsCarousel
+                    posts={flashPosts}
+                    user={user}
+                    handleLike={handleLike}
+                    onComment={setOpeningCommentsFor}
+                  />
+                </div>
+              )}
+              
+              {/* Exibe ViralClips após a 4ª postagem */}
+              {index === 3 && viralClips.length > 0 && (
+                <div className="my-6">
+                  <ViralClipsCarousel
+                    posts={viralClips}
+                    user={user}
+                    handleLike={handleLike}
+                    onComment={setOpeningCommentsFor}
+                  />
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
@@ -1232,21 +2056,52 @@ export default function Feed() {
       {/* Dialogs */}
       <Dialog open={aiEditing.open} onOpenChange={o => setAiEditing(p => ({...p, open: o}))}>
         <DialogContent className="sm:max-w-md rounded-2xl">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><Wand2 className="h-5 w-5 text-purple-600"/> Estúdio Mágico</DialogTitle></DialogHeader>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-purple-600"/> Estúdio Mágico
+            </DialogTitle>
+          </DialogHeader>
           <div className="space-y-4">
             {mediaFiles[aiEditing.imageIndex] && (
               <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
                 <img src={URL.createObjectURL(mediaFiles[aiEditing.imageIndex])} className="w-full h-full object-contain"/>
-                {aiEditing.loading && <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white backdrop-blur-sm"><Sparkles className="h-10 w-10 animate-spin text-purple-400 mb-2"/><span className="font-bold">Aplicando mágica...</span></div>}
+                {aiEditing.loading && (
+                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                    <Sparkles className="h-10 w-10 animate-spin text-purple-400 mb-2"/>
+                    <span className="font-bold">Aplicando mágica...</span>
+                  </div>
+                )}
               </div>
             )}
-            <ScrollArea className="h-48"><div className="grid grid-cols-2 gap-2 pr-4">{AI_STYLES.map(s => { const I = s.icon; return (
-              <button key={s.id} disabled={aiEditing.loading} onClick={() => handleApplyStyle(s.id)} className={cn("flex items-center gap-3 p-3 rounded-xl border text-left transition-all hover:bg-accent", aiEditing.loading && "opacity-50")}>
-                <div className={cn("p-2 rounded-lg", s.color)}><I className="h-5 w-5"/></div><span className="text-sm font-medium">{s.label}</span>
-              </button>
-            )})}</div></ScrollArea>
+            <ScrollArea className="h-48">
+              <div className="grid grid-cols-2 gap-2 pr-4">
+                {AI_STYLES.map(s => { 
+                  const I = s.icon; 
+                  return (
+                    <button 
+                      key={s.id} 
+                      disabled={aiEditing.loading} 
+                      onClick={() => handleApplyStyle(s.id)} 
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-xl border text-left transition-all hover:bg-accent", 
+                        aiEditing.loading && "opacity-50"
+                      )}
+                    >
+                      <div className={cn("p-2 rounded-lg", s.color)}>
+                        <I className="h-5 w-5"/>
+                      </div>
+                      <span className="text-sm font-medium">{s.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </ScrollArea>
           </div>
-          <DialogFooter><Button variant="ghost" onClick={() => setAiEditing(p => ({...p, open: false}))}>Fechar</Button></DialogFooter>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setAiEditing(p => ({...p, open: false}))}>
+              Fechar
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
 
@@ -1254,16 +2109,49 @@ export default function Feed() {
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
           <ScrollArea className="h-[50vh] pr-4">
-            {loadingComments ? <p className="text-center py-4 text-muted-foreground">Carregando...</p> : comments?.map((c:any) => (
-              <div key={c.id} className="flex gap-3 mb-4"><Avatar className="h-8 w-8"><AvatarImage src={c.author?.avatar_url}/><AvatarFallback>{c.author?.username?.[0]}</AvatarFallback></Avatar><div><span className="font-bold text-sm mr-2">{c.author?.username}</span><span className="text-sm">{c.content}</span></div></div>
+            {loadingComments ? (
+              <p className="text-center py-4 text-muted-foreground">Carregando...</p>
+            ) : comments?.map((c:any) => (
+              <div key={c.id} className="flex gap-3 mb-4">
+                <Avatar className="h-8 w-8">
+                  <AvatarImage src={c.author?.avatar_url}/>
+                  <AvatarFallback>{c.author?.username?.[0]}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <span className="font-bold text-sm mr-2">{c.author?.username}</span>
+                  <span className="text-sm">{c.content}</span>
+                </div>
+              </div>
             ))}
           </ScrollArea>
-          <div className="flex gap-2 mt-2"><Input value={newCommentText} onChange={e => setNewCommentText(e.target.value)} placeholder="Comente..." className="rounded-full"/><Button size="icon" className="rounded-full" onClick={()=>addComment.mutate()}><Send className="h-4 w-4"/></Button></div>
+          <div className="flex gap-2 mt-2">
+            <Input 
+              value={newCommentText} 
+              onChange={e => setNewCommentText(e.target.value)} 
+              placeholder="Comente..." 
+              className="rounded-full"
+            />
+            <Button size="icon" className="rounded-full" onClick={()=>addComment.mutate()}>
+              <Send className="h-4 w-4"/>
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
 
       <Dialog open={viewerOpen} onOpenChange={setViewerOpen}>
-        <DialogContent className="max-w-4xl p-0 bg-black/90 border-0"><div className="relative h-[80vh] flex items-center justify-center"><img src={viewerUrl||""} className="max-h-full max-w-full object-contain"/><Button variant="secondary" size="icon" className="absolute top-4 right-4 rounded-full" onClick={()=>setViewerOpen(false)}><Minimize2 className="h-4 w-4"/></Button></div></DialogContent>
+        <DialogContent className="max-w-4xl p-0 bg-black/90 border-0">
+          <div className="relative h-[80vh] flex items-center justify-center">
+            <img src={viewerUrl||""} className="max-h-full max-w-full object-contain"/>
+            <Button 
+              variant="secondary" 
+              size="icon" 
+              className="absolute top-4 right-4 rounded-full" 
+              onClick={()=>setViewerOpen(false)}
+            >
+              <Minimize2 className="h-4 w-4"/>
+            </Button>
+          </div>
+        </DialogContent>
       </Dialog>
     </div>
   );
