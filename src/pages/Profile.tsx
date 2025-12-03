@@ -45,13 +45,56 @@ type MiniProfile = {
   avatar_url: string | null;
 };
 
-// Helper functions
+// ===== UTILS FUNCTIONS =====
 const MEDIA_PREFIX = { image: "image::", video: "video::", audio: "audio::" } as const;
-const isVideoUrl = (u: string) => u.startsWith(MEDIA_PREFIX.video) || /\.(mp4|webm|ogg|mov|m4v)$/i.test(u.split("::").pop() || u);
-const stripPrefix = (u: string) => u.replace(/^image::|^video::|^audio::/, "");
-const fmtDateTime = (iso: string) => new Date(iso).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
-// Componente para exibir vídeos com controles
+const isVideoUrl = (u: any): boolean => {
+  if (!u || typeof u !== 'string') return false;
+  return u.startsWith(MEDIA_PREFIX.video) || /\.(mp4|webm|ogg|mov|m4v)$/i.test(u.split("::").pop() || u);
+};
+
+const isAudioUrl = (u: any): boolean => {
+  if (!u || typeof u !== 'string') return false;
+  return u.startsWith(MEDIA_PREFIX.audio) || /\.(mp3|wav|ogg|m4a)$/i.test(u.split("::").pop() || u);
+};
+
+const stripPrefix = (u: any): string => {
+  if (!u) return '';
+  if (typeof u !== 'string') {
+    try {
+      u = String(u);
+    } catch {
+      return '';
+    }
+  }
+  return u.replace(/^image::|^video::|^audio::/, "");
+};
+
+const fmtDateTime = (iso: string) => {
+  try {
+    return new Date(iso).toLocaleString("pt-BR", { 
+      day: "2-digit", 
+      month: "2-digit", 
+      year: "numeric", 
+      hour: "2-digit", 
+      minute: "2-digit" 
+    });
+  } catch {
+    return iso;
+  }
+};
+
+const ensureMediaUrlsArray = (mediaUrls: any): string[] => {
+  if (!mediaUrls) return [];
+  if (Array.isArray(mediaUrls)) {
+    return mediaUrls.filter((url): url is string => 
+      typeof url === 'string' && url.trim() !== ''
+    );
+  }
+  return [];
+};
+
+// ===== VIDEO PLAYER COMPONENT =====
 const VideoPlayer = ({ src, className, onClick }: { src: string; className?: string; onClick?: () => void }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -62,7 +105,7 @@ const VideoPlayer = ({ src, className, onClick }: { src: string; className?: str
       if (isPlaying) {
         videoRef.current.pause();
       } else {
-        videoRef.current.play();
+        videoRef.current.play().catch(console.error);
       }
       setIsPlaying(!isPlaying);
     }
@@ -112,7 +155,7 @@ const VideoPlayer = ({ src, className, onClick }: { src: string; className?: str
   );
 };
 
-// Componente para exibir posts
+// ===== POST ITEM COMPONENT =====
 const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
   const [viewerOpen, setViewerOpen] = useState(false);
   const [viewerUrl, setViewerUrl] = useState<string | null>(null);
@@ -124,6 +167,8 @@ const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
   const bombCount = post.post_votes?.filter((v: any) => v.vote_type === 'bomb').length || 0;
   const totalVotes = heartCount + bombCount;
   const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+
+  const mediaUrls = ensureMediaUrlsArray(post.media_urls);
 
   const handleMediaClick = (url: string) => {
     const cleanUrl = stripPrefix(url);
@@ -187,9 +232,9 @@ const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
           )}
 
           {/* Mídias do Post */}
-          {post.media_urls?.length > 0 && (
-            <div className={cn("grid gap-0.5", post.media_urls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
-              {post.media_urls.map((u: string, i: number) => {
+          {mediaUrls.length > 0 && (
+            <div className={cn("grid gap-0.5", mediaUrls.length === 1 ? "grid-cols-1" : "grid-cols-2")}>
+              {mediaUrls.map((u: string, i: number) => {
                 const url = stripPrefix(u);
                 if (isVideoUrl(u)) {
                   return (
@@ -211,6 +256,10 @@ const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
                       src={url}
                       alt="Post media"
                       className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        console.error("Erro ao carregar imagem:", e);
+                        e.currentTarget.src = 'https://placehold.co/400x400?text=Imagem+Indisponível';
+                      }}
                     />
                     <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
@@ -262,6 +311,9 @@ const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
                 src={viewerUrl || ""}
                 className="max-h-full max-w-full object-contain"
                 alt="Visualização ampliada"
+                onError={(e) => {
+                  e.currentTarget.src = 'https://placehold.co/800x800?text=Imagem+Indisponível';
+                }}
               />
             )}
             <Button
@@ -279,6 +331,7 @@ const PostItem = ({ post, user, onLike, onDelete, onEdit }: any) => {
   );
 };
 
+// ===== MAIN PROFILE COMPONENT =====
 export default function Profile() {
   const { userId } = useParams<{ userId?: string }>();
   const navigate = useNavigate();
@@ -308,7 +361,12 @@ export default function Profile() {
   const { data: profile } = useQuery({
     queryKey: ["profile", profileId],
     queryFn: async () => {
-      const { data, error } = await supabase.from("profiles").select("*").eq("id", profileId).single();
+      const { data, error } = await supabase
+        .from("profiles")
+        .select("*")
+        .eq("id", profileId)
+        .single();
+      
       if (error) throw error;
 
       if (isOwnProfile) {
@@ -339,8 +397,14 @@ export default function Profile() {
         .eq("user_id", profileId)
         .eq("is_community_approved", true)
         .order("created_at", { ascending: false });
+      
       if (error) throw error;
-      return data;
+      
+      // Processar media_urls para garantir que seja um array válido
+      return (data || []).map(post => ({
+        ...post,
+        media_urls: ensureMediaUrlsArray(post.media_urls)
+      }));
     },
     enabled: !!profileId,
   });
@@ -359,10 +423,20 @@ export default function Profile() {
         `)
         .eq("user_id", profileId)
         .eq("is_community_approved", true)
-        .not("media_urls", "is", null)
         .order("created_at", { ascending: false });
+      
       if (error) throw error;
-      return data;
+      
+      // Filtrar posts que têm mídias e processar media_urls
+      return (data || [])
+        .filter(post => {
+          const urls = ensureMediaUrlsArray(post.media_urls);
+          return urls.length > 0;
+        })
+        .map(post => ({
+          ...post,
+          media_urls: ensureMediaUrlsArray(post.media_urls)
+        }));
     },
     enabled: !!profileId,
   });
@@ -371,6 +445,8 @@ export default function Profile() {
   const { data: likedPosts } = useQuery({
     queryKey: ["likedPosts", profileId],
     queryFn: async () => {
+      if (!profileId) return [];
+
       // Primeiro, pega os IDs dos posts que o usuário curtiu
       const { data: likesData, error: likesError } = await supabase
         .from("likes")
@@ -398,7 +474,12 @@ export default function Profile() {
         .order("created_at", { ascending: false });
 
       if (postsError) throw postsError;
-      return postsData;
+      
+      // Processar media_urls
+      return (postsData || []).map(post => ({
+        ...post,
+        media_urls: ensureMediaUrlsArray(post.media_urls)
+      }));
     },
     enabled: !!profileId,
   });
@@ -728,13 +809,16 @@ export default function Profile() {
   // ===== Ações nos posts =====
   const handleLike = async (postId: string) => {
     try {
-      const post = [...(userPosts || []), ...(likedPosts || [])].find(p => p.id === postId);
+      const allPosts = [...(userPosts || []), ...(likedPosts || []), ...(userMedia || [])];
+      const post = allPosts.find(p => p.id === postId);
       const has = post?.likes?.find((l: any) => l.user_id === user?.id);
+      
       if (has) {
         await supabase.from("likes").delete().match({ id: has.id });
       } else {
         await supabase.from("likes").insert({ post_id: postId, user_id: user?.id });
       }
+      
       // Invalida todas as queries relacionadas
       queryClient.invalidateQueries({ queryKey: ["userPosts", profileId] });
       queryClient.invalidateQueries({ queryKey: ["userMedia", profileId] });
@@ -800,6 +884,100 @@ export default function Profile() {
     setEditPostContent(post.content || "");
   };
 
+  // ===== Renderização da aba de mídia =====
+  const renderMediaTab = () => {
+    if (!userMedia || userMedia.length === 0) {
+      return (
+        <div className="text-center py-12 text-muted-foreground">
+          <p>Nenhuma mídia ainda</p>
+        </div>
+      );
+    }
+
+    return (
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {userMedia.flatMap((post: any) => {
+          const mediaUrls = ensureMediaUrlsArray(post.media_urls);
+          return mediaUrls.map((mediaUrl: string, index: number) => {
+            const url = stripPrefix(mediaUrl);
+            const isVideo = isVideoUrl(mediaUrl);
+            
+            return (
+              <div
+                key={`${post.id}-${index}`}
+                className="relative aspect-square overflow-hidden rounded-lg bg-muted cursor-pointer group"
+                onClick={() => {
+                  if (isVideo) {
+                    setViewerUrl(url);
+                    setViewerIsVideo(true);
+                    setViewerOpen(true);
+                  } else {
+                    setViewerUrl(url);
+                    setViewerIsVideo(false);
+                    setViewerOpen(true);
+                  }
+                }}
+              >
+                {isVideo ? (
+                  <>
+                    <video
+                      src={url}
+                      className="w-full h-full object-cover"
+                      preload="metadata"
+                    />
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <Play className="h-12 w-12 text-white/80" />
+                    </div>
+                    <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+                      <Video className="h-4 w-4 text-white" />
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <img
+                      src={url}
+                      alt={`Mídia do post ${post.id}`}
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        console.error("Erro ao carregar imagem:", e);
+                        e.currentTarget.src = 'https://placehold.co/400x400?text=Imagem+Indisponível';
+                      }}
+                    />
+                    <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
+                      <Image className="h-4 w-4 text-white" />
+                    </div>
+                  </>
+                )}
+                <div className="absolute bottom-2 left-2 flex items-center gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 rounded-full bg-black/50 text-white hover:bg-black/70"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleLike(post.id);
+                    }}
+                  >
+                    <Heart className={cn("h-3 w-3", post.likes?.some((l: any) => l.user_id === user?.id) && "fill-current")} />
+                  </Button>
+                  <span className="text-xs text-white bg-black/50 px-2 py-1 rounded-full">
+                    {post.likes?.length || 0}
+                  </span>
+                </div>
+              </div>
+            );
+          });
+        })}
+      </div>
+    );
+  };
+
+  // Estados para viewer
+  const [viewerOpen, setViewerOpen] = useState(false);
+  const [viewerUrl, setViewerUrl] = useState<string | null>(null);
+  const [viewerIsVideo, setViewerIsVideo] = useState(false);
+
   return (
     <div className="min-h-screen pb-20 bg-background">
       {/* HEADER */}
@@ -817,7 +995,12 @@ export default function Profile() {
             {isOwnProfile && (
               <label className="absolute -bottom-1 -right-1 p-2 rounded-full bg-primary text-white cursor-pointer hover:bg-primary/90 transition-colors">
                 <Camera className="h-4 w-4" />
-                <input type="file" accept="image/*" onChange={handleAvatarUpload} className="hidden" />
+                <input 
+                  type="file" 
+                  accept="image/*" 
+                  onChange={handleAvatarUpload} 
+                  className="hidden" 
+                />
               </label>
             )}
           </div>
@@ -926,7 +1109,7 @@ export default function Profile() {
                       <>
                         {/* Seguir / Deixar de seguir */}
                         <Button
-                          onClick={() => (followMutation.mutate())}
+                          onClick={() => followMutation.mutate()}
                           disabled={followMutation.isPending}
                           variant={isFollowing ? "outline" : "default"}
                           className="w-full sm:w-auto"
@@ -1024,78 +1207,7 @@ export default function Profile() {
 
           {/* ABA: MÍDIA */}
           <TabsContent value="media" className="mt-6">
-            {userMedia?.length === 0 ? (
-              <div className="text-center py-12 text-muted-foreground">
-                <p>Nenhuma mídia ainda</p>
-              </div>
-            ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {userMedia?.flatMap((post: any) =>
-                  post.media_urls?.map((mediaUrl: string, index: number) => {
-                    const url = stripPrefix(mediaUrl);
-                    const isVideo = isVideoUrl(mediaUrl);
-                    
-                    return (
-                      <div
-                        key={`${post.id}-${index}`}
-                        className="relative aspect-square overflow-hidden rounded-lg bg-muted cursor-pointer group"
-                        onClick={() => {
-                          if (isVideo) {
-                            // Abrir vídeo em modal
-                          } else {
-                            // Abrir imagem em modal
-                          }
-                        }}
-                      >
-                        {isVideo ? (
-                          <>
-                            <video
-                              src={url}
-                              className="w-full h-full object-cover"
-                              preload="metadata"
-                            />
-                            <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
-                              <Play className="h-12 w-12 text-white/80" />
-                            </div>
-                            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
-                              <Video className="h-4 w-4 text-white" />
-                            </div>
-                          </>
-                        ) : (
-                          <>
-                            <img
-                              src={url}
-                              alt={`Mídia do post ${post.id}`}
-                              className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                            />
-                            <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 transition-opacity" />
-                            <div className="absolute top-2 right-2 bg-black/50 rounded-full p-1">
-                              <Image className="h-4 w-4 text-white" />
-                            </div>
-                          </>
-                        )}
-                        <div className="absolute bottom-2 left-2 flex items-center gap-2">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6 rounded-full bg-black/50 text-white hover:bg-black/70"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleLike(post.id);
-                            }}
-                          >
-                            <Heart className={cn("h-3 w-3", post.likes?.some((l: any) => l.user_id === user?.id) && "fill-current")} />
-                          </Button>
-                          <span className="text-xs text-white bg-black/50 px-2 py-1 rounded-full">
-                            {post.likes?.length || 0}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            )}
+            {renderMediaTab()}
           </TabsContent>
 
           {/* ABA: CURTIDAS */}

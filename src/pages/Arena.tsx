@@ -6,7 +6,7 @@ import {
   Camera, Video, Maximize2, Minimize2, Images, RotateCcw, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Users, Sparkles, Wand2,
   Palette, Sun, Moon, Monitor, Zap, Skull, Film, Music, Baby, Brush, PenTool, Ghost, Smile,
-  Clock, CheckCircle2, AlertCircle, Flame
+  Clock, CheckCircle2, AlertCircle, Flame, Loader2
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -24,6 +24,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogD
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Progress } from "@/components/ui/progress";
+import { useNavigate } from "react-router-dom";
 
 /* ---------- COMPONENTE: Timer de Votação (Otimizado) ---------- */
 const VotingCountdown = ({ endsAt, onExpire, variant = "default" }: { endsAt: string; onExpire?: () => void, variant?: "default" | "flash" | "viral" }) => {
@@ -97,24 +98,6 @@ const ProgressiveImage = ({ src, alt, className, onClick }: { src: string, alt: 
   );
 };
 
-/* ---------- Configurações de Estilo IA ---------- */
-const AI_STYLES = [
-  { id: 'rejuvenate', label: 'Rejuvenescer', icon: Baby, color: 'bg-green-100 text-green-600', prompt: 'make them look 20 years younger, remove deep wrinkles, face lift, glowing youthful skin, high fidelity, 8k, soft studio lighting', filter: 'rejuvenate' },
-  { id: 'beauty', label: 'Embelezar', icon: Sparkles, color: 'bg-pink-100 text-pink-600', prompt: 'high quality, beautified, perfect lighting, 8k, smooth skin, makeup, glamour', filter: 'beauty' },
-  { id: 'hdr', label: 'HDR / Nitidez', icon: Sun, color: 'bg-orange-100 text-orange-600', prompt: 'hdr, high contrast, sharp focus, detailed, hyperrealistic, 4k', filter: 'hdr' },
-  { id: 'oil', label: 'Pintura a Óleo', icon: Brush, color: 'bg-yellow-100 text-yellow-700', prompt: 'oil painting style, van gogh style, thick brushstrokes, artistic, masterpiece', filter: 'oil' },
-  { id: 'cartoon', label: 'Cartoon 3D', icon: Smile, color: 'bg-blue-50 text-blue-500', prompt: '3d pixar style character, cute, big eyes, disney style, smooth render', filter: 'cartoon' },
-  { id: 'sketch', label: 'Esboço', icon: PenTool, color: 'bg-stone-100 text-stone-600', prompt: 'pencil sketch, charcoal drawing, rough lines, black and white sketch', filter: 'sketch' },
-  { id: 'fantasy', label: 'Fantasia', icon: Ghost, color: 'bg-indigo-100 text-indigo-600', prompt: 'fantasy art, magical atmosphere, glowing lights, ethereal, dreamlike', filter: 'fantasy' },
-  { id: 'bw', label: 'Preto & Branco', icon: Moon, color: 'bg-gray-100 text-gray-600', prompt: 'black and white photography, artistic, monochrome, noir film', filter: 'bw' },
-  { id: 'vintage', label: 'Vintage 1950', icon: Film, color: 'bg-amber-100 text-amber-700', prompt: 'vintage photo, 1950s style, sepia, grain, old photo texture', filter: 'vintage' },
-  { id: 'cyberpunk', label: 'Cyberpunk', icon: Zap, color: 'bg-purple-100 text-purple-600', prompt: 'cyberpunk style, neon lights, magenta and cyan, futuristic, scifi city', filter: 'cyberpunk' },
-  { id: 'matrix', label: 'Matrix', icon: Monitor, color: 'bg-emerald-100 text-emerald-600', prompt: 'matrix code style, green tint, hacker atmosphere, digital rain', filter: 'matrix' },
-  { id: 'anime', label: 'Anime', icon: Palette, color: 'bg-blue-100 text-blue-600', prompt: 'anime style, vibrant colors, 2d animation style, japanese animation', filter: 'anime' },
-  { id: 'terror', label: 'Terror', icon: Skull, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
-  { id: 'cold', label: 'Frio / Inverno', icon: Music, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
-];
-
 /* ---------- COMPONENTE: Player de Vídeo Viral ---------- */
 const ViralVideoPlayer = ({ src, isPlaying, onPlayPause, onToggleMute, isMuted }: { 
   src: string; 
@@ -170,6 +153,224 @@ const ViralVideoPlayer = ({ src, isPlaying, onPlayPause, onToggleMute, isMuted }
         </div>
       )}
     </div>
+  );
+};
+
+/* ---------- Configurações de Estilo IA ---------- */
+const AI_STYLES = [
+  { id: 'rejuvenate', label: 'Rejuvenescer', icon: Baby, color: 'bg-green-100 text-green-600', prompt: 'make them look 20 years younger, remove deep wrinkles, face lift, glowing youthful skin, high fidelity, 8k, soft studio lighting', filter: 'rejuvenate' },
+  { id: 'beauty', label: 'Embelezar', icon: Sparkles, color: 'bg-pink-100 text-pink-600', prompt: 'high quality, beautified, perfect lighting, 8k, smooth skin, makeup, glamour', filter: 'beauty' },
+  { id: 'hdr', label: 'HDR / Nitidez', icon: Sun, color: 'bg-orange-100 text-orange-600', prompt: 'hdr, high contrast, sharp focus, detailed, hyperrealistic, 4k', filter: 'hdr' },
+  { id: 'oil', label: 'Pintura a Óleo', icon: Brush, color: 'bg-yellow-100 text-yellow-700', prompt: 'oil painting style, van gogh style, thick brushstrokes, artistic, masterpiece', filter: 'oil' },
+  { id: 'cartoon', label: 'Cartoon 3D', icon: Smile, color: 'bg-blue-50 text-blue-500', prompt: '3d pixar style character, cute, big eyes, disney style, smooth render', filter: 'cartoon' },
+  { id: 'sketch', label: 'Esboço', icon: PenTool, color: 'bg-stone-100 text-stone-600', prompt: 'pencil sketch, charcoal drawing, rough lines, black and white sketch', filter: 'sketch' },
+  { id: 'fantasy', label: 'Fantasia', icon: Ghost, color: 'bg-indigo-100 text-indigo-600', prompt: 'fantasy art, magical atmosphere, glowing lights, ethereal, dreamlike', filter: 'fantasy' },
+  { id: 'bw', label: 'Preto & Branco', icon: Moon, color: 'bg-gray-100 text-gray-600', prompt: 'black and white photography, artistic, monochrome, noir film', filter: 'bw' },
+  { id: 'vintage', label: 'Vintage 1950', icon: Film, color: 'bg-amber-100 text-amber-700', prompt: 'vintage photo, 1950s style, sepia, grain, old photo texture', filter: 'vintage' },
+  { id: 'cyberpunk', label: 'Cyberpunk', icon: Zap, color: 'bg-purple-100 text-purple-600', prompt: 'cyberpunk style, neon lights, magenta and cyan, futuristic, scifi city', filter: 'cyberpunk' },
+  { id: 'matrix', label: 'Matrix', icon: Monitor, color: 'bg-emerald-100 text-emerald-600', prompt: 'matrix code style, green tint, hacker atmosphere, digital rain', filter: 'matrix' },
+  { id: 'anime', label: 'Anime', icon: Palette, color: 'bg-blue-100 text-blue-600', prompt: 'anime style, vibrant colors, 2d animation style, japanese animation', filter: 'anime' },
+  { id: 'terror', label: 'Terror', icon: Skull, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
+  { id: 'cold', label: 'Frio / Inverno', icon: Music, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
+];
+
+/* ---------- COMPONENTE: Carrossel de ViralClips para Arena ---------- */
+interface ViralClipsCarouselProps {
+  posts: any[];
+  user: any;
+  handleVote: (postId: string, type: "heart" | "bomb") => void;
+  onComment: (post: any) => void;
+  handleVideoPlayPause: (postId: string) => void;
+  playingVideoId: string | null;
+  videoMuted: boolean;
+  setVideoMuted: (muted: boolean) => void;
+}
+
+const ViralClipsCarouselArena = ({ 
+  posts, 
+  user,
+  handleVote,
+  onComment,
+  handleVideoPlayPause,
+  playingVideoId,
+  videoMuted,
+  setVideoMuted
+}: ViralClipsCarouselProps) => {
+  const [currentIndex, setCurrentIndex] = useState(0);
+
+  const next = () => {
+    setCurrentIndex((prev) => (prev + 1) % posts.length);
+  };
+
+  const prev = () => {
+    setCurrentIndex((prev) => (prev - 1 + posts.length) % posts.length);
+  };
+
+  if (posts.length === 0) return null;
+
+  const currentPost = posts[currentIndex];
+  const videoUrl = currentPost?.media_urls?.[0] ? currentPost.media_urls[0].replace(/^video::/, "") : null;
+  const isVoting = currentPost.voting_period_active;
+  const heartCount = currentPost.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
+  const bombCount = currentPost.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
+  const totalVotes = heartCount + bombCount;
+  const approvalRate = totalVotes > 0 ? (heartCount / totalVotes) * 100 : 50;
+
+  return (
+    <Card className="border-0 shadow-2xl bg-gradient-to-br from-gray-900 via-purple-900/20 to-black overflow-hidden mb-6">
+      <CardContent className="p-4">
+        {/* Header do carrossel */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-purple-600 to-pink-600 p-2 rounded-xl">
+              <Flame className="h-6 w-6 text-white" />
+            </div>
+            <div>
+              <h3 className="text-xl font-bold text-white flex items-center gap-2">
+                ViralClips - Em Votação
+                <Badge className="bg-gradient-to-r from-orange-500 to-red-500 text-white border-0">
+                  <Clock className="h-3 w-3 mr-1" />
+                  Votação
+                </Badge>
+              </h3>
+              <p className="text-sm text-white/70">
+                Vídeos curtos de até 30s em votação
+              </p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={prev}
+              disabled={currentIndex === 0}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <span className="text-sm font-medium text-white">
+              {currentIndex + 1} / {posts.length}
+            </span>
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={next}
+              disabled={currentIndex === posts.length - 1}
+              className="h-8 w-8 rounded-full bg-white/10 text-white hover:bg-white/20"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+        
+        {/* Player de ViralClip */}
+        <div className="relative bg-black rounded-2xl overflow-hidden aspect-[9/16]">
+          {videoUrl ? (
+            <>
+              <ViralVideoPlayer
+                src={videoUrl}
+                isPlaying={playingVideoId === currentPost.id}
+                onPlayPause={() => handleVideoPlayPause(currentPost.id)}
+                onToggleMute={() => setVideoMuted(!videoMuted)}
+                isMuted={videoMuted}
+              />
+              <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/20" />
+              
+              {/* Controles */}
+              <div className="absolute bottom-0 left-0 right-0 p-4 z-20">
+                {isVoting ? (
+                  <div className="bg-black/40 backdrop-blur-md rounded-2xl p-4 border border-white/10">
+                    <div className="flex items-center gap-2 mb-3 text-white">
+                      <Avatar className="h-8 w-8 ring-2 ring-white/50">
+                        <AvatarImage src={currentPost.profiles?.avatar_url}/>
+                        <AvatarFallback className="bg-gradient-to-r from-purple-600 to-pink-600">
+                          {currentPost.profiles?.username?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div>
+                        <UserLink 
+                          userId={currentPost.user_id} 
+                          username={currentPost.profiles?.username || ''}
+                          className="font-bold text-white text-sm hover:text-white/80"
+                        >
+                          {currentPost.profiles?.username}
+                        </UserLink>
+                        <p className="text-white/70 text-xs">
+                          {currentPost.content || "ViralClip em votação!"}
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* Timer de votação */}
+                    <div className="flex items-center justify-between mb-3">
+                      <span className="text-xs font-bold text-white/70 uppercase tracking-wide">Votação ViralClips</span>
+                      <VotingCountdown 
+                        endsAt={currentPost.voting_ends_at} 
+                        variant="viral"
+                      />
+                    </div>
+
+                    {/* Barra de Progresso da Votação */}
+                    <div className="flex items-center gap-2 mb-3">
+                      <Bomb className="h-4 w-4 text-red-500" />
+                      <div className="flex-1 h-2 bg-gray-700 rounded-full overflow-hidden flex">
+                        <div style={{ width: `${approvalRate}%` }} className="h-full bg-gradient-to-r from-green-500 to-emerald-500 transition-all duration-500 shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                        <div style={{ width: `${100 - approvalRate}%` }} className="h-full bg-gradient-to-r from-red-500 to-pink-500 transition-all duration-500" />
+                      </div>
+                      <Heart className="h-4 w-4 text-green-500 fill-green-500" />
+                    </div>
+
+                    <div className="flex gap-2">
+                      <Button 
+                        size="sm" 
+                        className={cn(
+                          "flex-1 bg-gradient-to-r from-red-600 to-pink-600 hover:from-red-700 hover:to-pink-700 text-white border-0 backdrop-blur-sm",
+                          currentPost.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'bomb') && "ring-2 ring-white/50"
+                        )}
+                        onClick={() => handleVote(currentPost.id, "bomb")}
+                      >
+                        <Bomb className="mr-2 h-4 w-4"/>
+                        Rejeitar ({bombCount})
+                      </Button>
+                      <Button 
+                        size="sm" 
+                        className={cn(
+                          "flex-1 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white border-0 backdrop-blur-sm",
+                          currentPost.post_votes?.find((v:any) => v.user_id === user?.id && v.vote_type === 'heart') && "ring-2 ring-white/50"
+                        )}
+                        onClick={() => handleVote(currentPost.id, "heart")}
+                      >
+                        <Heart className="mr-2 h-4 w-4 fill-current"/>
+                        Aprovar ({heartCount})
+                      </Button>
+                    </div>
+                  </div>
+                ) : null}
+              </div>
+            </>
+          ) : (
+            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-purple-900 to-pink-900">
+              <Flame className="h-16 w-16 text-white/50" />
+            </div>
+          )}
+        </div>
+        
+        {/* Indicadores */}
+        <div className="flex justify-center gap-2 mt-4">
+          {posts.map((_, index) => (
+            <button
+              key={index}
+              onClick={() => setCurrentIndex(index)}
+              className={cn(
+                "h-2 rounded-full transition-all",
+                index === currentIndex ? "bg-gradient-to-r from-purple-500 to-pink-500 w-8" : "bg-white/30 w-2 hover:bg-white/50"
+              )}
+            />
+          ))}
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 
@@ -344,6 +545,7 @@ export default function Arena() {
   const { user } = useAuth();
   const { toast } = useToast();
   const queryClient = useQueryClient();
+  const navigate = useNavigate();
 
   /* States */
   const [newPost, setNewPost] = useState("");
@@ -379,10 +581,6 @@ export default function Arena() {
 
   const [currentCarouselIndex, setCurrentCarouselIndex] = useState(0);
   const [playingAudio, setPlayingAudio] = useState<string | null>(null);
-  const [isDragging, setIsDragging] = useState(false);
-  const [startX, setStartX] = useState(0);
-  const [currentTranslate, setCurrentTranslate] = useState(0);
-  const carouselRef = useRef<HTMLDivElement>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
 
   /* Data */
@@ -440,7 +638,13 @@ export default function Arena() {
         if (f.type.startsWith("image/")) accepted.push(await compressImage(f, 1440, 0.8));
         else if (f.type.startsWith("video/")) {
           const dur = await getMediaDurationSafe(f).catch(() => 0);
-          if (dur <= 15.3) accepted.push(f); else toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
+          if (postType === 'viral_clips') {
+            if (dur <= 30.3) accepted.push(f); 
+            else toast({ variant: "destructive", title: "Vídeo muito longo (Max 30s)" });
+          } else {
+            if (dur <= 15.3) accepted.push(f); 
+            else toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
+          }
         } else if (f.type.startsWith("audio/")) {
           const dur = await getMediaDurationSafe(f).catch(() => 0);
           if (dur <= 10) accepted.push(f); else toast({ variant: "destructive", title: "Áudio longo (Max 10s)" });
@@ -645,8 +849,12 @@ export default function Arena() {
       }
       
       toast({ 
-        title: "Publicado na Arena!", 
-        description: `Seu ${postType === 'viral_clips' ? 'ViralClip' : postType === 'photo_audio' ? 'Shorts' : 'post'} entrou em votação (60min)` 
+        title: postType === 'viral_clips' ? "ViralClip publicado na Arena!" : "Publicado na Arena!", 
+        description: postType === 'viral_clips' 
+          ? "Seu ViralClip entrou em votação (60min)" 
+          : postType === 'photo_audio' 
+            ? "Seu Shorts entrou em votação (60min)"
+            : "Seu post entrou em votação (60min)"
       }); 
       
       setNewPost(""); 
@@ -722,8 +930,6 @@ export default function Arena() {
 
     const next = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex + 1) % list.length); };
     const prev = () => { stopCurrentAudio(); setCurrentCarouselIndex((currentCarouselIndex - 1 + list.length) % list.length); };
-    const onTouchStart = (e: React.TouchEvent) => { setIsDragging(true); setStartX(e.touches[0].clientX); };
-    const onTouchEnd = (e: React.TouchEvent) => { setIsDragging(false); const diff = e.changedTouches[0].clientX - startX; if (diff > 50) prev(); else if (diff < -50) next(); setCurrentTranslate(0); };
 
     return (
       <Card className="mb-6 border-0 shadow-2xl bg-card/95 overflow-hidden max-w-sm mx-auto relative group">
@@ -741,7 +947,7 @@ export default function Arena() {
             </div>
         )}
 
-        <div className="relative aspect-[9/16] bg-black" onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
+        <div className="relative aspect-[9/16] bg-black">
           {img && <ProgressiveImage src={img} alt="Flash" className="w-full h-full" />}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-black/30 pointer-events-none"/>
           
@@ -828,6 +1034,10 @@ export default function Arena() {
     }
   };
 
+  const viralClips = posts?.filter(x => x.post_type === 'viral_clips') || [];
+  const flashPosts = posts?.filter(x => x.post_type === 'photo_audio') || [];
+  const standardPosts = posts?.filter(x => x.post_type === 'standard') || [];
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 pb-20">
       <div className="max-w-2xl mx-auto px-4 py-4 space-y-6">
@@ -836,9 +1046,21 @@ export default function Arena() {
         <Card className="border-0 shadow-lg bg-card/80 backdrop-blur-sm">
           <CardContent className="pt-6">
             <div className="flex gap-2 mb-4 justify-center flex-wrap">
-              <Button variant={postType==='standard'?"default":"outline"} onClick={()=>setPostType('standard')} className="rounded-full px-6">Feed</Button>
-              <Button variant={postType==='photo_audio'?"default":"outline"} onClick={()=>setPostType('photo_audio')} className="rounded-full px-6">Flash</Button>
-              <Button variant={postType==='viral_clips'?"default":"outline"} onClick={()=>setPostType('viral_clips')} className="rounded-full px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0">
+              <Button variant={postType==='standard'?"default":"outline"} onClick={()=>{
+                setPostType('standard');
+                setMediaFiles([]);
+                setVideoDuration(null);
+              }} className="rounded-full px-6">Feed</Button>
+              <Button variant={postType==='photo_audio'?"default":"outline"} onClick={()=>{
+                setPostType('photo_audio');
+                setMediaFiles([]);
+                setVideoDuration(null);
+              }} className="rounded-full px-6">Flash</Button>
+              <Button variant={postType==='viral_clips'?"default":"outline"} onClick={()=>{
+                setPostType('viral_clips');
+                setMediaFiles([]);
+                setVideoDuration(null);
+              }} className="rounded-full px-6 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0">
                 <Flame className="h-4 w-4 mr-2" />
                 ViralClips
               </Button>
@@ -931,31 +1153,115 @@ export default function Arena() {
 
                 {/* Multi-Media Preview Carousel */}
                 {mediaFiles.length > 0 && (
-                  <ScrollArea className="w-full whitespace-nowrap rounded-md border">
-                    <div className="flex w-max space-x-2 p-2">
-                      {mediaFiles.map((file, i) => (
-                        <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden group shrink-0">
-                          {file.type.startsWith("image/") ? <img src={URL.createObjectURL(file)} className="w-full h-full object-cover"/> : <div className="w-full h-full bg-black flex items-center justify-center"><Video className="text-white"/></div>}
-                          <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" onClick={()=>removeFile(i)}><X className="h-3 w-3"/></Button>
-                          {file.type.startsWith("image/") && <Button size="icon" className="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-purple-600 hover:bg-purple-700" onClick={()=>setAiEditing({open: true, imageIndex: i, selectedStyle: null, loading: false})}><Wand2 className="h-3 w-3"/></Button>}
-                        </div>
-                      ))}
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium">
+                        {postType === 'viral_clips' ? 'Vídeo selecionado:' : 'Mídias:'}
+                      </span>
+                      <Button 
+                        variant="ghost" 
+                        size="sm" 
+                        onClick={() => {
+                          setMediaFiles([]);
+                          setVideoDuration(null);
+                        }}
+                        className="h-6 text-xs"
+                      >
+                        Limpar tudo
+                      </Button>
                     </div>
-                  </ScrollArea>
+                    
+                    <ScrollArea className="w-full whitespace-nowrap rounded-md border">
+                      <div className="flex w-max space-x-2 p-2">
+                        {mediaFiles.map((file, i) => (
+                          <div key={i} className="relative w-24 h-24 rounded-lg overflow-hidden group shrink-0">
+                            {file.type.startsWith("image/") ? (
+                              <img src={URL.createObjectURL(file)} className="w-full h-full object-cover"/>
+                            ) : file.type.startsWith("video/") ? (
+                              <div className="w-full h-full bg-black flex items-center justify-center relative">
+                                <Video className="text-white h-8 w-8" />
+                                {postType === 'viral_clips' && videoDuration && (
+                                  <div className="absolute bottom-1 left-1 right-1 bg-black/70 rounded text-xs text-white text-center py-0.5">
+                                    {videoDuration.toFixed(1)}s
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="w-full h-full bg-black flex items-center justify-center">
+                                <Volume2 className="text-white h-8 w-8" />
+                              </div>
+                            )}
+                            <Button 
+                              variant="destructive" 
+                              size="icon" 
+                              className="absolute top-1 right-1 h-5 w-5 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                              onClick={()=>removeFile(i)}
+                            >
+                              <X className="h-3 w-3"/>
+                            </Button>
+                            {file.type.startsWith("image/") && (
+                              <Button 
+                                size="icon" 
+                                className="absolute bottom-1 right-1 h-6 w-6 rounded-full bg-purple-600 hover:bg-purple-700" 
+                                onClick={()=>setAiEditing({open: true, imageIndex: i, selectedStyle: null, loading: false})}
+                              >
+                                <Wand2 className="h-3 w-3"/>
+                              </Button>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </ScrollArea>
+                  </div>
                 )}
 
                 <div className="flex items-center justify-between">
                   <div className="flex gap-1">
-                    <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
-                    <input ref={cameraPhotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
-                    <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
-                    <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()}><Images className="h-5 w-5 text-muted-foreground"/></Button>
-                    <Button variant="ghost" size="icon" onClick={()=>cameraPhotoInputRef.current?.click()}><Camera className="h-5 w-5 text-muted-foreground"/></Button>
-                    <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()} className="text-purple-600 bg-purple-50 hover:bg-purple-100"><Sparkles className="h-5 w-5"/></Button>
-                    {postType==='standard'&&<Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}><Video className="h-5 w-5 text-muted-foreground"/></Button>}
+                    {postType !== 'viral_clips' && (
+                      <>
+                        <input ref={galleryInputRef} type="file" multiple accept="image/*,video/*" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
+                        <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()}><Images className="h-5 w-5 text-muted-foreground"/></Button>
+                        
+                        <input ref={cameraPhotoInputRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
+                        <Button variant="ghost" size="icon" onClick={()=>cameraPhotoInputRef.current?.click()}><Camera className="h-5 w-5 text-muted-foreground"/></Button>
+                        
+                        <Button variant="ghost" size="icon" onClick={()=>galleryInputRef.current?.click()} className="text-purple-600 bg-purple-50 hover:bg-purple-100"><Sparkles className="h-5 w-5"/></Button>
+                        
+                        {postType === 'standard' && (
+                          <>
+                            <input ref={cameraVideoInputRef} type="file" accept="video/*" capture="environment" className="hidden" onChange={e=>onFilesPicked(e.target.files)}/>
+                            <Button variant="ghost" size="icon" onClick={()=>cameraVideoInputRef.current?.click()}><Video className="h-5 w-5 text-muted-foreground"/></Button>
+                          </>
+                        )}
+                      </>
+                    )}
                   </div>
-                  <Button onClick={handleCreatePost} disabled={uploading} className="rounded-full px-6 font-bold bg-gradient-to-r from-primary to-purple-600">
-                    {uploading ? "..." : "Publicar na Arena"}
+                  
+                  <Button 
+                    onClick={handleCreatePost} 
+                    disabled={uploading || processing} 
+                    className={cn(
+                      "rounded-full px-6 font-bold",
+                      postType === 'viral_clips' 
+                        ? "bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700" 
+                        : "bg-gradient-to-r from-primary to-purple-600"
+                    )}
+                  >
+                    {uploading ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Publicando...
+                      </>
+                    ) : processing ? (
+                      <>
+                        <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        Processando...
+                      </>
+                    ) : postType === 'viral_clips' ? (
+                      "Publicar ViralClip"
+                    ) : (
+                      "Publicar na Arena"
+                    )}
                   </Button>
                 </div>
               </div>
@@ -963,11 +1269,23 @@ export default function Arena() {
           </CardContent>
         </Card>
 
+        {/* Exibir ViralClips em votação no topo */}
+        {viralClips.length > 0 && (
+          <ViralClipsCarouselArena
+            posts={viralClips}
+            user={user}
+            handleVote={handleVote}
+            onComment={setOpeningCommentsFor}
+            handleVideoPlayPause={handleVideoPlayPause}
+            playingVideoId={playingVideoId}
+            videoMuted={videoMuted}
+            setVideoMuted={setVideoMuted}
+          />
+        )}
+
         {renderPhotoAudioCarousel()}
 
-        {posts?.map((post) => {
-          if (post.post_type === 'photo_audio') return null;
-          
+        {standardPosts?.map((post) => {
           const isVoting = post.voting_period_active;
           const heartCount = post.post_votes?.filter((v:any) => v.vote_type === 'heart').length || 0;
           const bombCount = post.post_votes?.filter((v:any) => v.vote_type === 'bomb').length || 0;
@@ -1014,28 +1332,6 @@ export default function Arena() {
                       const url = stripPrefix(u);
                       if (isVideoUrl(u)) {
                         const vidId = `${post.id}-${i}`;
-                        const isViralClip = post.post_type === 'viral_clips';
-                        
-                        if (isViralClip) {
-                          return (
-                            <div key={i} className="relative bg-black aspect-video">
-                              <ViralVideoPlayer
-                                src={url}
-                                isPlaying={playingVideoId === vidId}
-                                onPlayPause={() => handleVideoPlayPause(vidId)}
-                                onToggleMute={() => setVideoMuted(!videoMuted)}
-                                isMuted={videoMuted}
-                              />
-                              <div className="absolute bottom-2 right-2">
-                                <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0">
-                                  <Flame className="h-3 w-3 mr-1" />
-                                  ViralClip
-                                </Badge>
-                              </div>
-                            </div>
-                          );
-                        }
-                        
                         return (
                           <div key={i} className="relative bg-black aspect-square">
                             <video ref={el=>{if(el)registerVideo(vidId, el); else unregisterVideo(vidId);}} data-video-id={vidId} src={url} className="w-full h-full object-cover" loop muted={muted} playsInline preload="metadata" onClick={()=>playingVideo===vidId?pauseVideo(vidId):playVideo(vidId)}/>
