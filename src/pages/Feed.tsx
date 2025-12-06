@@ -130,59 +130,6 @@ const processMediaFile = async (file: File): Promise<File> => {
   }
 };
 
-/* ---------- COMPONENTE: Imagem Progressiva ---------- */
-const ProgressiveImage = ({ src, alt, className, onClick, objectFit = "contain" }: { 
-  src: string, 
-  alt: string, 
-  className?: string, 
-  onClick?: () => void,
-  objectFit?: "cover" | "contain" | "fill" | "none" | "scale-down"
-}) => {
-  const [isLoaded, setIsLoaded] = useState(false);
-  const [hasError, setHasError] = useState(false);
-  
-  const isValidSrc = src && (src.startsWith('http') || src.startsWith('blob') || src.startsWith('data') || src.includes('supabase'));
-  
-  if (!isValidSrc || hasError) {
-    return (
-      <div className={cn("flex items-center justify-center bg-muted/30 rounded-lg", className)}>
-        <div className="text-center p-4">
-          <Images className="h-8 w-8 text-muted-foreground mx-auto" />
-          <p className="text-xs text-muted-foreground mt-2">Mídia não disponível</p>
-        </div>
-      </div>
-    );
-  }
-  
-  return (
-    <div className={cn("relative overflow-hidden bg-muted/30 rounded-lg flex items-center justify-center", className)} onClick={onClick}>
-      <img 
-        src={src} 
-        alt={alt}
-        className={cn(
-          "absolute inset-0 w-full h-full filter blur-xl scale-110 transition-opacity duration-700",
-          isLoaded ? "opacity-0" : "opacity-100"
-        )}
-        style={{ objectFit }}
-        aria-hidden="true"
-        onError={() => setHasError(true)}
-      />
-      <img
-        src={src}
-        alt={alt}
-        loading="lazy"
-        className={cn(
-          "relative w-full h-full transition-all duration-700 rounded-lg",
-          isLoaded ? "opacity-100 blur-0 scale-100" : "opacity-0 blur-sm scale-105"
-        )}
-        style={{ objectFit }}
-        onLoad={() => setIsLoaded(true)}
-        onError={() => setHasError(true)}
-      />
-    </div>
-  );
-};
-
 /* ---------- COMPONENTE: VideoPlayer TikTok ---------- */
 interface TikTokVideoPlayerProps {
   src: string;
@@ -259,16 +206,11 @@ const TikTokVideoPlayer = ({
     const x = e.clientX - rect.left;
     const width = rect.width;
     
-    // Se clicar no lado esquerdo (25% da tela), volta
     if (x < width * 0.25) {
       onPrevious();
-    }
-    // Se clicar no lado direito (25% da tela), avança
-    else if (x > width * 0.75) {
+    } else if (x > width * 0.75) {
       onNext();
-    }
-    // Se clicar no meio, play/pause
-    else {
+    } else {
       togglePlay();
       setShowControls(true);
       setTimeout(() => setShowControls(false), 3000);
@@ -301,7 +243,6 @@ const TikTokVideoPlayer = ({
         onEnded={() => setIsPlaying(false)}
       />
       
-      {/* Progress Bar */}
       <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700/50">
         <div 
           className="h-full bg-gradient-to-r from-pink-500 to-orange-500"
@@ -309,7 +250,6 @@ const TikTokVideoPlayer = ({
         />
       </div>
       
-      {/* Botões de navegação PC */}
       {showNavigationButtons && (
         <>
           <button
@@ -327,7 +267,6 @@ const TikTokVideoPlayer = ({
         </>
       )}
       
-      {/* Controles */}
       {showControls && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/30">
           <Button
@@ -347,7 +286,6 @@ const TikTokVideoPlayer = ({
         </div>
       )}
       
-      {/* Sidebar de ações */}
       <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6">
         <TooltipProvider>
           <Tooltip>
@@ -457,7 +395,6 @@ const TikTokVideoPlayer = ({
         </TooltipProvider>
       </div>
       
-      {/* Informações do post */}
       <div className="absolute bottom-24 left-4 right-20 text-white">
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-10 w-10 ring-2 ring-white/50">
@@ -485,670 +422,10 @@ const TikTokVideoPlayer = ({
         </div>
       </div>
 
-      {/* Instruções de navegação PC */}
       <div className="absolute top-4 left-4 bg-black/70 text-white/80 text-xs px-3 py-2 rounded-lg backdrop-blur-sm">
         <div className="flex items-center gap-2">
           <Keyboard className="h-3 w-3" />
           <span>Use as setas ou clique nas bordas</span>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ---------- COMPONENTE: TikTok Post Card ---------- */
-interface TikTokPostCardProps {
-  post: any;
-  user: any;
-  isActive: boolean;
-  onLike: (postId: string) => void;
-  onComment: (post: any) => void;
-  onNext: () => void;
-  onPrevious: () => void;
-}
-
-const TikTokPostCard = ({ 
-  post, 
-  user, 
-  isActive,
-  onLike,
-  onComment,
-  onNext,
-  onPrevious
-}: TikTokPostCardProps) => {
-  const [showFullText, setShowFullText] = useState(false);
-  const [showNavigationButtons, setShowNavigationButtons] = useState(false);
-  
-  const getMediaUrl = (post: any) => {
-    if (!post.media_urls || !Array.isArray(post.media_urls) || post.media_urls.length === 0) {
-      return null;
-    }
-    
-    const url = post.media_urls[0];
-    if (!url || typeof url !== 'string') return null;
-    
-    return url.replace(/^(image::|video::|audio::)/, '');
-  };
-
-  const isVideo = (url: string) => {
-    if (!url) return false;
-    const videoExtensions = /\.(mp4|webm|ogg|mov|m4v|avi|mkv|flv|wmv)$/i;
-    return videoExtensions.test(url) || url.startsWith('video::');
-  };
-
-  const mediaUrl = getMediaUrl(post);
-  const isPostVideo = mediaUrl && isVideo(mediaUrl);
-  const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
-
-  const handleShare = async () => {
-    if (navigator.share) {
-      try {
-        await navigator.share({
-          title: `Post de @${post.profiles?.username}`,
-          text: post.content,
-          url: window.location.href,
-        });
-      } catch (error) {
-        console.error('Erro ao compartilhar:', error);
-      }
-    }
-  };
-
-  const handleImageClick = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const width = rect.width;
-    
-    if (x < width * 0.25) {
-      onPrevious();
-    } else if (x > width * 0.75) {
-      onNext();
-    }
-  };
-
-  if (isPostVideo) {
-    return (
-      <TikTokVideoPlayer
-        src={mediaUrl}
-        post={post}
-        user={user}
-        isActive={isActive}
-        onLike={() => onLike(post.id)}
-        onComment={() => onComment(post)}
-        onShare={handleShare}
-        onNext={onNext}
-        onPrevious={onPrevious}
-      />
-    );
-  }
-
-  // Post com imagem/texto
-  return (
-    <div 
-      className="relative w-full h-full bg-gradient-to-b from-gray-900 to-black overflow-y-auto"
-      onMouseEnter={() => setShowNavigationButtons(true)}
-      onMouseLeave={() => setShowNavigationButtons(false)}
-    >
-      {/* Botões de navegação PC */}
-      {showNavigationButtons && (
-        <>
-          <button
-            className="absolute left-4 top-1/2 transform -translate-y-1/2 h-16 w-8 bg-black/50 text-white rounded-r-lg flex items-center justify-center hover:bg-black/70 transition-colors z-10"
-            onClick={onPrevious}
-          >
-            <ChevronLeft className="h-6 w-6" />
-          </button>
-          <button
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 h-16 w-8 bg-black/50 text-white rounded-l-lg flex items-center justify-center hover:bg-black/70 transition-colors z-10"
-            onClick={onNext}
-          >
-            <ChevronRight className="h-6 w-6" />
-          </button>
-        </>
-      )}
-
-      {/* Conteúdo do post */}
-      <div className="p-6">
-        {/* Cabeçalho */}
-        <div className="flex items-center gap-3 mb-4">
-          <Avatar className="h-12 w-12">
-            <AvatarImage src={post.profiles?.avatar_url}/>
-            <AvatarFallback className="bg-gradient-to-r from-blue-500 to-purple-500 text-white">
-              {post.profiles?.username?.[0]}
-            </AvatarFallback>
-          </Avatar>
-          <div className="flex-1">
-            <UserLink 
-              userId={post.user_id} 
-              username={post.profiles?.username || ''}
-              className="font-bold text-white text-lg hover:text-white/80"
-            >
-              @{post.profiles?.username}
-            </UserLink>
-            <p className="text-white/70 text-sm">
-              {new Date(post.created_at).toLocaleDateString('pt-BR')}
-            </p>
-          </div>
-          <Button variant="ghost" size="icon" className="text-white">
-            <MoreVertical className="h-5 w-5" />
-          </Button>
-        </div>
-
-        {/* Texto */}
-        {post.content && (
-          <div className="mb-4">
-            <p className={cn("text-white text-base", !showFullText && "line-clamp-3")}>
-              {post.content}
-            </p>
-            {post.content.length > 150 && (
-              <Button
-                variant="link"
-                className="text-blue-400 p-0 h-auto"
-                onClick={() => setShowFullText(!showFullText)}
-              >
-                {showFullText ? "Ver menos" : "Ver mais"}
-              </Button>
-            )}
-          </div>
-        )}
-
-        {/* Mídia */}
-        {mediaUrl && !isVideo(mediaUrl) && (
-          <div 
-            className="mb-4 rounded-xl overflow-hidden cursor-pointer relative"
-            onClick={handleImageClick}
-          >
-            <ProgressiveImage
-              src={mediaUrl}
-              alt={`Mídia de ${post.profiles?.username}`}
-              className="w-full max-h-96"
-              objectFit="cover"
-            />
-            <div className="absolute top-4 left-4 bg-black/70 text-white/80 text-xs px-3 py-2 rounded-lg backdrop-blur-sm">
-              <div className="flex items-center gap-2">
-                <MousePointer className="h-3 w-3" />
-                <span>Clique nas bordas para navegar</span>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* Ações */}
-        <div className="flex items-center gap-4 pt-4 border-t border-white/10">
-          <Button
-            variant="ghost"
-            className={cn("text-white", isLiked && "text-red-500")}
-            onClick={() => onLike(post.id)}
-          >
-            <Heart className={cn("h-6 w-6 mr-2", isLiked && "fill-current")} />
-            <span>{post.likes?.length || 0}</span>
-          </Button>
-          
-          <Button
-            variant="ghost"
-            className="text-white"
-            onClick={() => onComment(post)}
-          >
-            <MessageCircle className="h-6 w-6 mr-2" />
-            <span>{post.comments?.length || 0}</span>
-          </Button>
-          
-          <Button
-            variant="ghost"
-            className="text-white"
-            onClick={handleShare}
-          >
-            <Send className="h-6 w-6 mr-2" />
-          </Button>
-          
-          <Button variant="ghost" className="text-white ml-auto">
-            <Bookmark className="h-6 w-6" />
-          </Button>
-        </div>
-      </div>
-    </div>
-  );
-};
-
-/* ---------- COMPONENTE: Criação de Post ---------- */
-const CreatePostScreen = ({ onClose }: { onClose: () => void }) => {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-  const navigate = useNavigate();
-  
-  const [newPost, setNewPost] = useState("");
-  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-  const [uploading, setUploading] = useState(false);
-  const [processing, setProcessing] = useState(false);
-  const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
-  const [videoDuration, setVideoDuration] = useState<number | null>(null);
-  
-  const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
-  const cameraVideoInputRef = useRef<HTMLInputElement>(null);
-
-  const onFilesPicked = async (files?: FileList | null) => {
-    const list = Array.from(files || []);
-    if (list.length === 0) return;
-    setProcessing(true);
-    const accepted: File[] = [];
-    
-    for (const f of list) {
-      try {
-        if (f.type.startsWith("image/")) {
-          const compressedFile = await processMediaFile(f);
-          accepted.push(compressedFile);
-          
-          toast({
-            title: "Imagem comprimida",
-            description: `Tamanho reduzido de ${(f.size / 1024 / 1024).toFixed(2)}MB para ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-            duration: 3000
-          });
-        } else if (f.type.startsWith("video/")) {
-          const dur = await getMediaDurationSafe(f).catch(() => 0);
-          
-          if (postType === 'viral_clips') {
-            if (dur <= 30.3) {
-              const compressedFile = await processMediaFile(f);
-              accepted.push(compressedFile);
-              setVideoDuration(dur);
-              
-              toast({
-                title: "Vídeo comprimido",
-                description: `Tamanho reduzido de ${(f.size / 1024 / 1024).toFixed(2)}MB para ${(compressedFile.size / 1024 / 1024).toFixed(2)}MB`,
-                duration: 3000
-              });
-            } else {
-              toast({ 
-                variant: "destructive", 
-                title: "Vídeo muito longo", 
-                description: "Clips devem ter no máximo 30 segundos" 
-              });
-            }
-          } else if (postType === 'standard') {
-            if (dur <= 15.3) {
-              const compressedFile = await processMediaFile(f);
-              accepted.push(compressedFile);
-            } else {
-              toast({ variant: "destructive", title: "Vídeo longo (Max 15s)" });
-            }
-          }
-        }
-      } catch (error) {
-        console.error("Erro ao processar arquivo:", error);
-      }
-    }
-    
-    setProcessing(false);
-    if (accepted.length) {
-      setMediaFiles(prev => [...prev, ...accepted]);
-    }
-  };
-
-  const removeFile = (idx: number) => {
-    setMediaFiles(prev => prev.filter((_, i) => i !== idx));
-    if (postType === 'viral_clips') {
-      setVideoDuration(null);
-    }
-  };
-
-  const handleCreatePost = async () => {
-    if (postType === 'viral_clips' && mediaFiles.length === 0) { 
-      toast({ variant: "destructive", title: "Selecione um vídeo para Clip" }); 
-      return; 
-    }
-    
-    if (postType === 'standard' && !newPost.trim() && mediaFiles.length === 0) { 
-      toast({ variant: "destructive", title: "Conteúdo vazio" }); 
-      return; 
-    }
-    
-    setUploading(true);
-    try {
-      const mediaUrls: string[] = [];
-      
-      for (const file of mediaFiles) {
-        const ext = file.name.split(".").pop() || "jpg";
-        const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
-        
-        const { error: uploadError } = await supabase.storage
-          .from("media")
-          .upload(path, file);
-        
-        if (uploadError) {
-          console.error("Erro ao fazer upload:", uploadError);
-          throw uploadError;
-        }
-        
-        const { data: urlData } = supabase.storage
-          .from("media")
-          .getPublicUrl(path);
-        
-        if (!urlData?.publicUrl) {
-          throw new Error("Falha ao obter URL pública");
-        }
-        
-        if (file.type.startsWith("video/")) {
-          mediaUrls.push(`video::${urlData.publicUrl}`);
-        } else if (file.type.startsWith("image/")) {
-          mediaUrls.push(`image::${urlData.publicUrl}`);
-        }
-      }
-      
-      const ends = new Date(); 
-      ends.setMinutes(ends.getMinutes() + 60);
-
-      const content = newPost;
-      const { data: post, error } = await supabase
-        .from("posts")
-        .insert({ 
-          user_id: user?.id, 
-          content, 
-          media_urls: mediaUrls.length ? mediaUrls : null, 
-          audio_url: null,
-          post_type: postType, 
-          voting_ends_at: ends.toISOString(), 
-          voting_period_active: true 
-        })
-        .select()
-        .single();
-      
-      if (error) {
-        console.error("Erro ao criar post:", error);
-        throw error;
-      }
-      
-      toast({ 
-        title: postType === 'viral_clips' ? "Clip publicado! 🔥" : "Post publicado! 🎉",
-        description: "Seu conteúdo foi publicado com sucesso!"
-      });
-      
-      setNewPost(""); 
-      setMediaFiles([]); 
-      setVideoDuration(null);
-      
-      queryClient.invalidateQueries({ queryKey: ["posts", user?.id] });
-      onClose();
-      
-    } catch (e: any) { 
-      console.error("Erro completo:", e);
-      toast({ 
-        variant: "destructive", 
-        title: "Erro ao publicar", 
-        description: e.message || "Tente novamente" 
-      }); 
-    } finally { 
-      setUploading(false); 
-    }
-  };
-
-  // Teclado shortcuts para tela de criação
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-      if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
-        e.preventDefault();
-        handleCreatePost();
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCreatePost, onClose]);
-
-  return (
-    <div className="h-full bg-gradient-to-b from-gray-900 to-black text-white overflow-y-auto">
-      {/* Header */}
-      <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-white/10 p-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              onClick={onClose}
-              className="text-white"
-              title="Voltar (ESC)"
-            >
-              <ChevronLeft className="h-6 w-6" />
-            </Button>
-            <div>
-              <h1 className="text-xl font-bold">Criar Post</h1>
-              <p className="text-xs text-gray-400">Ctrl+Enter para publicar • ESC para voltar</p>
-            </div>
-          </div>
-          <Button
-            onClick={handleCreatePost}
-            disabled={uploading || processing}
-            className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
-            title="Ctrl+Enter"
-          >
-            {uploading ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Publicando...
-              </>
-            ) : processing ? (
-              <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processando...
-              </>
-            ) : (
-              "Publicar"
-            )}
-          </Button>
-        </div>
-      </div>
-
-      {/* Conteúdo */}
-      <div className="p-6 space-y-6">
-        {/* Tipo de post */}
-        <div className="flex gap-2">
-          <Button 
-            variant={postType==='standard'?"default":"outline"} 
-            onClick={()=>{
-              setPostType('standard');
-              setMediaFiles([]);
-              setVideoDuration(null);
-            }} 
-            className={cn(
-              "flex-1",
-              postType==='standard' 
-                ? "bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white border-0" 
-                : "text-white border-white/20"
-            )}
-          >
-            <Globe className="h-4 w-4 mr-2" />
-            Post
-          </Button>
-          <Button 
-            variant={postType==='viral_clips'?"default":"outline"} 
-            onClick={()=>{
-              setPostType('viral_clips');
-              setMediaFiles([]);
-              setVideoDuration(null);
-            }} 
-            className={cn(
-              "flex-1",
-              postType==='viral_clips' 
-                ? "bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 text-white border-0" 
-                : "text-white border-white/20"
-            )}
-          >
-            <Flame className="h-4 w-4 mr-2" />
-            Clip
-          </Button>
-        </div>
-
-        {/* Área de texto */}
-        <div className="space-y-3">
-          <div className="flex items-center gap-3">
-            <Avatar className="h-10 w-10">
-              <AvatarImage src={user?.user_metadata?.avatar_url}/>
-              <AvatarFallback>{user?.email?.[0]?.toUpperCase() || "U"}</AvatarFallback>
-            </Avatar>
-            <div>
-              <p className="font-semibold">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
-            </div>
-          </div>
-          
-          <textarea
-            value={newPost}
-            onChange={(e) => setNewPost(e.target.value)}
-            placeholder={
-              postType === 'standard' 
-                ? "No que está pensando? @menção #tag" 
-                : "Adicione uma descrição para o seu Clip..."
-            }
-            className="w-full bg-transparent border border-white/20 rounded-xl p-4 text-white placeholder-white/50 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-pink-500"
-            autoFocus
-          />
-        </div>
-
-        {/* Preview de mídias */}
-        {mediaFiles.length > 0 && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="font-semibold">Mídias selecionadas:</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => {
-                  setMediaFiles([]);
-                  setVideoDuration(null);
-                }}
-                className="text-white/70 hover:text-white"
-              >
-                Limpar tudo
-              </Button>
-            </div>
-            <div className="grid grid-cols-2 gap-2">
-              {mediaFiles.map((file, i) => (
-                <div key={i} className="relative rounded-lg overflow-hidden group">
-                  {file.type.startsWith("image/") ? (
-                    <img 
-                      src={URL.createObjectURL(file)} 
-                      alt={`Preview ${i}`}
-                      className="w-full h-32 object-cover"
-                    />
-                  ) : (
-                    <div className="w-full h-32 bg-black flex items-center justify-center relative">
-                      <Video className="text-white h-8 w-8" />
-                      {videoDuration && (
-                        <div className="absolute bottom-2 left-2 bg-black/70 rounded text-xs text-white px-2 py-1">
-                          {videoDuration.toFixed(1)}s
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  <Button 
-                    variant="destructive" 
-                    size="icon" 
-                    className="absolute top-2 right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
-                    onClick={()=>removeFile(i)}
-                  >
-                    <X className="h-3 w-3"/>
-                  </Button>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* Opções de mídia */}
-        <div className="space-y-4">
-          <h3 className="font-semibold">Adicionar mídia</h3>
-          <div className="grid grid-cols-3 gap-3">
-            <input 
-              ref={galleryInputRef} 
-              type="file" 
-              multiple 
-              accept="image/*,video/*" 
-              className="hidden" 
-              onChange={e=>onFilesPicked(e.target.files)}
-              disabled={processing}
-            />
-            <Button 
-              variant="outline"
-              onClick={()=>galleryInputRef.current?.click()}
-              disabled={processing}
-              className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
-              title="G - Galeria"
-            >
-              <Images className="h-8 w-8 mb-2" />
-              <span className="text-sm">Galeria</span>
-            </Button>
-            
-            <input 
-              ref={cameraPhotoInputRef} 
-              type="file" 
-              accept="image/*" 
-              capture="environment" 
-              className="hidden" 
-              onChange={e=>onFilesPicked(e.target.files)}
-              disabled={processing}
-            />
-            <Button 
-              variant="outline"
-              onClick={()=>cameraPhotoInputRef.current?.click()}
-              disabled={processing}
-              className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
-              title="C - Câmera"
-            >
-              <Camera className="h-8 w-8 mb-2" />
-              <span className="text-sm">Câmera</span>
-            </Button>
-            
-            <input 
-              ref={cameraVideoInputRef} 
-              type="file" 
-              accept="video/*" 
-              capture="environment" 
-              className="hidden" 
-              onChange={e=>onFilesPicked(e.target.files)}
-              disabled={processing}
-            />
-            <Button 
-              variant="outline"
-              onClick={()=>cameraVideoInputRef.current?.click()}
-              disabled={processing}
-              className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
-              title="V - Vídeo"
-            >
-              <Video className="h-8 w-8 mb-2" />
-              <span className="text-sm">Vídeo</span>
-            </Button>
-          </div>
-        </div>
-
-        {/* Teclas de atalho */}
-        <div className="bg-black/50 rounded-lg p-4 border border-white/10">
-          <h4 className="font-semibold mb-2 flex items-center gap-2">
-            <Keyboard className="h-4 w-4" />
-            Atalhos do teclado
-          </h4>
-          <div className="grid grid-cols-2 gap-2 text-sm">
-            <div className="flex items-center gap-2">
-              <kbd className="bg-gray-800 px-2 py-1 rounded text-xs">ESC</kbd>
-              <span className="text-gray-300">Voltar</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="bg-gray-800 px-2 py-1 rounded text-xs">Ctrl</kbd>
-              <span className="text-gray-300">+</span>
-              <kbd className="bg-gray-800 px-2 py-1 rounded text-xs">Enter</kbd>
-              <span className="text-gray-300">Publicar</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="bg-gray-800 px-2 py-1 rounded text-xs">G</kbd>
-              <span className="text-gray-300">Galeria</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <kbd className="bg-gray-800 px-2 py-1 rounded text-xs">C</kbd>
-              <span className="text-gray-300">Câmera</span>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -1201,18 +478,19 @@ export default function WorldFlow() {
   const queryClient = useQueryClient();
   const navigate = useNavigate();
 
-  /* Estados principais */
+  /* Estados principais - CORRIGIDO: estados movidos para cima */
   const [activeTab, setActiveTab] = useState<'clips' | 'feed' | 'create'>('clips');
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
-  const [touchEnd, setTouchEnd] = useState({ x: 0, y: 0 });
-  const [showMenu, setShowMenu] = useState(false);
-  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-  
-  // Estados para comentários - MOVIDO PARA CIMA para evitar o erro
   const [openingCommentsFor, setOpeningCommentsFor] = useState<any>(null);
   const [newCommentText, setNewCommentText] = useState("");
+  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
+  const [isTouchDevice, setIsTouchDevice] = useState(false);
+
+  /* Estados para gestos */
+  const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
+  const [touchEnd, setTouchEnd] = useState({ x: 0, y: 0 });
+  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
+  const [showMenu, setShowMenu] = useState(false);
 
   /* Detectar dispositivo touch */
   useEffect(() => {
@@ -1262,7 +540,7 @@ export default function WorldFlow() {
   const standardPosts = posts?.filter(x => x.post_type === 'standard') || [];
   const allPosts = [...clipsPosts, ...standardPosts];
 
-  /* Mutation para adicionar comentário - MOVIDO PARA DEPOIS dos estados */
+  /* Mutation para adicionar comentário */
   const addComment = useMutation({
     mutationFn: async () => { 
       if (openingCommentsFor && newCommentText.trim()) {
@@ -1294,7 +572,7 @@ export default function WorldFlow() {
     }
   });
 
-  /* Query para buscar comentários - MOVIDO PARA DEPOIS dos estados */
+  /* Query para buscar comentários */
   const { data: comments, isLoading: loadingComments } = useQuery({
     queryKey: ["post-comments", openingCommentsFor?.id], 
     enabled: !!openingCommentsFor,
@@ -1316,7 +594,7 @@ export default function WorldFlow() {
     }
   });
 
-  /* Handlers de navegação */
+  /* Handlers de navegação SIMPLIFICADOS */
   const handleNext = () => {
     if (currentIndex < allPosts.length - 1) {
       setCurrentIndex(prev => prev + 1);
@@ -1329,43 +607,95 @@ export default function WorldFlow() {
     }
   };
 
-  const handleNextTab = () => {
-    const tabs: ('clips' | 'feed' | 'create')[] = ['clips', 'feed', 'create'];
-    const currentIndex = tabs.indexOf(activeTab);
-    const nextIndex = (currentIndex + 1) % tabs.length;
-    setActiveTab(tabs[nextIndex]);
+  /* Handlers de gestos TOUCH CORRIGIDOS */
+  const handleTouchStart = (e: React.TouchEvent) => {
+    setTouchStart({
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    });
+    setSwipeDirection(null);
   };
 
-  const handlePreviousTab = () => {
-    const tabs: ('clips' | 'feed' | 'create')[] = ['clips', 'feed', 'create'];
-    const currentIndex = tabs.indexOf(activeTab);
-    const prevIndex = (currentIndex - 1 + tabs.length) % tabs.length;
-    setActiveTab(tabs[prevIndex]);
+  const handleTouchMove = (e: React.TouchEvent) => {
+    setTouchEnd({
+      x: e.touches[0].clientX,
+      y: e.touches[0].clientY
+    });
   };
 
-  /* Eventos de teclado */
+  const handleTouchEnd = () => {
+    const xDiff = touchStart.x - touchEnd.x;
+    const yDiff = touchStart.y - touchEnd.y;
+    const minSwipeDistance = 50;
+
+    // Determinar direção principal do swipe
+    if (Math.abs(xDiff) > Math.abs(yDiff)) {
+      // Swipe horizontal
+      if (Math.abs(xDiff) > minSwipeDistance) {
+        if (xDiff > 0) {
+          // Swipe para ESQUERDA -> Abre tela de criação
+          setSwipeDirection('left');
+          setTimeout(() => {
+            setActiveTab('create');
+            setSwipeDirection(null);
+          }, 300);
+        } else {
+          // Swipe para DIREITA -> Mostra clips
+          setSwipeDirection('right');
+          setTimeout(() => {
+            setActiveTab('clips');
+            setSwipeDirection(null);
+          }, 300);
+        }
+      }
+    } else {
+      // Swipe vertical
+      if (Math.abs(yDiff) > minSwipeDistance) {
+        if (yDiff > 0) {
+          // Swipe para BAIXO -> Navega entre posts no feed
+          setSwipeDirection('down');
+          setTimeout(() => {
+            if (activeTab === 'clips') {
+              handleNext();
+            } else if (activeTab === 'feed') {
+              // No feed, navega para próximo post
+              if (currentIndex < standardPosts.length - 1) {
+                setCurrentIndex(prev => prev + 1);
+              }
+            }
+            setSwipeDirection(null);
+          }, 300);
+        } else {
+          // Swipe para CIMA -> Navega para post anterior
+          setSwipeDirection('up');
+          setTimeout(() => {
+            if (activeTab === 'clips') {
+              handlePrevious();
+            } else if (activeTab === 'feed') {
+              // No feed, navega para post anterior
+              if (currentIndex > 0) {
+                setCurrentIndex(prev => prev - 1);
+              }
+            }
+            setSwipeDirection(null);
+          }, 300);
+        }
+      }
+    }
+  };
+
+  /* Eventos de teclado SIMPLIFICADOS */
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Navegação geral
       switch (e.key) {
         case 'ArrowRight':
           e.preventDefault();
-          if (activeTab === 'clips') {
-            handleNextTab();
-          } else if (activeTab === 'feed') {
-            // No feed, direita também muda de tab
-            handleNextTab();
-          }
+          setActiveTab('clips');
           break;
           
         case 'ArrowLeft':
           e.preventDefault();
-          if (activeTab === 'clips') {
-            handlePreviousTab();
-          } else if (activeTab === 'create') {
-            // Na criação, esquerda volta para clips
-            setActiveTab('clips');
-          }
+          setActiveTab('create');
           break;
           
         case 'ArrowDown':
@@ -1373,8 +703,9 @@ export default function WorldFlow() {
           if (activeTab === 'clips') {
             handleNext();
           } else if (activeTab === 'feed') {
-            // No feed, baixo scrolla
-            window.scrollBy({ top: 100, behavior: 'smooth' });
+            if (currentIndex < standardPosts.length - 1) {
+              setCurrentIndex(prev => prev + 1);
+            }
           }
           break;
           
@@ -1383,14 +714,14 @@ export default function WorldFlow() {
           if (activeTab === 'clips') {
             handlePrevious();
           } else if (activeTab === 'feed') {
-            // No feed, cima scrolla
-            window.scrollBy({ top: -100, behavior: 'smooth' });
+            if (currentIndex > 0) {
+              setCurrentIndex(prev => prev - 1);
+            }
           }
           break;
           
         case ' ':
           e.preventDefault();
-          // Space para play/pause no player de vídeo
           const videoElement = document.querySelector('video');
           if (videoElement) {
             if (videoElement.paused) {
@@ -1401,44 +732,6 @@ export default function WorldFlow() {
           }
           break;
           
-        case 'm':
-        case 'M':
-          e.preventDefault();
-          // M para mute/unmute
-          const video = document.querySelector('video');
-          if (video) {
-            video.muted = !video.muted;
-          }
-          break;
-          
-        case 'l':
-        case 'L':
-          e.preventDefault();
-          // L para curtir post atual
-          if (allPosts[currentIndex]) {
-            handleLike(allPosts[currentIndex].id);
-          }
-          break;
-          
-        case 'c':
-        case 'C':
-          e.preventDefault();
-          // C para comentar no post atual
-          if (allPosts[currentIndex]) {
-            setOpeningCommentsFor(allPosts[currentIndex]);
-          }
-          break;
-          
-        case 's':
-        case 'S':
-          e.preventDefault();
-          // S para compartilhar
-          toast({
-            title: "Compartilhar",
-            description: "Link copiado para a área de transferência!",
-          });
-          break;
-          
         case 'Escape':
           if (openingCommentsFor) {
             setOpeningCommentsFor(null);
@@ -1446,14 +739,6 @@ export default function WorldFlow() {
             setShowKeyboardHelp(false);
           } else if (activeTab === 'create') {
             setActiveTab('clips');
-          }
-          break;
-          
-        case 'h':
-        case 'H':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            setShowKeyboardHelp(!showKeyboardHelp);
           }
           break;
           
@@ -1482,77 +767,7 @@ export default function WorldFlow() {
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, currentIndex, allPosts, openingCommentsFor, showKeyboardHelp]);
-
-  /* Evento de scroll do mouse */
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      if (activeTab === 'clips') {
-        e.preventDefault();
-        if (e.deltaY > 0) {
-          handleNext();
-        } else {
-          handlePrevious();
-        }
-      }
-    };
-
-    const container = document.querySelector('.main-container');
-    if (container && activeTab === 'clips') {
-      container.addEventListener('wheel', handleWheel, { passive: false });
-    }
-
-    return () => {
-      if (container) {
-        container.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [activeTab, currentIndex, allPosts.length]);
-
-  /* Handlers de gestos touch */
-  const handleTouchStart = (e: React.TouchEvent) => {
-    setTouchStart({
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY
-    });
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    setTouchEnd({
-      x: e.touches[0].clientX,
-      y: e.touches[0].clientY
-    });
-  };
-
-  const handleTouchEnd = () => {
-    const xDiff = touchStart.x - touchEnd.x;
-    const yDiff = touchStart.y - touchEnd.y;
-    const minSwipeDistance = 50;
-
-    // Swipe horizontal (esquerda/direita)
-    if (Math.abs(xDiff) > Math.abs(yDiff)) {
-      if (Math.abs(xDiff) > minSwipeDistance) {
-        if (xDiff > 0) {
-          // Swipe para esquerda
-          setActiveTab('create');
-        } else {
-          // Swipe para direita
-          setActiveTab('clips');
-        }
-      }
-    } else {
-      // Swipe vertical (cima/baixo)
-      if (Math.abs(yDiff) > minSwipeDistance) {
-        if (yDiff > 0) {
-          // Swipe para baixo - próxima postagem
-          handleNext();
-        } else {
-          // Swipe para cima - postagem anterior
-          handlePrevious();
-        }
-      }
-    }
-  };
+  }, [activeTab, currentIndex, allPosts, openingCommentsFor, showKeyboardHelp, standardPosts.length]);
 
   /* Handlers de ações */
   const handleLike = async (postId: string) => {
@@ -1585,226 +800,574 @@ export default function WorldFlow() {
     }
   };
 
-  /* Renderização baseada na tab atual */
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'clips':
-        if (allPosts.length === 0) {
-          return (
-            <div className="h-full flex flex-col items-center justify-center text-white p-8">
-              <Flame className="h-16 w-16 mb-4 text-gray-500" />
-              <h2 className="text-xl font-bold mb-2">Nenhum post ainda</h2>
-              <p className="text-gray-400 text-center mb-6">
-                Seja o primeiro a compartilhar algo!
-              </p>
-              <Button
-                onClick={() => setActiveTab('create')}
-                className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
-              >
-                Criar primeiro post
-              </Button>
-            </div>
-          );
-        }
+  /* Componente para Clips */
+  const TikTokClipsView = () => {
+    if (allPosts.length === 0) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center text-white p-8">
+          <Flame className="h-16 w-16 mb-4 text-gray-500" />
+          <h2 className="text-xl font-bold mb-2">Nenhum clip ainda</h2>
+          <p className="text-gray-400 text-center mb-6">
+            Seja o primeiro a compartilhar um clip!
+          </p>
+          <Button
+            onClick={() => setActiveTab('create')}
+            className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
+          >
+            Criar primeiro clip
+          </Button>
+        </div>
+      );
+    }
 
-        const currentPost = allPosts[currentIndex];
-        return (
-          <TikTokPostCard
-            key={currentPost.id}
-            post={currentPost}
-            user={user}
-            isActive={true}
-            onLike={handleLike}
-            onComment={setOpeningCommentsFor}
-            onNext={handleNext}
-            onPrevious={handlePrevious}
-          />
-        );
+    const currentPost = allPosts[currentIndex];
+    const getMediaUrl = (post: any) => {
+      if (!post.media_urls || !Array.isArray(post.media_urls) || post.media_urls.length === 0) {
+        return null;
+      }
+      
+      const url = post.media_urls[0];
+      if (!url || typeof url !== 'string') return null;
+      
+      return url.replace(/^(image::|video::|audio::)/, '');
+    };
 
-      case 'feed':
-        return (
-          <div className="h-full overflow-y-auto bg-gradient-to-b from-gray-900 to-black main-container">
-            <div className="p-4 max-w-3xl mx-auto">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-2xl font-bold text-white">Feed</h2>
-                <div className="flex items-center gap-2">
-                  <Badge className="bg-gradient-to-r from-blue-500 to-purple-500">
-                    Use ↑↓ para scroll
-                  </Badge>
+    const mediaUrl = getMediaUrl(currentPost);
+    const isVideo = mediaUrl && isVideoUrl(mediaUrl);
+
+    if (isVideo && mediaUrl) {
+      return (
+        <TikTokVideoPlayer
+          src={mediaUrl}
+          post={currentPost}
+          user={user}
+          isActive={true}
+          onLike={() => handleLike(currentPost.id)}
+          onComment={() => setOpeningCommentsFor(currentPost)}
+          onShare={() => {
+            toast({
+              title: "Compartilhar",
+              description: "Link copiado para a área de transferência!",
+            });
+          }}
+          onNext={handleNext}
+          onPrevious={handlePrevious}
+        />
+      );
+    }
+
+    return (
+      <div className="relative w-full h-full bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
+        <div className="text-center p-8">
+          <Flame className="h-24 w-24 text-gray-600 mx-auto mb-4" />
+          <h2 className="text-2xl font-bold text-white mb-2">Clip não disponível</h2>
+          <p className="text-gray-400 mb-6">
+            Este clip não está mais disponível ou foi removido.
+          </p>
+          <Button
+            onClick={handleNext}
+            className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
+          >
+            Próximo clip
+          </Button>
+        </div>
+      </div>
+    );
+  };
+
+  /* Componente para Feed */
+  const TikTokFeedView = () => {
+    if (standardPosts.length === 0) {
+      return (
+        <div className="h-full flex flex-col items-center justify-center text-white p-8">
+          <Globe className="h-16 w-16 mb-4 text-gray-500" />
+          <h2 className="text-xl font-bold mb-2">Nenhum post ainda</h2>
+          <p className="text-gray-400 text-center mb-6">
+            Seja o primeiro a compartilhar algo!
+          </p>
+          <Button
+            onClick={() => setActiveTab('create')}
+            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
+          >
+            Criar primeiro post
+          </Button>
+        </div>
+      );
+    }
+
+    const currentPost = standardPosts[currentIndex];
+    const getMediaUrl = (post: any) => {
+      if (!post.media_urls || !Array.isArray(post.media_urls) || post.media_urls.length === 0) {
+        return null;
+      }
+      
+      const url = post.media_urls[0];
+      if (!url || typeof url !== 'string') return null;
+      
+      return url.replace(/^(image::|video::|audio::)/, '');
+    };
+
+    const mediaUrl = getMediaUrl(currentPost);
+    const isVideo = mediaUrl && isVideoUrl(mediaUrl);
+
+    return (
+      <div className="h-full bg-gradient-to-b from-gray-900 to-black overflow-y-auto">
+        <div className="p-6 max-w-2xl mx-auto">
+          <div className="mb-6">
+            <h2 className="text-2xl font-bold text-white mb-2">Feed</h2>
+            <p className="text-gray-400">
+              Post {currentIndex + 1} de {standardPosts.length}
+            </p>
+          </div>
+
+          <Card className="bg-gray-800 border-gray-700 overflow-hidden">
+            <CardContent className="p-0">
+              <div className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <Avatar>
+                    <AvatarImage src={currentPost.profiles?.avatar_url}/>
+                    <AvatarFallback>
+                      {currentPost.profiles?.username?.[0]?.toUpperCase() || "U"}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <UserLink 
+                      userId={currentPost.user_id} 
+                      username={currentPost.profiles?.username||""} 
+                      className="font-bold text-white hover:underline"
+                    >
+                      @{currentPost.profiles?.username}
+                    </UserLink>
+                    <p className="text-gray-400 text-sm">
+                      {new Date(currentPost.created_at).toLocaleDateString('pt-BR')}
+                    </p>
+                  </div>
+                </div>
+
+                {currentPost.content && (
+                  <p className="text-white mb-6 text-lg">{currentPost.content}</p>
+                )}
+
+                {mediaUrl && (
+                  <div className="mb-6 rounded-xl overflow-hidden">
+                    {isVideo ? (
+                      <video
+                        src={mediaUrl}
+                        className="w-full h-auto max-h-96 rounded-lg"
+                        controls
+                        playsInline
+                      />
+                    ) : (
+                      <img
+                        src={mediaUrl}
+                        alt={`Mídia de ${currentPost.profiles?.username}`}
+                        className="w-full h-auto max-h-96 object-cover rounded-lg"
+                      />
+                    )}
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 pt-4 border-t border-gray-700">
                   <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setActiveTab('create')}
-                    className="text-white border-white/20"
+                    variant="ghost"
+                    className={cn(
+                      "text-white",
+                      currentPost.likes?.some((l:any) => l.user_id === user?.id) && "text-red-500"
+                    )}
+                    onClick={() => handleLike(currentPost.id)}
                   >
-                    <Pencil className="h-4 w-4 mr-2" />
-                    Novo Post
+                    <Heart className={cn(
+                      "h-6 w-6 mr-2",
+                      currentPost.likes?.some((l:any) => l.user_id === user?.id) && "fill-current"
+                    )} />
+                    <span>{currentPost.likes?.length || 0}</span>
+                  </Button>
+                  
+                  <Button
+                    variant="ghost"
+                    className="text-white"
+                    onClick={() => setOpeningCommentsFor(currentPost)}
+                  >
+                    <MessageCircle className="h-6 w-6 mr-2" />
+                    <span>{currentPost.comments?.length || 0}</span>
                   </Button>
                 </div>
               </div>
-              <div className="space-y-4">
-                {standardPosts.map((post) => (
-                  <Card key={post.id} className="bg-gray-800 border-gray-700 overflow-hidden hover:border-gray-600 transition-colors">
-                    <CardContent className="p-0">
-                      <div className="p-4">
-                        <div className="flex items-center gap-3 mb-3">
-                          <Avatar>
-                            <AvatarImage src={post.profiles?.avatar_url}/>
-                            <AvatarFallback>
-                              {post.profiles?.username?.[0]?.toUpperCase() || "U"}
-                            </AvatarFallback>
-                          </Avatar>
-                          <div className="flex-1">
-                            <UserLink 
-                              userId={post.user_id} 
-                              username={post.profiles?.username||""} 
-                              className="font-bold text-white hover:underline"
-                            >
-                              @{post.profiles?.username}
-                            </UserLink>
-                            <p className="text-gray-400 text-sm">
-                              {new Date(post.created_at).toLocaleDateString('pt-BR')}
-                            </p>
-                          </div>
-                        </div>
-                        {post.content && (
-                          <p className="text-white mb-3">{post.content}</p>
-                        )}
+            </CardContent>
+          </Card>
+
+          <div className="flex justify-between items-center mt-6">
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (currentIndex > 0) {
+                  setCurrentIndex(prev => prev - 1);
+                }
+              }}
+              disabled={currentIndex === 0}
+              className="text-white border-gray-700"
+            >
+              <ChevronLeft className="h-4 w-4 mr-2" />
+              Anterior
+            </Button>
+            
+            <span className="text-gray-400 text-sm">
+              {currentIndex + 1} / {standardPosts.length}
+            </span>
+            
+            <Button
+              variant="outline"
+              onClick={() => {
+                if (currentIndex < standardPosts.length - 1) {
+                  setCurrentIndex(prev => prev + 1);
+                }
+              }}
+              disabled={currentIndex === standardPosts.length - 1}
+              className="text-white border-gray-700"
+            >
+              Próximo
+              <ChevronRight className="h-4 w-4 ml-2" />
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  /* Componente para Criação */
+  const TikTokCreateView = () => {
+    const [newPost, setNewPost] = useState("");
+    const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+    const [uploading, setUploading] = useState(false);
+    const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
+    
+    const galleryInputRef = useRef<HTMLInputElement>(null);
+
+    const handleCreatePost = async () => {
+      if (!newPost.trim() && mediaFiles.length === 0) { 
+        toast({ variant: "destructive", title: "Conteúdo vazio" }); 
+        return; 
+      }
+      
+      setUploading(true);
+      try {
+        const mediaUrls: string[] = [];
+        
+        for (const file of mediaFiles) {
+          const ext = file.name.split(".").pop() || "jpg";
+          const path = `${user?.id}/${Date.now()}-${Math.random()}.${ext}`;
+          
+          const { error: uploadError } = await supabase.storage
+            .from("media")
+            .upload(path, file);
+          
+          if (uploadError) throw uploadError;
+          
+          const { data: urlData } = supabase.storage
+            .from("media")
+            .getPublicUrl(path);
+          
+          if (!urlData?.publicUrl) {
+            throw new Error("Falha ao obter URL pública");
+          }
+          
+          if (file.type.startsWith("video/")) {
+            mediaUrls.push(`video::${urlData.publicUrl}`);
+          } else if (file.type.startsWith("image/")) {
+            mediaUrls.push(`image::${urlData.publicUrl}`);
+          }
+        }
+        
+        const ends = new Date(); 
+        ends.setMinutes(ends.getMinutes() + 60);
+
+        const content = newPost;
+        const { error } = await supabase
+          .from("posts")
+          .insert({ 
+            user_id: user?.id, 
+            content, 
+            media_urls: mediaUrls.length ? mediaUrls : null, 
+            audio_url: null,
+            post_type: postType, 
+            voting_ends_at: ends.toISOString(), 
+            voting_period_active: true 
+          });
+        
+        if (error) throw error;
+        
+        toast({ 
+          title: "Post publicado! 🎉",
+          description: "Seu conteúdo foi publicado com sucesso!"
+        });
+        
+        setNewPost(""); 
+        setMediaFiles([]);
+        refetch();
+        setActiveTab('clips');
+        
+      } catch (e: any) { 
+        toast({ 
+          variant: "destructive", 
+          title: "Erro ao publicar", 
+          description: e.message || "Tente novamente" 
+        }); 
+      } finally { 
+        setUploading(false); 
+      }
+    };
+
+    return (
+      <div className="h-full bg-gradient-to-b from-gray-900 to-black text-white overflow-y-auto">
+        <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-white/10 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={() => setActiveTab('clips')}
+                className="text-white"
+              >
+                <ChevronLeft className="h-6 w-6" />
+              </Button>
+              <h1 className="text-xl font-bold">Criar Post</h1>
+            </div>
+            <Button
+              onClick={handleCreatePost}
+              disabled={uploading}
+              className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+            >
+              {uploading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Publicando...
+                </>
+              ) : (
+                "Publicar"
+              )}
+            </Button>
+          </div>
+        </div>
+
+        <div className="p-6 space-y-6">
+          <div className="flex gap-2">
+            <Button 
+              variant={postType==='standard'?"default":"outline"} 
+              onClick={()=>setPostType('standard')} 
+              className={cn(
+                "flex-1",
+                postType==='standard' 
+                  ? "bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white border-0" 
+                  : "text-white border-white/20"
+              )}
+            >
+              <Globe className="h-4 w-4 mr-2" />
+              Post
+            </Button>
+            <Button 
+              variant={postType==='viral_clips'?"default":"outline"} 
+              onClick={()=>setPostType('viral_clips')} 
+              className={cn(
+                "flex-1",
+                postType==='viral_clips' 
+                  ? "bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 text-white border-0" 
+                  : "text-white border-white/20"
+              )}
+            >
+              <Flame className="h-4 w-4 mr-2" />
+              Clip
+            </Button>
+          </div>
+
+          <div className="space-y-3">
+            <div className="flex items-center gap-3">
+              <Avatar className="h-10 w-10">
+                <AvatarImage src={user?.user_metadata?.avatar_url}/>
+                <AvatarFallback>{user?.email?.[0]?.toUpperCase() || "U"}</AvatarFallback>
+              </Avatar>
+              <div>
+                <p className="font-semibold">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
+              </div>
+            </div>
+            
+            <textarea
+              value={newPost}
+              onChange={(e) => setNewPost(e.target.value)}
+              placeholder={
+                postType === 'standard' 
+                  ? "No que está pensando?" 
+                  : "Adicione uma descrição para o seu Clip..."
+              }
+              className="w-full bg-transparent border border-white/20 rounded-xl p-4 text-white placeholder-white/50 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
+              autoFocus
+            />
+          </div>
+
+          <div className="space-y-4">
+            <h3 className="font-semibold">Adicionar mídia</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <input 
+                ref={galleryInputRef} 
+                type="file" 
+                multiple 
+                accept="image/*,video/*" 
+                className="hidden" 
+                onChange={(e) => {
+                  const files = Array.from(e.target.files || []);
+                  setMediaFiles(prev => [...prev, ...files]);
+                }}
+              />
+              <Button 
+                variant="outline"
+                onClick={()=>galleryInputRef.current?.click()}
+                className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
+              >
+                <Images className="h-8 w-8 mb-2" />
+                <span className="text-sm">Galeria</span>
+              </Button>
+              
+              <Button 
+                variant="outline"
+                onClick={() => {
+                  if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) {
+                    navigator.mediaDevices.getUserMedia({ video: true })
+                      .then(stream => {
+                        // Implementar captura de foto/vídeo
+                        toast({
+                          title: "Câmera ativada",
+                          description: "Funcionalidade de câmera em desenvolvimento"
+                        });
+                        stream.getTracks().forEach(track => track.stop());
+                      })
+                      .catch(err => {
+                        console.error("Erro ao acessar câmera:", err);
+                        toast({
+                          variant: "destructive",
+                          title: "Erro na câmera",
+                          description: "Não foi possível acessar a câmera"
+                        });
+                      });
+                  }
+                }}
+                className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
+              >
+                <Camera className="h-8 w-8 mb-2" />
+                <span className="text-sm">Câmera</span>
+              </Button>
+            </div>
+          </div>
+
+          {mediaFiles.length > 0 && (
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold">Mídias selecionadas:</h3>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setMediaFiles([])}
+                  className="text-white/70 hover:text-white"
+                >
+                  Limpar tudo
+                </Button>
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                {mediaFiles.map((file, i) => (
+                  <div key={i} className="relative rounded-lg overflow-hidden group">
+                    {file.type.startsWith("image/") ? (
+                      <img 
+                        src={URL.createObjectURL(file)} 
+                        alt={`Preview ${i}`}
+                        className="w-full h-32 object-cover"
+                      />
+                    ) : (
+                      <div className="w-full h-32 bg-black flex items-center justify-center relative">
+                        <Video className="text-white h-8 w-8" />
                       </div>
-                      
-                      {/* Mídia */}
-                      {post.media_urls?.[0] && (
-                        <div className="relative">
-                          <ProgressiveImage
-                            src={stripPrefix(post.media_urls[0])}
-                            alt={`Mídia de ${post.profiles?.username}`}
-                            className="w-full max-h-96"
-                            objectFit="cover"
-                          />
-                        </div>
-                      )}
-                      
-                      {/* Ações */}
-                      <div className="p-4 flex items-center gap-4 border-t border-gray-700">
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className={cn(
-                            "text-white",
-                            post.likes?.some((l:any) => l.user_id === user?.id) && "text-red-500"
-                          )}
-                          onClick={() => handleLike(post.id)}
-                        >
-                          <Heart className={cn(
-                            "h-5 w-5 mr-2",
-                            post.likes?.some((l:any) => l.user_id === user?.id) && "fill-current"
-                          )} />
-                          {post.likes?.length || 0}
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="text-white"
-                          onClick={() => setOpeningCommentsFor(post)}
-                        >
-                          <MessageCircle className="h-5 w-5 mr-2" />
-                          {post.comments?.length || 0}
-                        </Button>
-                      </div>
-                    </CardContent>
-                  </Card>
+                    )}
+                    <Button 
+                      variant="destructive" 
+                      size="icon" 
+                      className="absolute top-2 right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                      onClick={()=>setMediaFiles(prev => prev.filter((_, index) => index !== i))}
+                    >
+                      <X className="h-3 w-3"/>
+                    </Button>
+                  </div>
                 ))}
               </div>
             </div>
-          </div>
-        );
+          )}
+        </div>
+      </div>
+    );
+  };
 
+  /* Renderização principal */
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'clips':
+        return <TikTokClipsView />;
+      case 'feed':
+        return <TikTokFeedView />;
       case 'create':
-        return <CreatePostScreen onClose={() => setActiveTab('clips')} />;
-
+        return <TikTokCreateView />;
       default:
         return null;
     }
   };
 
-  /* Navegação inferior */
-  const BottomNavigation = () => (
-    <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-lg border-t border-white/10 z-40">
-      <div className="flex items-center justify-around p-3">
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-12 w-12 rounded-full transition-all",
-                  activeTab === 'clips' 
-                    ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white scale-110" 
-                    : "text-white/70 hover:text-white hover:bg-white/10"
-                )}
-                onClick={() => setActiveTab('clips')}
-              >
-                <Home className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Clips (Ctrl+1)</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-12 w-12 rounded-full transition-all",
-                  activeTab === 'feed' 
-                    ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white scale-110" 
-                    : "text-white/70 hover:text-white hover:bg-white/10"
-                )}
-                onClick={() => setActiveTab('feed')}
-              >
-                <Globe className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Feed (Ctrl+2)</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className={cn(
-                  "h-12 w-12 rounded-full transition-all",
-                  activeTab === 'create' 
-                    ? "bg-gradient-to-r from-green-500 to-teal-500 text-white scale-110" 
-                    : "text-white/70 hover:text-white hover:bg-white/10"
-                )}
-                onClick={() => setActiveTab('create')}
-              >
-                <Pencil className="h-6 w-6" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Criar (Ctrl+3)</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    </div>
-  );
+  /* Animação de swipe */
+  const getSwipeAnimation = () => {
+    if (!swipeDirection) return '';
+    
+    switch (swipeDirection) {
+      case 'left':
+        return 'animate-slide-in-left';
+      case 'right':
+        return 'animate-slide-in-right';
+      case 'up':
+        return 'animate-slide-in-up';
+      case 'down':
+        return 'animate-slide-in-down';
+      default:
+        return '';
+    }
+  };
 
   return (
     <div className="fixed inset-0 bg-black overflow-hidden">
+      {/* Adicionar estilos de animação */}
+      <style>{`
+        @keyframes slideInLeft {
+          from { transform: translateX(100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInRight {
+          from { transform: translateX(-100%); opacity: 0; }
+          to { transform: translateX(0); opacity: 1; }
+        }
+        @keyframes slideInUp {
+          from { transform: translateY(100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        @keyframes slideInDown {
+          from { transform: translateY(-100%); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
+        }
+        .animate-slide-in-left {
+          animation: slideInLeft 0.3s ease-out;
+        }
+        .animate-slide-in-right {
+          animation: slideInRight 0.3s ease-out;
+        }
+        .animate-slide-in-up {
+          animation: slideInUp 0.3s ease-out;
+        }
+        .animate-slide-in-down {
+          animation: slideInDown 0.3s ease-out;
+        }
+      `}</style>
+
       {/* Menu superior */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/80 to-transparent p-4">
         <div className="flex items-center justify-between">
@@ -1815,7 +1378,6 @@ export default function WorldFlow() {
                   variant="ghost"
                   size="icon"
                   className="text-white hover:bg-white/20"
-                  title="Menu (M)"
                 >
                   <Menu className="h-6 w-6" />
                 </Button>
@@ -1838,17 +1400,29 @@ export default function WorldFlow() {
                     </div>
                   </div>
                   <div className="space-y-1 mt-4">
-                    <Button variant="ghost" className="w-full justify-start text-white hover:bg-gray-800">
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start text-white hover:bg-gray-800"
+                      onClick={() => setActiveTab('clips')}
+                    >
                       <Home className="mr-3 h-4 w-4" />
-                      Início
+                      Clips
                     </Button>
-                    <Button variant="ghost" className="w-full justify-start text-white hover:bg-gray-800">
-                      <User className="mr-3 h-4 w-4" />
-                      Perfil
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start text-white hover:bg-gray-800"
+                      onClick={() => setActiveTab('feed')}
+                    >
+                      <Globe className="mr-3 h-4 w-4" />
+                      Feed
                     </Button>
-                    <Button variant="ghost" className="w-full justify-start text-white hover:bg-gray-800">
-                      <Settings className="mr-3 h-4 w-4" />
-                      Configurações
+                    <Button 
+                      variant="ghost" 
+                      className="w-full justify-start text-white hover:bg-gray-800"
+                      onClick={() => setActiveTab('create')}
+                    >
+                      <Pencil className="mr-3 h-4 w-4" />
+                      Criar
                     </Button>
                     <Button 
                       variant="ghost" 
@@ -1856,7 +1430,7 @@ export default function WorldFlow() {
                       onClick={() => setShowKeyboardHelp(true)}
                     >
                       <Keyboard className="mr-3 h-4 w-4" />
-                      Atalhos de Teclado
+                      Atalhos
                     </Button>
                   </div>
                 </div>
@@ -1864,11 +1438,11 @@ export default function WorldFlow() {
             </Sheet>
 
             <div className="text-white">
-              <h1 className="font-bold text-lg">WORLD Flow</h1>
+              <h1 className="font-bold text-lg">TikTok Flow</h1>
               <p className="text-xs text-gray-400">
                 {activeTab === 'clips' ? 'Clips' : 
                  activeTab === 'feed' ? 'Feed' : 
-                 'Criar Post'}
+                 'Criar'}
               </p>
             </div>
           </div>
@@ -1879,26 +1453,14 @@ export default function WorldFlow() {
                 <span className="text-white text-sm">
                   {currentIndex + 1} / {allPosts.length}
                 </span>
-                <div className="flex gap-1">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-white hover:bg-white/20"
-                    onClick={handlePrevious}
-                    disabled={currentIndex === 0}
-                  >
-                    <ChevronUp className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-6 w-6 text-white hover:bg-white/20"
-                    onClick={handleNext}
-                    disabled={currentIndex === allPosts.length - 1}
-                  >
-                    <ChevronDown className="h-4 w-4" />
-                  </Button>
-                </div>
+              </div>
+            )}
+
+            {activeTab === 'feed' && standardPosts.length > 0 && (
+              <div className="hidden md:flex items-center gap-2 bg-black/50 rounded-full px-3 py-1">
+                <span className="text-white text-sm">
+                  {currentIndex + 1} / {standardPosts.length}
+                </span>
               </div>
             )}
 
@@ -1908,7 +1470,7 @@ export default function WorldFlow() {
               activeTab === 'feed' ? "bg-gradient-to-r from-blue-500 to-purple-500" :
               "bg-gradient-to-r from-green-500 to-teal-500"
             )}>
-              {isTouchDevice ? "Toque para navegar" : "Use as setas do teclado"}
+              {isTouchDevice ? "Deslize para navegar" : "Use as setas"}
             </Badge>
             
             <Button
@@ -1916,7 +1478,6 @@ export default function WorldFlow() {
               size="icon"
               className="text-white hover:bg-white/20"
               onClick={() => setShowKeyboardHelp(true)}
-              title="Atalhos de teclado (Ctrl+H)"
             >
               <Keyboard className="h-5 w-5" />
             </Button>
@@ -1924,9 +1485,9 @@ export default function WorldFlow() {
         </div>
       </div>
 
-      {/* Área principal com gestos e navegação */}
+      {/* Área principal com gestos */}
       <div 
-        className="h-full w-full main-container"
+        className={`h-full w-full ${getSwipeAnimation()}`}
         onTouchStart={isTouchDevice ? handleTouchStart : undefined}
         onTouchMove={isTouchDevice ? handleTouchMove : undefined}
         onTouchEnd={isTouchDevice ? handleTouchEnd : undefined}
@@ -1934,119 +1495,130 @@ export default function WorldFlow() {
         {renderContent()}
       </div>
 
-      {/* Indicadores de navegação PC */}
-      {!isTouchDevice && activeTab === 'clips' && allPosts.length > 0 && (
-        <>
-          <div className="fixed top-1/2 left-4 transform -translate-y-1/2 z-30">
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-white/50 text-xs rotate-90 hidden md:block">SETAS</div>
-              <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-                <div className="flex flex-col items-center">
-                  <ArrowUp className="h-4 w-4 text-white/70" />
-                  <span className="text-white/50 text-xs">↑</span>
-                  <ArrowDown className="h-4 w-4 text-white/70 mt-2" />
-                  <span className="text-white/50 text-xs">↓</span>
-                </div>
-              </div>
+      {/* Indicadores de gestos */}
+      {isTouchDevice && (
+        <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30">
+          <div className="bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-4">
+            <div className="flex flex-col items-center">
+              <ArrowLeft className="h-4 w-4 text-white/70" />
+              <span className="text-white/50 text-xs">Criar</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ArrowRight className="h-4 w-4 text-white/70" />
+              <span className="text-white/50 text-xs">Clips</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ArrowDown className="h-4 w-4 text-white/70" />
+              <span className="text-white/50 text-xs">Próximo</span>
+            </div>
+            <div className="flex flex-col items-center">
+              <ArrowUp className="h-4 w-4 text-white/70" />
+              <span className="text-white/50 text-xs">Anterior</span>
             </div>
           </div>
-          <div className="fixed top-1/2 right-4 transform -translate-y-1/2 z-30">
-            <div className="flex flex-col items-center gap-2">
-              <div className="text-white/50 text-xs rotate-90 hidden md:block">ABAS</div>
-              <div className="bg-black/50 backdrop-blur-sm rounded-lg p-2">
-                <div className="flex flex-col items-center">
-                  <ArrowLeft className="h-4 w-4 text-white/70" />
-                  <span className="text-white/50 text-xs">←</span>
-                  <ArrowRight className="h-4 w-4 text-white/70 mt-2" />
-                  <span className="text-white/50 text-xs">→</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </>
+        </div>
       )}
 
       {/* Navegação inferior */}
-      <BottomNavigation />
+      <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-lg border-t border-white/10 z-40">
+        <div className="flex items-center justify-around p-3">
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all",
+              activeTab === 'clips' 
+                ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white scale-110" 
+                : "text-white/70 hover:text-white hover:bg-white/10"
+            )}
+            onClick={() => setActiveTab('clips')}
+          >
+            <Home className="h-6 w-6" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all",
+              activeTab === 'feed' 
+                ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white scale-110" 
+                : "text-white/70 hover:text-white hover:bg-white/10"
+            )}
+            onClick={() => {
+              setActiveTab('feed');
+              setCurrentIndex(0);
+            }}
+          >
+            <Globe className="h-6 w-6" />
+          </Button>
+          
+          <Button
+            variant="ghost"
+            size="icon"
+            className={cn(
+              "h-12 w-12 rounded-full transition-all",
+              activeTab === 'create' 
+                ? "bg-gradient-to-r from-green-500 to-teal-500 text-white scale-110" 
+                : "text-white/70 hover:text-white hover:bg-white/10"
+            )}
+            onClick={() => setActiveTab('create')}
+          >
+            <Pencil className="h-6 w-6" />
+          </Button>
+        </div>
+      </div>
 
       {/* Dialog de ajuda do teclado */}
       <Dialog open={showKeyboardHelp} onOpenChange={setShowKeyboardHelp}>
-        <DialogContent className="max-w-2xl bg-gray-900 border-gray-800 text-white">
+        <DialogContent className="max-w-md bg-gray-900 border-gray-800 text-white">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Keyboard className="h-5 w-5" />
-              Atalhos de Teclado
+              Como Navegar
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg text-pink-400">Navegação</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Setas ↑↓</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Posts Anterior/Próximo</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Setas ←→</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Trocar Abas</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Ctrl+1/2/3</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Ir para Clips/Feed/Criar</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">ESC</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Voltar/Fechar</kbd>
-                  </div>
+            <div className="space-y-3">
+              <h3 className="font-semibold text-pink-400">No Celular:</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <ArrowLeft className="h-4 w-4" />
+                  <span className="text-gray-300 text-sm">← Criar Post</span>
                 </div>
-              </div>
-              
-              <div className="space-y-3">
-                <h3 className="font-semibold text-lg text-blue-400">Ações</h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Espaço</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Play/Pause Vídeo</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">M</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Mutar/Desmutar</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">L</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Curtir Post</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">C</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Comentar</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">S</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Compartilhar</kbd>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span className="text-gray-300">Ctrl+H</span>
-                    <kbd className="bg-gray-800 px-2 py-1 rounded text-sm">Esta ajuda</kbd>
-                  </div>
+                <div className="flex items-center gap-2">
+                  <ArrowRight className="h-4 w-4" />
+                  <span className="text-gray-300 text-sm">Clips →</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ArrowDown className="h-4 w-4" />
+                  <span className="text-gray-300 text-sm">↓ Próximo</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <ArrowUp className="h-4 w-4" />
+                  <span className="text-gray-300 text-sm">Anterior ↑</span>
                 </div>
               </div>
             </div>
             
             <div className="space-y-3">
-              <h3 className="font-semibold text-lg text-green-400">Navegação com Mouse</h3>
-              <div className="space-y-2">
-                <div className="flex items-center gap-3">
-                  <MousePointer className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-300">Clique nas bordas esquerda/direita para navegar entre posts</span>
+              <h3 className="font-semibold text-blue-400">No Computador:</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-300 text-sm">Setas ←→</span>
+                  <span className="text-gray-400 text-xs">Trocar telas</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <MousePointer className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-300">Scroll do mouse para navegar entre posts (aba Clips)</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-300 text-sm">Setas ↑↓</span>
+                  <span className="text-gray-400 text-xs">Navegar posts</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  <MousePointer className="h-4 w-4 text-gray-400" />
-                  <span className="text-gray-300">Clique no meio do vídeo para play/pause</span>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-300 text-sm">Espaço</span>
+                  <span className="text-gray-400 text-xs">Play/Pause</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-gray-300 text-sm">ESC</span>
+                  <span className="text-gray-400 text-xs">Voltar</span>
                 </div>
               </div>
             </div>
@@ -2109,9 +1681,6 @@ export default function WorldFlow() {
                 if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   addComment.mutate();
-                }
-                if (e.key === 'Escape') {
-                  setOpeningCommentsFor(null);
                 }
               }}
             />
