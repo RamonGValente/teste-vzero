@@ -2,14 +2,13 @@ import { useState, useEffect, useRef, useCallback } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
-// CORREÇÃO AQUI: Mudado de "lucide" para "lucide-react"
 import {
   Heart, MessageCircle, Send, Bookmark, MoreVertical, X, Pencil, Trash2,
   Camera, Video, Minimize2, Images, Play, Mic, Square,
   ChevronLeft, ChevronRight, Volume2, VolumeX, Pause, Sparkles, Wand2,
   Clock, Loader2, Flame, TrendingUp, Bomb, Users, Zap, Globe, Zap as FlashIcon,
-  RefreshCw, RotateCw, Menu, Home, User, Settings, ArrowUp, ArrowDown, ArrowLeft, ArrowRight,
-  MousePointer, Keyboard, ChevronUp, ChevronDown, MoveVertical
+  RefreshCw, RotateCw, Menu, Home, User, Settings, ArrowUp, ArrowDown,
+  MousePointer, Keyboard, ChevronUp, ChevronDown, Film
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -140,8 +139,10 @@ interface TikTokVideoPlayerProps {
   onLike: () => void;
   onComment: () => void;
   onShare: () => void;
-  onNext: () => void;
-  onPrevious: () => void;
+  onNextClip: () => void;
+  onPreviousClip: () => void;
+  hasNextClip: boolean;
+  hasPreviousClip: boolean;
 }
 
 const TikTokVideoPlayer = ({ 
@@ -152,15 +153,16 @@ const TikTokVideoPlayer = ({
   onLike,
   onComment,
   onShare,
-  onNext,
-  onPrevious
+  onNextClip,
+  onPreviousClip,
+  hasNextClip,
+  hasPreviousClip
 }: TikTokVideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(true);
   const [showControls, setShowControls] = useState(false);
   const [progress, setProgress] = useState(0);
-  const [showNavigationButtons, setShowNavigationButtons] = useState(false);
   const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
   useEffect(() => {
@@ -208,36 +210,21 @@ const TikTokVideoPlayer = ({
     }
   };
 
-  const handleVideoClick = (e: React.MouseEvent) => {
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = e.clientX - rect.left;
-    const width = rect.width;
-    
-    if (x < width * 0.25) {
-        // Área esquerda reservada
-    } else if (x > width * 0.75) {
-        // Área direita reservada
-    } else {
-      togglePlay();
-      setShowControls(true);
-      setTimeout(() => setShowControls(false), 3000);
-    }
-  };
-
-  const handleMouseEnter = () => {
-    setShowNavigationButtons(true);
-  };
-
-  const handleMouseLeave = () => {
-    setShowNavigationButtons(false);
+  const handleVideoClick = () => {
+    togglePlay();
+    setShowControls(true);
+    setTimeout(() => setShowControls(false), 3000);
   };
 
   return (
-    <div 
-      className="relative w-full h-full bg-black"
-      onMouseEnter={handleMouseEnter}
-      onMouseLeave={handleMouseLeave}
-    >
+    <div className="relative w-full h-full bg-gradient-to-b from-purple-900 to-pink-900">
+      <div className="absolute top-4 left-4 z-10">
+        <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 shadow-lg">
+          <Film className="h-3 w-3 mr-1" />
+          CLIPS
+        </Badge>
+      </div>
+      
       <video
         ref={videoRef}
         src={src}
@@ -250,32 +237,15 @@ const TikTokVideoPlayer = ({
         onEnded={() => setIsPlaying(false)}
       />
       
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-700/50">
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-purple-800/50">
         <div 
-          className="h-full bg-gradient-to-r from-pink-500 to-orange-500"
+          className="h-full bg-gradient-to-r from-pink-500 to-purple-500"
           style={{ width: `${progress}%` }}
         />
       </div>
       
-      {showNavigationButtons && (
-        <>
-          <button
-            className="absolute left-4 top-1/2 transform -translate-y-1/2 h-16 w-8 bg-black/50 text-white rounded-r-lg flex items-center justify-center hover:bg-black/70 transition-colors"
-            onClick={onPrevious}
-          >
-            <ChevronUp className="h-6 w-6" />
-          </button>
-          <button
-            className="absolute right-4 top-1/2 transform -translate-y-1/2 h-16 w-8 bg-black/50 text-white rounded-l-lg flex items-center justify-center hover:bg-black/70 transition-colors"
-            onClick={onNext}
-          >
-            <ChevronDown className="h-6 w-6" />
-          </button>
-        </>
-      )}
-      
       {showControls && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/30">
+        <div className="absolute inset-0 flex items-center justify-center bg-black/40">
           <Button
             size="icon"
             className="h-20 w-20 rounded-full bg-white/20 backdrop-blur-md text-white hover:bg-white/30"
@@ -301,16 +271,16 @@ const TikTokVideoPlayer = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-14 w-14 rounded-full bg-black/40 text-white hover:bg-black/60 mb-1"
+                  className="h-14 w-14 rounded-full bg-purple-900/60 text-white hover:bg-purple-800/80 mb-1"
                   onClick={onLike}
                 >
-                  <Heart className={cn("h-7 w-7", isLiked && "fill-current text-red-500")} />
+                  <Heart className={cn("h-7 w-7", isLiked && "fill-current text-pink-400")} />
                 </Button>
                 <span className="text-white text-xs font-medium">{post.likes?.length || 0}</span>
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Curtir (L)</p>
+              <p>Curtir</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -322,7 +292,7 @@ const TikTokVideoPlayer = ({
                 <Button
                   variant="ghost"
                   size="icon"
-                  className="h-14 w-14 rounded-full bg-black/40 text-white hover:bg-black/60 mb-1"
+                  className="h-14 w-14 rounded-full bg-purple-900/60 text-white hover:bg-purple-800/80 mb-1"
                   onClick={onComment}
                 >
                   <MessageCircle className="h-7 w-7" />
@@ -331,28 +301,7 @@ const TikTokVideoPlayer = ({
               </div>
             </TooltipTrigger>
             <TooltipContent>
-              <p>Comentar (C)</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-        
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <div className="flex flex-col items-center">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-14 w-14 rounded-full bg-black/40 text-white hover:bg-black/60 mb-1"
-                  onClick={onShare}
-                >
-                  <Send className="h-7 w-7" />
-                </Button>
-                <span className="text-white text-xs font-medium">Compartilhar</span>
-              </div>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>Compartilhar (S)</p>
+              <p>Comentar</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
@@ -363,7 +312,7 @@ const TikTokVideoPlayer = ({
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-14 w-14 rounded-full bg-black/40 text-white hover:bg-black/60"
+                className="h-14 w-14 rounded-full bg-purple-900/60 text-white hover:bg-purple-800/80"
                 onClick={toggleMute}
               >
                 {isMuted ? (
@@ -374,37 +323,37 @@ const TikTokVideoPlayer = ({
               </Button>
             </TooltipTrigger>
             <TooltipContent>
-              <p>{isMuted ? "Ativar som (M)" : "Desativar som (M)"}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-14 w-14 rounded-full bg-black/40 text-white hover:bg-black/60"
-                onClick={togglePlay}
-              >
-                {isPlaying ? (
-                  <Pause className="h-7 w-7" />
-                ) : (
-                  <Play className="h-7 w-7" />
-                )}
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p>{isPlaying ? "Pausar (Espaço)" : "Play (Espaço)"}</p>
+              <p>{isMuted ? "Ativar som" : "Desativar som"}</p>
             </TooltipContent>
           </Tooltip>
         </TooltipProvider>
       </div>
       
+      {/* Botões de navegação horizontal para clips */}
+      <div className="absolute bottom-4 left-0 right-0 flex justify-center gap-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-12 w-12 rounded-full bg-purple-900/60 text-white hover:bg-purple-800/80 disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={onPreviousClip}
+          disabled={!hasPreviousClip}
+        >
+          <ChevronLeft className="h-6 w-6" />
+        </Button>
+        <Button
+          variant="ghost"
+          size="icon"
+          className="h-12 w-12 rounded-full bg-purple-900/60 text-white hover:bg-purple-800/80 disabled:opacity-30 disabled:cursor-not-allowed"
+          onClick={onNextClip}
+          disabled={!hasNextClip}
+        >
+          <ChevronRight className="h-6 w-6" />
+        </Button>
+      </div>
+      
       <div className="absolute bottom-24 left-4 right-20 text-white">
         <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-10 w-10 ring-2 ring-white/50">
+          <Avatar className="h-10 w-10 ring-2 ring-purple-500/50">
             <AvatarImage src={post.profiles?.avatar_url}/>
             <AvatarFallback className="bg-gradient-to-r from-purple-600 to-pink-600">
               {post.profiles?.username?.[0]}
@@ -422,17 +371,13 @@ const TikTokVideoPlayer = ({
         </div>
         <p className="text-white/90 text-sm mb-2">{post.content}</p>
         <div className="flex items-center gap-2">
-          <Badge className="bg-white/20 text-white border-0">#{post.post_type}</Badge>
+          <Badge className="bg-purple-700/50 text-white border-0">
+            <Film className="h-3 w-3 mr-1" />
+            Clip {post.clipIndex ? `#${post.clipIndex}` : ''}
+          </Badge>
           <span className="text-white/70 text-xs">
             {new Date(post.created_at).toLocaleDateString('pt-BR')}
           </span>
-        </div>
-      </div>
-
-      <div className="absolute top-4 left-4 bg-black/70 text-white/80 text-xs px-3 py-2 rounded-lg backdrop-blur-sm">
-        <div className="flex items-center gap-2">
-          <Keyboard className="h-3 w-3" />
-          <span>Use as setas ou clique nas bordas</span>
         </div>
       </div>
     </div>
@@ -453,7 +398,7 @@ const isVideoUrl = (u: any): boolean => {
   return u.startsWith('video::') || videoExtensions.test(cleanUrl);
 };
 
-/* ---------- COMPONENTE PRINCIPAL TIKTOK ---------- */
+/* ---------- COMPONENTE PRINCIPAL ---------- */
 export default function WorldFlow() {
   const { user } = useAuth();
   const { toast } = useToast();
@@ -461,35 +406,12 @@ export default function WorldFlow() {
   const navigate = useNavigate();
 
   /* Estados principais */
-  const [activeTab, setActiveTab] = useState<'clips' | 'feed' | 'create'>('clips');
   const [currentIndex, setCurrentIndex] = useState(0);
   const [openingCommentsFor, setOpeningCommentsFor] = useState<any>(null);
   const [newCommentText, setNewCommentText] = useState("");
-  const [showKeyboardHelp, setShowKeyboardHelp] = useState(false);
-  const [isTouchDevice, setIsTouchDevice] = useState(false);
-
-  /* Estados para gestos */
-  const [touchStart, setTouchStart] = useState({ x: 0, y: 0 });
-  const [touchEnd, setTouchEnd] = useState({ x: 0, y: 0 });
-  const [swipeDirection, setSwipeDirection] = useState<'left' | 'right' | 'up' | 'down' | null>(null);
+  const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
-  const [wheelDelta, setWheelDelta] = useState(0);
-
-  /* Detectar dispositivo touch */
-  useEffect(() => {
-    const checkTouchDevice = () => {
-      const isTouch = 'ontouchstart' in window || navigator.maxTouchPoints > 0;
-      setIsTouchDevice(isTouch);
-    };
-    checkTouchDevice();
-    window.addEventListener('resize', checkTouchDevice);
-    return () => window.removeEventListener('resize', checkTouchDevice);
-  }, []);
-
-  /* Reset currentIndex ao trocar de aba */
-  useEffect(() => {
-    setCurrentIndex(0);
-  }, [activeTab]);
+  const [clipIndex, setClipIndex] = useState(0); // Índice para navegação horizontal nos clips
 
   /* Query dos posts */
   const { data: posts, refetch } = useQuery({
@@ -525,11 +447,165 @@ export default function WorldFlow() {
   });
 
   /* Filtragem de posts */
-  const clipsPosts = posts?.filter(x => x.post_type === 'viral_clips') || [];
   const standardPosts = posts?.filter(x => x.post_type === 'standard') || [];
+  const clipPosts = posts?.filter(x => x.post_type === 'viral_clips') || [];
   
-  const verticalClipPosts = clipsPosts;
-  const verticalFeedPosts = standardPosts;
+  /* Combinar posts: após 2 posts normais, inserir os clips */
+  const [combinedPosts, setCombinedPosts] = useState<any[]>([]);
+  
+  useEffect(() => {
+    if (!standardPosts.length && !clipPosts.length) return;
+    
+    const combined = [...standardPosts];
+    
+    // Se houver clips, inserir após o segundo post normal
+    if (clipPosts.length > 0 && standardPosts.length >= 2) {
+      // Adicionar índice aos clips para identificação
+      const clipsWithIndex = clipPosts.map((clip, idx) => ({
+        ...clip,
+        clipIndex: idx + 1
+      }));
+      combined.splice(2, 0, ...clipsWithIndex);
+    } else if (clipPosts.length > 0) {
+      // Se não houver 2 posts normais, adicionar clips no final
+      const clipsWithIndex = clipPosts.map((clip, idx) => ({
+        ...clip,
+        clipIndex: idx + 1
+      }));
+      combined.push(...clipsWithIndex);
+    }
+    
+    setCombinedPosts(combined);
+  }, [standardPosts, clipPosts]);
+
+  const currentPost = combinedPosts[currentIndex];
+  const isClipPost = currentPost?.post_type === 'viral_clips';
+  
+  // Determinar cor de fundo baseada no tipo de post
+  const backgroundColorClass = isClipPost 
+    ? "bg-gradient-to-b from-purple-900/30 to-pink-900/30" 
+    : "bg-gradient-to-b from-gray-900 to-black";
+
+  /* Calcular índices dos clips na lista combinada */
+  const clipIndices = combinedPosts
+    .map((post, idx) => post.post_type === 'viral_clips' ? idx : -1)
+    .filter(idx => idx !== -1);
+
+  const currentClipIndexInArray = clipIndices.findIndex(idx => idx === currentIndex);
+  const hasNextClip = currentClipIndexInArray < clipIndices.length - 1;
+  const hasPreviousClip = currentClipIndexInArray > 0;
+
+  /* Handlers de navegação vertical */
+  const handleNext = useCallback(() => {
+    if (currentIndex < combinedPosts.length - 1) {
+      setCurrentIndex(prev => prev + 1);
+    }
+  }, [currentIndex, combinedPosts.length]);
+
+  const handlePrevious = useCallback(() => {
+    if (currentIndex > 0) {
+      setCurrentIndex(prev => prev - 1);
+    }
+  }, [currentIndex]);
+
+  /* Handlers de navegação horizontal para clips */
+  const handleNextClip = useCallback(() => {
+    if (hasNextClip) {
+      const nextClipIndex = clipIndices[currentClipIndexInArray + 1];
+      setCurrentIndex(nextClipIndex);
+      setClipIndex(prev => prev + 1);
+    }
+  }, [hasNextClip, clipIndices, currentClipIndexInArray]);
+
+  const handlePreviousClip = useCallback(() => {
+    if (hasPreviousClip) {
+      const prevClipIndex = clipIndices[currentClipIndexInArray - 1];
+      setCurrentIndex(prevClipIndex);
+      setClipIndex(prev => prev - 1);
+    }
+  }, [hasPreviousClip, clipIndices, currentClipIndexInArray]);
+
+  /* Eventos de wheel (scroll) */
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      const target = e.target as HTMLElement;
+      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA') {
+        return;
+      }
+
+      e.preventDefault();
+      
+      if (e.deltaY > 0) {
+        handleNext();
+      } else {
+        handlePrevious();
+      }
+    };
+
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [handleNext, handlePrevious]);
+
+  /* Eventos de teclado simplificados */
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const isInputFocused = document.activeElement instanceof HTMLInputElement || 
+                             document.activeElement instanceof HTMLTextAreaElement;
+      
+      if (isInputFocused && e.key !== 'Escape') {
+        return;
+      }
+      
+      switch (e.key) {
+        case 'ArrowDown':
+          e.preventDefault();
+          handleNext();
+          break;
+          
+        case 'ArrowUp':
+          e.preventDefault();
+          handlePrevious();
+          break;
+          
+        case 'ArrowRight':
+          if (isClipPost) {
+            e.preventDefault();
+            handleNextClip();
+          }
+          break;
+          
+        case 'ArrowLeft':
+          if (isClipPost) {
+            e.preventDefault();
+            handlePreviousClip();
+          }
+          break;
+          
+        case ' ': 
+          if (isClipPost) {
+            e.preventDefault();
+            const videoElement = document.querySelector('video');
+            if (videoElement) {
+              if (videoElement.paused) {
+                videoElement.play();
+              } else {
+                videoElement.pause();
+              }
+            }
+          }
+          break;
+          
+        case 'Escape': 
+          if (openingCommentsFor) {
+            setOpeningCommentsFor(null);
+          }
+          break;
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [currentIndex, isClipPost, handleNext, handlePrevious, handleNextClip, handlePreviousClip, openingCommentsFor]);
 
   /* Mutation para adicionar comentário */
   const addComment = useMutation({
@@ -585,251 +661,10 @@ export default function WorldFlow() {
     }
   });
 
-  /* Handlers de navegação */
-  const handleNext = useCallback(() => {
-    const list = activeTab === 'clips' ? verticalClipPosts : verticalFeedPosts;
-    if (currentIndex < list.length - 1) {
-      setCurrentIndex(prev => prev + 1);
-    }
-  }, [activeTab, currentIndex, verticalClipPosts, verticalFeedPosts]);
-
-  const handlePrevious = useCallback(() => {
-    if (currentIndex > 0) {
-      setCurrentIndex(prev => prev - 1);
-    }
-  }, [currentIndex]);
-
-  /* CORREÇÃO: Lógica de swipe corrigida conforme solicitado */
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setTouchStart({
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY
-      });
-      setSwipeDirection(null);
-    }
-  };
-
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (e.touches.length === 1) {
-      setTouchEnd({
-        x: e.touches[0].clientX,
-        y: e.touches[0].clientY
-      });
-    }
-  };
-
-  const handleTouchEnd = () => {
-    if (touchStart.x === 0 && touchStart.y === 0) return;
-    
-    const xDiff = touchStart.x - touchEnd.x;
-    const yDiff = touchStart.y - touchEnd.y;
-    const minSwipeDistance = 50;
-    
-    /* CORREÇÃO: Lógica invertida conforme solicitado */
-    if (Math.abs(xDiff) > Math.abs(yDiff) && Math.abs(xDiff) > minSwipeDistance) {
-      if (xDiff > 0) {
-        // Swipe ESQUERDA → Vai para Criar (da aba Feed para Criar)
-        if (activeTab === 'feed') {
-          setSwipeDirection('left');
-          setTimeout(() => { setActiveTab('create'); setSwipeDirection(null); }, 300);
-        } else if (activeTab === 'clips') {
-          setSwipeDirection('left');
-          setTimeout(() => { setActiveTab('feed'); setSwipeDirection(null); }, 300);
-        }
-      } else {
-        // Swipe DIREITA → Vai para Clips (da aba Feed para Clips)
-        if (activeTab === 'feed') {
-          setSwipeDirection('right');
-          setTimeout(() => { setActiveTab('clips'); setSwipeDirection(null); }, 300);
-        } else if (activeTab === 'create') {
-          setSwipeDirection('right');
-          setTimeout(() => { setActiveTab('feed'); setSwipeDirection(null); }, 300);
-        }
-      }
-    } else if (Math.abs(yDiff) > Math.abs(xDiff) && Math.abs(yDiff) > minSwipeDistance) {
-      if (yDiff > 0) {
-        // Swipe PARA CIMA → Anterior Post
-        setSwipeDirection('up');
-        setTimeout(() => {
-          handlePrevious();
-          setSwipeDirection(null);
-        }, 300);
-      } else {
-        // Swipe PARA BAIXO → Próximo Post
-        setSwipeDirection('down');
-        setTimeout(() => {
-          handleNext();
-          setSwipeDirection(null);
-        }, 300);
-      }
-    }
-
-    setTouchStart({ x: 0, y: 0 });
-    setTouchEnd({ x: 0, y: 0 });
-  };
-
-  /* Eventos de wheel (scroll) para PC */
-  useEffect(() => {
-    const handleWheel = (e: WheelEvent) => {
-      const target = e.target as HTMLElement;
-      if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || isTouchDevice) {
-        return;
-      }
-
-      if (activeTab === 'clips' || activeTab === 'feed') {
-        e.preventDefault();
-        
-        setWheelDelta(prev => {
-          const newDelta = prev + e.deltaY;
-          
-          if (Math.abs(newDelta) > 100) {
-            if (e.deltaY > 0) {
-              handleNext();
-            } else {
-              handlePrevious();
-            }
-            return 0;
-          }
-          
-          return newDelta;
-        });
-      }
-    };
-
-    window.addEventListener('wheel', handleWheel, { passive: false });
-    return () => window.removeEventListener('wheel', handleWheel);
-  }, [activeTab, isTouchDevice, handleNext, handlePrevious]);
-
-  /* CORREÇÃO: Eventos de teclado corrigidos conforme solicitado */
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      const isInputFocused = document.activeElement instanceof HTMLInputElement || 
-                             document.activeElement instanceof HTMLTextAreaElement;
-      
-      if (isInputFocused && e.key !== 'Escape') {
-        return;
-      }
-      
-      switch (e.key) {
-        case 'ArrowRight':
-          e.preventDefault();
-          // Seta direita → Vai para Clips (da aba Feed para Clips)
-          if (activeTab === 'feed') setActiveTab('clips');
-          else if (activeTab === 'create') setActiveTab('feed');
-          break;
-          
-        case 'ArrowLeft':
-          e.preventDefault();
-          // Seta esquerda → Vai para Criar (da aba Feed para Criar)
-          if (activeTab === 'feed') setActiveTab('create');
-          else if (activeTab === 'clips') setActiveTab('feed');
-          break;
-          
-        case 'ArrowDown':
-          e.preventDefault();
-          // Seta baixo → Próximo Post
-          handleNext();
-          break;
-          
-        case 'ArrowUp':
-          e.preventDefault();
-          // Seta cima → Anterior Post
-          handlePrevious();
-          break;
-          
-        case ' ': 
-          if (activeTab === 'clips') {
-            e.preventDefault();
-            const videoElement = document.querySelector('video');
-            if (videoElement) {
-              if (videoElement.paused) {
-                videoElement.play();
-              } else {
-                videoElement.pause();
-              }
-            }
-          }
-          break;
-          
-        case 'Escape': 
-          if (openingCommentsFor) {
-            setOpeningCommentsFor(null);
-          } else if (showKeyboardHelp) {
-            setShowKeyboardHelp(false);
-          } else if (activeTab === 'create') {
-            setActiveTab('feed');
-          } else if (activeTab === 'feed') {
-            setActiveTab('clips');
-          }
-          break;
-          
-        case '1':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            setActiveTab('clips');
-          }
-          break;
-          
-        case '2':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            setActiveTab('feed');
-          }
-          break;
-          
-        case '3':
-          if (e.ctrlKey || e.metaKey) {
-            e.preventDefault();
-            setActiveTab('create');
-          }
-          break;
-          
-        case 'l':
-        case 'L':
-          if (activeTab === 'clips' || activeTab === 'feed') {
-            e.preventDefault();
-            const list = activeTab === 'clips' ? verticalClipPosts : verticalFeedPosts;
-            const currentPost = list[currentIndex];
-            if (currentPost) {
-              handleLike(currentPost.id);
-            }
-          }
-          break;
-          
-        case 'c':
-        case 'C':
-          if (activeTab === 'clips' || activeTab === 'feed') {
-            e.preventDefault();
-            const list = activeTab === 'clips' ? verticalClipPosts : verticalFeedPosts;
-            const currentPost = list[currentIndex];
-            if (currentPost) {
-              setOpeningCommentsFor(currentPost);
-            }
-          }
-          break;
-          
-        case 'm':
-        case 'M':
-          if (activeTab === 'clips') {
-            e.preventDefault();
-            const videoElement = document.querySelector('video');
-            if (videoElement) {
-              videoElement.muted = !videoElement.muted;
-            }
-          }
-          break;
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [activeTab, currentIndex, verticalClipPosts, verticalFeedPosts, openingCommentsFor, showKeyboardHelp, handleNext, handlePrevious]);
-
   /* Handlers de ações */
   const handleLike = async (postId: string) => {
     try {
-      const post = [...verticalClipPosts, ...verticalFeedPosts].find(p => p.id === postId);
+      const post = combinedPosts.find(p => p.id === postId);
       if (!post) return;
       
       const hasLiked = post.likes?.some((l:any) => l.user_id === user?.id);
@@ -857,32 +692,24 @@ export default function WorldFlow() {
     }
   };
 
-  /* Componente para Clips */
-  const TikTokClipsView = () => {
-    if (verticalClipPosts.length === 0) {
+  /* Renderização do post atual */
+  const renderCurrentPost = () => {
+    if (!currentPost) {
       return (
         <div className="h-full flex flex-col items-center justify-center text-white p-8">
-          <Flame className="h-16 w-16 mb-4 text-gray-500" />
-          <h2 className="text-xl font-bold mb-2">Nenhum clip ainda</h2>
+          <Globe className="h-16 w-16 mb-4 text-gray-500" />
+          <h2 className="text-xl font-bold mb-2">Nenhum post disponível</h2>
           <p className="text-gray-400 text-center mb-6">
-            Seja o primeiro a compartilhar um clip!
+            Seja o primeiro a compartilhar algo!
           </p>
           <Button
-            onClick={() => setActiveTab('create')}
-            className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
+            onClick={() => setShowCreateModal(true)}
+            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
           >
-            Criar primeiro clip
+            Criar primeiro post
           </Button>
         </div>
       );
-    }
-
-    const safeIndex = currentIndex % verticalClipPosts.length;
-    const currentPost = verticalClipPosts[safeIndex];
-    
-    if (!currentPost) {
-        setCurrentIndex(0);
-        return null; 
     }
 
     const getMediaUrl = (post: any) => {
@@ -899,13 +726,13 @@ export default function WorldFlow() {
     const mediaUrl = getMediaUrl(currentPost);
     const isVideo = mediaUrl && isVideoUrl(mediaUrl);
 
-    if (isVideo && mediaUrl) {
+    if (currentPost.post_type === 'viral_clips' && isVideo && mediaUrl) {
       return (
         <TikTokVideoPlayer
           src={mediaUrl}
           post={currentPost}
           user={user}
-          isActive={activeTab === 'clips'} 
+          isActive={true}
           onLike={() => handleLike(currentPost.id)}
           onComment={() => setOpeningCommentsFor(currentPost)}
           onShare={() => {
@@ -914,193 +741,141 @@ export default function WorldFlow() {
               description: "Link copiado para a área de transferência!",
             });
           }}
-          onNext={handleNext}
-          onPrevious={handlePrevious}
+          onNextClip={handleNextClip}
+          onPreviousClip={handlePreviousClip}
+          hasNextClip={hasNextClip}
+          hasPreviousClip={hasPreviousClip}
         />
       );
     }
 
+    // Renderização para posts normais
     return (
-      <div className="relative w-full h-full bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
-        <div className="text-center p-8">
-          <Flame className="h-24 w-24 text-gray-600 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-white mb-2">Clip não disponível</h2>
-          <p className="text-gray-400 mb-6">
-            Este clip não está mais disponível ou foi removido.
-          </p>
-          <Button
-            onClick={handleNext}
-            className="bg-gradient-to-r from-pink-500 to-orange-500 hover:from-pink-600 hover:to-orange-600"
-          >
-            Próximo clip
-          </Button>
-        </div>
-      </div>
-    );
-  };
-
-  /* Componente para Feed */
-  const TikTokFeedView = () => {
-    if (verticalFeedPosts.length === 0) {
-      return (
-        <div className="h-full flex flex-col items-center justify-center text-white p-8">
-          <Globe className="h-16 w-16 mb-4 text-gray-500" />
-          <h2 className="text-xl font-bold mb-2">Nenhum post ainda</h2>
-          <p className="text-gray-400 text-center mb-6">
-            Seja o primeiro a compartilhar algo!
-          </p>
-          <Button
-            onClick={() => setActiveTab('create')}
-            className="bg-gradient-to-r from-blue-500 to-purple-500 hover:from-blue-600 hover:to-purple-600"
-          >
-            Criar primeiro post
-          </Button>
-        </div>
-      );
-    }
-    
-    const safeIndex = currentIndex % verticalFeedPosts.length;
-    const currentPost = verticalFeedPosts[safeIndex];
-
-    if (!currentPost) {
-        setCurrentIndex(0);
-        return null; 
-    }
-    
-    const getMediaUrl = (post: any) => {
-      if (!post.media_urls || !Array.isArray(post.media_urls) || post.media_urls.length === 0) {
-        return null;
-      }
-      
-      const url = post.media_urls[0];
-      if (!url || typeof url !== 'string') return null;
-      
-      return url.replace(/^(image::|video::|audio::)/, '');
-    };
-
-    const mediaUrl = getMediaUrl(currentPost);
-    const isVideo = mediaUrl && isVideoUrl(mediaUrl);
-
-    return (
-      <div className="h-full bg-gradient-to-b from-gray-900 to-black overflow-hidden relative">
+      <div className="h-full overflow-hidden relative">
         <ScrollArea className="h-full w-full">
-            <div className="p-6 max-w-2xl mx-auto min-h-full flex flex-col justify-center">
-              <div className="mb-6">
-                <h2 className="text-2xl font-bold text-white mb-2">Feed</h2>
-                <p className="text-gray-400">
-                  Post {currentIndex + 1} de {verticalFeedPosts.length}
-                </p>
-              </div>
-
-              <Card className="bg-gray-800 border-gray-700 overflow-hidden">
-                <CardContent className="p-0">
-                  <div className="p-6">
-                    <div className="flex items-center gap-3 mb-4">
-                      <Avatar>
-                        <AvatarImage src={currentPost.profiles?.avatar_url}/>
-                        <AvatarFallback>
-                          {currentPost.profiles?.username?.[0]?.toUpperCase() || "U"}
-                        </AvatarFallback>
-                      </Avatar>
-                      <div className="flex-1">
-                        <UserLink 
-                          userId={currentPost.user_id} 
-                          username={currentPost.profiles?.username||""} 
-                          className="font-bold text-white hover:underline"
-                        >
-                          @{currentPost.profiles?.username}
-                        </UserLink>
-                        <p className="text-gray-400 text-sm">
-                          {new Date(currentPost.created_at).toLocaleDateString('pt-BR')}
-                        </p>
-                      </div>
-                    </div>
-
-                    {currentPost.content && (
-                      <p className="text-white mb-6 text-lg">{currentPost.content}</p>
-                    )}
-
-                    {mediaUrl && (
-                      <div className="mb-6 rounded-xl overflow-hidden">
-                        {isVideo ? (
-                          <video
-                            src={mediaUrl}
-                            className="w-full h-auto max-h-96 rounded-lg"
-                            controls
-                            playsInline
-                          />
-                        ) : (
-                          <img
-                            src={mediaUrl}
-                            alt={`Mídia de ${currentPost.profiles?.username}`}
-                            className="w-full h-auto max-h-96 object-cover rounded-lg"
-                          />
-                        )}
-                      </div>
-                    )}
-
-                    <div className="flex items-center gap-4 pt-4 border-t border-gray-700">
-                      <Button
-                        variant="ghost"
-                        className={cn(
-                          "text-white",
-                          currentPost.likes?.some((l:any) => l.user_id === user?.id) && "text-red-500"
-                        )}
-                        onClick={() => handleLike(currentPost.id)}
-                      >
-                        <Heart className={cn(
-                          "h-6 w-6 mr-2",
-                          currentPost.likes?.some((l:any) => l.user_id === user?.id) && "fill-current"
-                        )} />
-                        <span>{currentPost.likes?.length || 0}</span>
-                      </Button>
-                      
-                      <Button
-                        variant="ghost"
-                        className="text-white"
-                        onClick={() => setOpeningCommentsFor(currentPost)}
-                      >
-                        <MessageCircle className="h-6 w-6 mr-2" />
-                        <span>{currentPost.comments?.length || 0}</span>
-                      </Button>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-
-              <div className="flex justify-between items-center mt-6">
-                <Button
-                  variant="outline"
-                  onClick={handlePrevious}
-                  disabled={currentIndex === 0}
-                  className="text-white border-gray-700"
-                >
-                  <ChevronUp className="h-4 w-4 mr-2" />
-                  Anterior
-                </Button>
-                
-                <span className="text-gray-400 text-sm">
-                  {currentIndex + 1} / {verticalFeedPosts.length}
-                </span>
-                
-                <Button
-                  variant="outline"
-                  onClick={handleNext}
-                  disabled={currentIndex === verticalFeedPosts.length - 1}
-                  className="text-white border-gray-700"
-                >
-                  Próximo
-                  <ChevronDown className="h-4 w-4 ml-2" />
-                </Button>
-              </div>
+          <div className="p-6 max-w-2xl mx-auto min-h-full flex flex-col justify-center">
+            <div className="mb-6">
+              <h2 className="text-2xl font-bold text-white mb-2 flex items-center gap-2">
+                <Globe className="h-5 w-5 text-blue-400" />
+                Feed
+              </h2>
+              <p className="text-gray-400">
+                Post {currentIndex + 1} de {combinedPosts.length}
+              </p>
             </div>
+
+            <Card className="bg-gray-800/50 border-gray-700/50 overflow-hidden backdrop-blur-sm">
+              <CardContent className="p-0">
+                <div className="p-6">
+                  <div className="flex items-center gap-3 mb-4">
+                    <Avatar>
+                      <AvatarImage src={currentPost.profiles?.avatar_url}/>
+                      <AvatarFallback className="bg-gradient-to-r from-blue-600 to-cyan-600">
+                        {currentPost.profiles?.username?.[0]?.toUpperCase() || "U"}
+                      </AvatarFallback>
+                    </Avatar>
+                    <div className="flex-1">
+                      <UserLink 
+                        userId={currentPost.user_id} 
+                        username={currentPost.profiles?.username||""} 
+                        className="font-bold text-white hover:underline"
+                      >
+                        @{currentPost.profiles?.username}
+                      </UserLink>
+                      <p className="text-gray-400 text-sm">
+                        {new Date(currentPost.created_at).toLocaleDateString('pt-BR')}
+                      </p>
+                    </div>
+                    <Badge className="bg-blue-500/20 text-blue-300 border-blue-500/30">
+                      Post
+                    </Badge>
+                  </div>
+
+                  {currentPost.content && (
+                    <p className="text-white mb-6 text-lg">{currentPost.content}</p>
+                  )}
+
+                  {mediaUrl && (
+                    <div className="mb-6 rounded-xl overflow-hidden border border-gray-700/50">
+                      {isVideo ? (
+                        <video
+                          src={mediaUrl}
+                          className="w-full h-auto max-h-96 rounded-lg"
+                          controls
+                          playsInline
+                        />
+                      ) : (
+                        <img
+                          src={mediaUrl}
+                          alt={`Mídia de ${currentPost.profiles?.username}`}
+                          className="w-full h-auto max-h-96 object-cover rounded-lg"
+                        />
+                      )}
+                    </div>
+                  )}
+
+                  <div className="flex items-center gap-4 pt-4 border-t border-gray-700/50">
+                    <Button
+                      variant="ghost"
+                      className={cn(
+                        "text-white hover:bg-blue-500/20",
+                        currentPost.likes?.some((l:any) => l.user_id === user?.id) && "text-red-500"
+                      )}
+                      onClick={() => handleLike(currentPost.id)}
+                    >
+                      <Heart className={cn(
+                        "h-6 w-6 mr-2",
+                        currentPost.likes?.some((l:any) => l.user_id === user?.id) && "fill-current"
+                      )} />
+                      <span>{currentPost.likes?.length || 0}</span>
+                    </Button>
+                    
+                    <Button
+                      variant="ghost"
+                      className="text-white hover:bg-blue-500/20"
+                      onClick={() => setOpeningCommentsFor(currentPost)}
+                    >
+                      <MessageCircle className="h-6 w-6 mr-2" />
+                      <span>{currentPost.comments?.length || 0}</span>
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <div className="flex justify-between items-center mt-6">
+              <Button
+                variant="outline"
+                onClick={handlePrevious}
+                disabled={currentIndex === 0}
+                className="text-white border-gray-700 hover:bg-blue-500/20 hover:border-blue-500/30"
+              >
+                <ChevronUp className="h-4 w-4 mr-2" />
+                Anterior
+              </Button>
+              
+              <span className="text-gray-400 text-sm">
+                {currentIndex + 1} / {combinedPosts.length}
+              </span>
+              
+              <Button
+                variant="outline"
+                onClick={handleNext}
+                disabled={currentIndex === combinedPosts.length - 1}
+                className="text-white border-gray-700 hover:bg-blue-500/20 hover:border-blue-500/30"
+              >
+                Próximo
+                <ChevronDown className="h-4 w-4 ml-2" />
+              </Button>
+            </div>
+          </div>
         </ScrollArea>
       </div>
     );
   };
 
-  /* Componente para Criação */
-  const TikTokCreateView = () => {
+  /* Componente para Criação (Modal) */
+  const CreatePostModal = () => {
     const [newPost, setNewPost] = useState("");
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
@@ -1185,7 +960,7 @@ export default function WorldFlow() {
         setNewPost(""); 
         setMediaFiles([]);
         refetch(); 
-        setActiveTab('clips'); 
+        setShowCreateModal(false);
         
       } catch (e: any) { 
         toast({ 
@@ -1199,24 +974,153 @@ export default function WorldFlow() {
     };
 
     return (
-      <div className="h-full bg-gradient-to-b from-gray-900 to-black text-white overflow-y-auto">
-        <div className="sticky top-0 z-50 bg-black/80 backdrop-blur-md border-b border-white/10 p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setActiveTab('feed')} 
-                className="text-white"
+      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
+        <DialogContent className="max-w-2xl bg-gray-900 border-gray-800 text-white max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Pencil className="h-5 w-5" />
+              Criar Post
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            <div className="flex gap-2">
+              <Button 
+                variant={postType==='standard'?"default":"outline"} 
+                onClick={()=>setPostType('standard')} 
+                className={cn(
+                  "flex-1",
+                  postType==='standard' 
+                    ? "bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white border-0" 
+                    : "text-white border-white/20"
+                )}
               >
-                <ChevronLeft className="h-6 w-6" />
+                <Globe className="h-4 w-4 mr-2" />
+                Post
               </Button>
-              <h1 className="text-xl font-bold">Criar Post</h1>
+              <Button 
+                variant={postType==='viral_clips'?"default":"outline"} 
+                onClick={()=>setPostType('viral_clips')} 
+                className={cn(
+                  "flex-1",
+                  postType==='viral_clips' 
+                    ? "bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 text-white border-0" 
+                    : "text-white border-white/20"
+                )}
+              >
+                <Film className="h-4 w-4 mr-2" />
+                Clip
+              </Button>
             </div>
+
+            <div className="space-y-3">
+              <div className="flex items-center gap-3">
+                <Avatar className="h-10 w-10">
+                  <AvatarImage src={user?.user_metadata?.avatar_url}/>
+                  <AvatarFallback>{user?.email?.[0]?.toUpperCase() || "U"}</AvatarFallback>
+                </Avatar>
+                <div>
+                  <p className="font-semibold">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
+                </div>
+              </div>
+              
+              <textarea
+                value={newPost}
+                onChange={(e) => setNewPost(e.target.value)}
+                placeholder={
+                  postType === 'standard' 
+                    ? "No que está pensando?" 
+                    : "Adicione uma descrição para o seu Clip..."
+                }
+                className="w-full bg-transparent border border-white/20 rounded-xl p-4 text-white placeholder-white/50 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
+                autoFocus
+              />
+            </div>
+
+            <div className="space-y-4">
+              <h3 className="font-semibold">Adicionar mídia</h3>
+              <div className="grid grid-cols-2 gap-3">
+                <input 
+                  ref={galleryInputRef} 
+                  type="file" 
+                  multiple 
+                  accept="image/*,video/*" 
+                  className="hidden" 
+                  onChange={handleFileChange}
+                />
+                <Button 
+                  variant="outline"
+                  onClick={()=>galleryInputRef.current?.click()}
+                  className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
+                >
+                  <Images className="h-8 w-8 mb-2" />
+                  <span className="text-sm">Galeria</span>
+                </Button>
+              </div>
+            </div>
+
+            {mediaFiles.length > 0 && (
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-semibold">Mídias selecionadas:</h3>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setMediaFiles([])}
+                    className="text-white/70 hover:text-white"
+                  >
+                    Limpar tudo
+                  </Button>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  {mediaFiles.map((file, i) => (
+                    <div key={i} className="relative rounded-lg overflow-hidden group">
+                      {file.type.startsWith("image/") ? (
+                        <img 
+                          src={URL.createObjectURL(file)} 
+                          alt={`Preview ${i}`}
+                          className="w-full h-32 object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-32 bg-black flex items-center justify-center relative">
+                          <Video className="text-white h-8 w-8" />
+                        </div>
+                      )}
+                      <Button 
+                        variant="destructive" 
+                        size="icon" 
+                        className="absolute top-2 right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
+                        onClick={()=>setMediaFiles(prev => prev.filter((_, index) => index !== i))}
+                      >
+                        <X className="h-3 w-3"/>
+                      </Button>
+                      <Badge className="absolute bottom-2 left-2 bg-black/70 text-white border-0">
+                          {file.type.startsWith("video/") ? "Vídeo" : "Imagem"} ({Math.round(file.size / 1024 / 1024)}MB)
+                      </Badge>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+          
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setShowCreateModal(false)}
+              className="border-gray-700 text-white hover:bg-gray-800"
+            >
+              Cancelar
+            </Button>
             <Button
               onClick={handleCreatePost}
               disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)}
-              className="bg-gradient-to-r from-green-500 to-teal-500 hover:from-green-600 hover:to-teal-600"
+              className={cn(
+                "bg-gradient-to-r hover:opacity-90",
+                postType === 'standard' 
+                  ? "from-blue-500 to-purple-500" 
+                  : "from-pink-500 to-orange-500"
+              )}
             >
               {uploading ? (
                 <>
@@ -1227,195 +1131,14 @@ export default function WorldFlow() {
                 "Publicar"
               )}
             </Button>
-          </div>
-        </div>
-
-        <div className="p-6 space-y-6">
-          <div className="flex gap-2">
-            <Button 
-              variant={postType==='standard'?"default":"outline"} 
-              onClick={()=>setPostType('standard')} 
-              className={cn(
-                "flex-1",
-                postType==='standard' 
-                  ? "bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 text-white border-0" 
-                  : "text-white border-white/20"
-              )}
-            >
-              <Globe className="h-4 w-4 mr-2" />
-              Post
-            </Button>
-            <Button 
-              variant={postType==='viral_clips'?"default":"outline"} 
-              onClick={()=>setPostType('viral_clips')} 
-              className={cn(
-                "flex-1",
-                postType==='viral_clips' 
-                  ? "bg-gradient-to-r from-pink-500 via-red-500 to-orange-500 text-white border-0" 
-                  : "text-white border-white/20"
-              )}
-            >
-              <Flame className="h-4 w-4 mr-2" />
-              Clip
-            </Button>
-          </div>
-
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <Avatar className="h-10 w-10">
-                <AvatarImage src={user?.user_metadata?.avatar_url}/>
-                <AvatarFallback>{user?.email?.[0]?.toUpperCase() || "U"}</AvatarFallback>
-              </Avatar>
-              <div>
-                <p className="font-semibold">@{user?.user_metadata?.username || user?.email?.split('@')[0]}</p>
-              </div>
-            </div>
-            
-            <textarea
-              value={newPost}
-              onChange={(e) => setNewPost(e.target.value)}
-              placeholder={
-                postType === 'standard' 
-                  ? "No que está pensando?" 
-                  : "Adicione uma descrição para o seu Clip..."
-              }
-              className="w-full bg-transparent border border-white/20 rounded-xl p-4 text-white placeholder-white/50 min-h-[120px] resize-none focus:outline-none focus:ring-2 focus:ring-green-500"
-              autoFocus
-            />
-          </div>
-
-          <div className="space-y-4">
-            <h3 className="font-semibold">Adicionar mídia</h3>
-            <div className="grid grid-cols-2 gap-3">
-              <input 
-                ref={galleryInputRef} 
-                type="file" 
-                multiple 
-                accept="image/*,video/*" 
-                className="hidden" 
-                onChange={handleFileChange}
-              />
-              <Button 
-                variant="outline"
-                onClick={()=>galleryInputRef.current?.click()}
-                className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
-              >
-                <Images className="h-8 w-8 mb-2" />
-                <span className="text-sm">Galeria</span>
-              </Button>
-              
-              <Button 
-                variant="outline"
-                onClick={() => {
-                    toast({
-                      title: "Funcionalidade em desenvolvimento",
-                      description: "A captura direta de câmera não está implementada nesta versão."
-                    });
-                }}
-                className="flex flex-col items-center justify-center h-24 border-dashed border-white/30 text-white hover:bg-white/10"
-              >
-                <Camera className="h-8 w-8 mb-2" />
-                <span className="text-sm">Câmera</span>
-              </Button>
-            </div>
-          </div>
-
-          {mediaFiles.length > 0 && (
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <h3 className="font-semibold">Mídias selecionadas:</h3>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => setMediaFiles([])}
-                  className="text-white/70 hover:text-white"
-                >
-                  Limpar tudo
-                </Button>
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                {mediaFiles.map((file, i) => (
-                  <div key={i} className="relative rounded-lg overflow-hidden group">
-                    {file.type.startsWith("image/") ? (
-                      <img 
-                        src={URL.createObjectURL(file)} 
-                        alt={`Preview ${i}`}
-                        className="w-full h-32 object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-32 bg-black flex items-center justify-center relative">
-                        <Video className="text-white h-8 w-8" />
-                      </div>
-                    )}
-                    <Button 
-                      variant="destructive" 
-                      size="icon" 
-                      className="absolute top-2 right-2 h-6 w-6 rounded-full opacity-0 group-hover:opacity-100 transition-opacity" 
-                      onClick={()=>setMediaFiles(prev => prev.filter((_, index) => index !== i))}
-                    >
-                      <X className="h-3 w-3"/>
-                    </Button>
-                    <Badge className="absolute bottom-2 left-2 bg-black/70 text-white border-0">
-                        {file.type.startsWith("video/") ? "Vídeo" : "Imagem"} ({Math.round(file.size / 1024 / 1024)}MB)
-                    </Badge>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     );
   };
 
-  /* Renderização principal */
-  const renderContent = () => {
-    switch (activeTab) {
-      case 'clips':
-        return <TikTokClipsView />;
-      case 'feed':
-        return <TikTokFeedView />;
-      case 'create':
-        return <TikTokCreateView />;
-      default:
-        return null;
-    }
-  };
-
-  /* Animação de swipe */
-  const getSwipeAnimation = () => {
-    if (!swipeDirection) return '';
-    switch (swipeDirection) {
-      case 'left':
-        return 'animate-slide-in-left';
-      case 'right':
-        return 'animate-slide-in-right';
-      case 'up':
-      case 'down':
-      default:
-        return '';
-    }
-  };
-
   return (
-    <div className="fixed inset-0 bg-black overflow-hidden">
-      <style>{`
-        @keyframes slideInLeft {
-          from { transform: translateX(100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        @keyframes slideInRight {
-          from { transform: translateX(-100%); opacity: 0; }
-          to { transform: translateX(0); opacity: 1; }
-        }
-        .animate-slide-in-left {
-          animation: slideInLeft 0.3s ease-out;
-        }
-        .animate-slide-in-right {
-          animation: slideInRight 0.3s ease-out;
-        }
-      `}</style>
-
+    <div className={`fixed inset-0 overflow-hidden transition-colors duration-500 ${backgroundColorClass}`}>
       {/* Menu superior */}
       <div className="fixed top-0 left-0 right-0 z-50 bg-gradient-to-b from-black/80 to-transparent p-4">
         <div className="flex items-center justify-between">
@@ -1451,34 +1174,10 @@ export default function WorldFlow() {
                     <Button 
                       variant="ghost" 
                       className="w-full justify-start text-white hover:bg-gray-800"
-                      onClick={() => setActiveTab('clips')}
-                    >
-                      <Home className="mr-3 h-4 w-4" />
-                      Clips
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start text-white hover:bg-gray-800"
-                      onClick={() => setActiveTab('feed')}
-                    >
-                      <Globe className="mr-3 h-4 w-4" />
-                      Feed
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start text-white hover:bg-gray-800"
-                      onClick={() => setActiveTab('create')}
+                      onClick={() => setShowCreateModal(true)}
                     >
                       <Pencil className="mr-3 h-4 w-4" />
-                      Criar
-                    </Button>
-                    <Button 
-                      variant="ghost" 
-                      className="w-full justify-start text-white hover:bg-gray-800"
-                      onClick={() => setShowKeyboardHelp(true)}
-                    >
-                      <Keyboard className="mr-3 h-4 w-4" />
-                      Atalhos
+                      Criar Post
                     </Button>
                   </div>
                 </div>
@@ -1488,262 +1187,64 @@ export default function WorldFlow() {
             <div className="text-white">
               <h1 className="font-bold text-lg">World-Flow</h1>
               <p className="text-xs text-gray-400">
-                {activeTab === 'clips' ? 'Clips' : 
-                 activeTab === 'feed' ? 'Feed' : 
-                 'Criar'}
+                {isClipPost ? (
+                  <span className="flex items-center gap-1">
+                    <Film className="h-3 w-3 text-purple-400" />
+                    Clip {currentClipIndexInArray + 1} de {clipIndices.length}
+                  </span>
+                ) : (
+                  <span className="flex items-center gap-1">
+                    <Globe className="h-3 w-3 text-blue-400" />
+                    Feed {currentIndex + 1} de {combinedPosts.length}
+                  </span>
+                )}
               </p>
             </div>
           </div>
-
-          <div className="flex items-center gap-3">
-            {(activeTab === 'clips' && verticalClipPosts.length > 0) && (
-              <div className="hidden md:flex items-center gap-2 bg-black/50 rounded-full px-3 py-1">
-                <span className="text-white text-sm">
-                  {currentIndex + 1} / {verticalClipPosts.length}
-                </span>
-              </div>
-            )}
-
-            {(activeTab === 'feed' && verticalFeedPosts.length > 0) && (
-              <div className="hidden md:flex items-center gap-2 bg-black/50 rounded-full px-3 py-1">
-                <span className="text-white text-sm">
-                  {currentIndex + 1} / {verticalFeedPosts.length}
-                </span>
-              </div>
-            )}
-
-            <Badge className={cn(
-              "hidden md:flex",
-              activeTab === 'clips' ? "bg-gradient-to-r from-pink-500 to-orange-500" :
-              activeTab === 'feed' ? "bg-gradient-to-r from-blue-500 to-purple-500" :
-              "bg-gradient-to-r from-green-500 to-teal-500"
-            )}>
-              {isTouchDevice ? "Deslize para navegar" : "Use setas ou scroll"}
-            </Badge>
-            
-            {!isTouchDevice && (
-              <Button
-                variant="ghost"
-                size="icon"
-                className="text-white hover:bg-white/20"
-                onClick={() => setShowKeyboardHelp(true)}
-              >
-                <Keyboard className="h-5 w-5" />
-              </Button>
-            )}
-          </div>
         </div>
       </div>
 
-      {/* Área principal com gestos */}
-      <div 
-        className={`h-full w-full pt-16 pb-16 transition-transform duration-300 ease-out ${getSwipeAnimation()}`}
-        onTouchStart={isTouchDevice ? handleTouchStart : undefined}
-        onTouchMove={isTouchDevice ? handleTouchMove : undefined}
-        onTouchEnd={isTouchDevice ? handleTouchEnd : undefined}
+      {/* Área principal */}
+      <div className="h-full w-full pt-16 pb-16">
+        {renderCurrentPost()}
+      </div>
+
+      {/* Indicadores de navegação */}
+      <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30 pointer-events-none">
+        <div className="bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-4">
+          <div className="flex flex-col items-center">
+            <ArrowUp className="h-4 w-4 text-white/70" />
+            <span className="text-white/50 text-xs">Anterior</span>
+          </div>
+          <div className="flex flex-col items-center">
+            <ArrowDown className="h-4 w-4 text-white/70" />
+            <span className="text-white/50 text-xs">Próximo</span>
+          </div>
+          {isClipPost && (
+            <>
+              <div className="flex flex-col items-center">
+                <ChevronLeft className="h-4 w-4 text-white/70" />
+                <span className="text-white/50 text-xs">Clip Anterior</span>
+              </div>
+              <div className="flex flex-col items-center">
+                <ChevronRight className="h-4 w-4 text-white/70" />
+                <span className="text-white/50 text-xs">Próximo Clip</span>
+              </div>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Botão flutuante para criação */}
+      <Button
+        className="fixed bottom-20 right-6 h-14 w-14 rounded-full bg-gradient-to-r from-green-500 to-teal-500 text-white shadow-lg hover:from-green-600 hover:to-teal-600 z-40"
+        onClick={() => setShowCreateModal(true)}
       >
-        {renderContent()}
-      </div>
+        <Pencil className="h-6 w-6" />
+      </Button>
 
-      {/* CORREÇÃO: Indicadores corrigidos conforme layout espacial solicitado */}
-      {isTouchDevice && (
-        <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30 pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-4">
-            <div className="flex flex-col items-center">
-              <ArrowRight className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">Clips ←</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowLeft className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">→ Criar</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowUp className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">Anterior</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowDown className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">Próximo</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* CORREÇÃO: Indicadores para PC corrigidos */}
-      {!isTouchDevice && (
-        <div className="fixed bottom-20 left-0 right-0 flex justify-center z-30 pointer-events-none">
-          <div className="bg-black/60 backdrop-blur-sm rounded-full px-4 py-2 flex items-center gap-4">
-            <div className="flex flex-col items-center">
-              <ArrowRight className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">→ Clips</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowLeft className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">Criar ←</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowUp className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">↑ Anterior</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <ArrowDown className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">↓ Próximo</span>
-            </div>
-            <div className="flex flex-col items-center">
-              <MoveVertical className="h-4 w-4 text-white/70" />
-              <span className="text-white/50 text-xs">Scroll</span>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Navegação inferior */}
-      <div className="fixed bottom-0 left-0 right-0 bg-black/90 backdrop-blur-lg border-t border-white/10 z-40">
-        <div className="flex items-center justify-around p-3">
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-12 w-12 rounded-full transition-all",
-              activeTab === 'clips' 
-                ? "bg-gradient-to-r from-pink-500 to-orange-500 text-white scale-110" 
-                : "text-white/70 hover:text-white hover:bg-white/10"
-            )}
-            onClick={() => setActiveTab('clips')}
-          >
-            <Home className="h-6 w-6" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-12 w-12 rounded-full transition-all",
-              activeTab === 'feed' 
-                ? "bg-gradient-to-r from-blue-500 to-purple-500 text-white scale-110" 
-                : "text-white/70 hover:text-white hover:bg-white/10"
-            )}
-            onClick={() => {
-              setActiveTab('feed');
-              setCurrentIndex(0); 
-            }}
-          >
-            <Globe className="h-6 w-6" />
-          </Button>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            className={cn(
-              "h-12 w-12 rounded-full transition-all",
-              activeTab === 'create' 
-                ? "bg-gradient-to-r from-green-500 to-teal-500 text-white scale-110" 
-                : "text-white/70 hover:text-white hover:bg-white/10"
-            )}
-            onClick={() => setActiveTab('create')}
-          >
-            <Pencil className="h-6 w-6" />
-          </Button>
-        </div>
-      </div>
-
-      {/* Dialog de ajuda do teclado */}
-      <Dialog open={showKeyboardHelp} onOpenChange={setShowKeyboardHelp}>
-        <DialogContent className="max-w-md bg-gray-900 border-gray-800 text-white">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Keyboard className="h-5 w-5" />
-              Como Navegar
-            </DialogTitle>
-          </DialogHeader>
-          <div className="space-y-4">
-            {isTouchDevice && (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-pink-400">No Celular (Gestos):</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowRight className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Swipe Direita → Clips</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Swipe Esquerda → Criar</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowUp className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Swipe para Cima → Anterior Post</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowDown className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Swipe para Baixo → Próximo Post</span>
-                  </div>
-                </div>
-              </div>
-            )}
-            
-            {!isTouchDevice && (
-              <div className="space-y-3">
-                <h3 className="font-semibold text-blue-400">No Computador (Teclado):</h3>
-                <div className="grid grid-cols-2 gap-3">
-                  <div className="flex items-center gap-2">
-                    <ArrowRight className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Seta Direita → Clips</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowLeft className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Seta Esquerda → Criar</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowUp className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Seta Cima → Anterior Post</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <ArrowDown className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Seta Baixo → Próximo Post</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <MoveVertical className="h-4 w-4" />
-                    <span className="text-gray-300 text-sm">Scroll (Wheel) → Navegar posts</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">Espaço</span>
-                    <span className="text-gray-400 text-xs">Play/Pause (Clips)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">ESC</span>
-                    <span className="text-gray-400 text-xs">Voltar</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">Ctrl/Cmd + 1/2/3</span>
-                    <span className="text-gray-400 text-xs">Abas (Clips/Feed/Criar)</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">L</span>
-                    <span className="text-gray-400 text-xs">Curtir</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">C</span>
-                    <span className="text-gray-400 text-xs">Comentar</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="text-gray-300 text-sm">M</span>
-                    <span className="text-gray-400 text-xs">Mutar/Ativar som</span>
-                  </div>
-                </div>
-              </div>
-            )}
-          </div>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => setShowKeyboardHelp(false)}
-              className="border-gray-700 text-white hover:bg-gray-800"
-            >
-              Fechar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Modal de criação */}
+      <CreatePostModal />
 
       {/* Dialog de comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => !o && setOpeningCommentsFor(null)}>

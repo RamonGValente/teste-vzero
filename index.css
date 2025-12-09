@@ -4,74 +4,374 @@
 
 @layer base {
   :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96.1%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --primary: 222.2 47.4% 11.2%; /* Cor principal do tema (Light) */
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96.1%;
-    --secondary-foreground: 222.2 47.4% 11.2%;
-    --accent: 210 40% 96.1%;
-    --accent-foreground: 222.2 47.4% 11.2%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 215 20.2% 65.1%;
-    --radius: 0.5rem;
+    --background: 0 0% 0%;
+    --foreground: 0 0% 100%;
+    --card: 0 0% 3%;
+    --card-foreground: 0 0% 100%;
+    --popover: 0 0% 3%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 262 83% 58%;
+    --primary-foreground: 0 0% 100%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 63%;
+    --accent: 262 83% 58%;
+    --accent-foreground: 0 0% 100%;
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 0 0% 20%;
+    --input: 0 0% 20%;
+    --ring: 262 83% 58%;
+    --radius: 0.75rem;
   }
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --primary: 210 40% 98%; /* Cor principal do tema (Dark) - Geralmente a mais clara */
-    --primary-foreground: 222.2 47.4% 11.2%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --ring: 217.2 32.6% 17.5%;
+}
+
+@layer base {
+  * {
+    @apply border-border;
   }
-  * { @apply border-border; }
-  body { @apply bg-background text-foreground; }
+  
+  body {
+    @apply bg-background text-foreground;
+    overflow: hidden;
+  }
+  
+  /* Scrollbar personalizada */
+  ::-webkit-scrollbar {
+    width: 8px;
+  }
+  
+  ::-webkit-scrollbar-track {
+    @apply bg-black;
+  }
+  
+  ::-webkit-scrollbar-thumb {
+    @apply bg-purple-500/50 rounded-full;
+  }
+  
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-purple-500;
+  }
 }
 
-/* ================================================= */
-/* SCROLLBAR CUSTOMIZADO COM COR DO TEMA (PRIMARY) */
-/* ================================================= */
-
-.custom-scrollbar-primary::-webkit-scrollbar {
-  width: 8px; /* Largura da barra vertical */
-  height: 8px; /* Largura da barra horizontal */
+@layer utilities {
+  /* Animações personalizadas */
+  .animate-float {
+    animation: float 6s ease-in-out infinite;
+  }
+  
+  .animate-pulse-glow {
+    animation: pulse-glow 2s ease-in-out infinite;
+  }
+  
+  .animate-spin-slow {
+    animation: spin 20s linear infinite;
+  }
+  
+  .animate-orbit {
+    animation: orbit 30s linear infinite;
+  }
+  
+  .animate-quantum {
+    animation: quantum 3s ease-in-out infinite;
+  }
+  
+  .preserve-3d {
+    transform-style: preserve-3d;
+  }
+  
+  .perspective-1000 {
+    perspective: 1000px;
+  }
+  
+  .backface-hidden {
+    backface-visibility: hidden;
+  }
+  
+  /* Gradientes animados */
+  .bg-gradient-animate {
+    background-size: 200% 200%;
+    animation: gradient 15s ease infinite;
+  }
+  
+  /* Efeitos de vidro */
+  .glass-effect {
+    @apply backdrop-blur-md bg-white/5 border border-white/10;
+  }
+  
+  .glass-effect-dark {
+    @apply backdrop-blur-md bg-black/30 border border-white/5;
+  }
+  
+  /* Texto com gradiente */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r;
+  }
+  
+  .text-gradient-purple {
+    @apply from-purple-400 to-pink-400;
+  }
+  
+  .text-gradient-cyan {
+    @apply from-cyan-400 to-blue-400;
+  }
+  
+  .text-gradient-green {
+    @apply from-green-400 to-emerald-400;
+  }
+  
+  /* Sombras neón */
+  .shadow-neon-purple {
+    box-shadow: 0 0 20px theme('colors.purple.500 / 30%'),
+                0 0 40px theme('colors.purple.500 / 20%'),
+                0 0 60px theme('colors.purple.500 / 10%');
+  }
+  
+  .shadow-neon-cyan {
+    box-shadow: 0 0 20px theme('colors.cyan.500 / 30%'),
+                0 0 40px theme('colors.cyan.500 / 20%'),
+                0 0 60px theme('colors.cyan.500 / 10%');
+  }
+  
+  .shadow-neon-green {
+    box-shadow: 0 0 20px theme('colors.green.500 / 30%'),
+                0 0 40px theme('colors.green.500 / 20%'),
+                0 0 60px theme('colors.green.500 / 10%');
+  }
+  
+  /* Efeito de partículas */
+  .particle {
+    @apply absolute rounded-full;
+    background: radial-gradient(circle, theme('colors.purple.400') 0%, transparent 70%);
+    animation: particle-float 10s infinite linear;
+  }
+  
+  /* Grid dimensional */
+  .dimensional-grid {
+    background-image: 
+      linear-gradient(to right, theme('colors.white / 5%') 1px, transparent 1px),
+      linear-gradient(to bottom, theme('colors.white / 5%') 1px, transparent 1px);
+    background-size: 50px 50px;
+  }
+  
+  /* Cursor personalizado */
+  .cursor-quantum {
+    cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='32' height='32' viewBox='0 0 32 32'%3E%3Ccircle cx='16' cy='16' r='14' fill='none' stroke='%236366f1' stroke-width='2'/%3E%3Ccircle cx='16' cy='16' r='6' fill='%236366f1'/%3E%3C/svg%3E") 16 16, pointer;
+  }
 }
 
-.custom-scrollbar-primary::-webkit-scrollbar-track {
-  /* Cor de fundo da trilha, usando a cor 'muted' do tema */
-  background: hsl(var(--muted)); 
-  border-radius: 10px;
+/* Animações keyframes */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-20px) rotate(180deg);
+  }
 }
 
-.custom-scrollbar-primary::-webkit-scrollbar-thumb {
-  /* Cor da barra de rolagem, usando a cor 'primary' do tema */
-  background: hsl(var(--primary)); 
-  border-radius: 10px;
+@keyframes pulse-glow {
+  0%, 100% {
+    opacity: 0.5;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.05);
+  }
 }
 
-/* Estilo ao passar o mouse: usa a cor primary-foreground */
-.custom-scrollbar-primary::-webkit-scrollbar-thumb:hover {
-  background: hsl(var(--primary-foreground)); 
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes orbit {
+  from {
+    transform: rotate(0deg) translateX(150px) rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg) translateX(150px) rotate(-360deg);
+  }
+}
+
+@keyframes quantum {
+  0%, 100% {
+    opacity: 0.3;
+    filter: blur(0px);
+  }
+  50% {
+    opacity: 1;
+    filter: blur(2px);
+  }
+}
+
+@keyframes gradient {
+  0%, 100% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+}
+
+@keyframes particle-float {
+  0% {
+    transform: translateY(100vh) rotate(0deg);
+    opacity: 0;
+  }
+  10% {
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(-100px) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+@keyframes slide-in-left {
+  from {
+    transform: translateX(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-up {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-down {
+  from {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+/* Classes de animação */
+.animate-slide-in-left {
+  animation: slide-in-left 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.3s ease-out;
+}
+
+.animate-slide-in-up {
+  animation: slide-in-up 0.3s ease-out;
+}
+
+.animate-slide-in-down {
+  animation: slide-in-down 0.3s ease-out;
+}
+
+/* Efeito de digitação */
+.typewriter {
+  overflow: hidden;
+  border-right: .15em solid theme('colors.purple.500');
+  white-space: nowrap;
+  animation: typing 3.5s steps(40, end), blink-caret .75s step-end infinite;
+}
+
+@keyframes typing {
+  from { width: 0 }
+  to { width: 100% }
+}
+
+@keyframes blink-caret {
+  from, to { border-color: transparent }
+  50% { border-color: theme('colors.purple.500') }
+}
+
+/* Loader quântico */
+.quantum-loader {
+  position: relative;
+  width: 80px;
+  height: 80px;
+}
+
+.quantum-loader:before,
+.quantum-loader:after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  border: 4px solid transparent;
+  border-top-color: theme('colors.purple.500');
+  animation: spin 1s linear infinite;
+}
+
+.quantum-loader:after {
+  border-top-color: theme('colors.cyan.500');
+  animation-duration: 0.5s;
+  animation-direction: reverse;
+}
+
+/* Grid de energia */
+.energy-grid {
+  background-image: 
+    radial-gradient(circle at 25% 25%, theme('colors.green.500 / 10%') 2px, transparent 2px),
+    radial-gradient(circle at 75% 75%, theme('colors.blue.500 / 10%') 2px, transparent 2px);
+  background-size: 100px 100px;
+}
+
+/* Efeito de portal */
+.portal-effect {
+  position: relative;
+  overflow: hidden;
+}
+
+.portal-effect:before {
+  content: '';
+  position: absolute;
+  top: -50%;
+  left: -50%;
+  width: 200%;
+  height: 200%;
+  background: conic-gradient(
+    from 0deg,
+    transparent,
+    theme('colors.purple.500'),
+    theme('colors.cyan.500'),
+    theme('colors.purple.500'),
+    transparent
+  );
+  animation: spin 3s linear infinite;
+  z-index: -1;
 }
