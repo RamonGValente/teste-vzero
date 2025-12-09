@@ -1,23 +1,25 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import {
-  Heart, MessageCircle, Send,
+  Heart, MessageCircle, Send, X, Pencil,
   Camera, Video, Images, Play,
-  ChevronLeft, ChevronRight, Volume2, VolumeX,
-  Clock, Loader2, Globe,
-  Menu, ArrowDown,
-  Film, Plus
+  ChevronLeft, ChevronRight, Volume2, VolumeX, Pause,
+  Clock, Loader2, Flame, Globe,
+  Menu, ArrowUp, ArrowDown,
+  ChevronUp, ChevronDown, Film, Plus
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
 import { Button } from "@/components/ui/button";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 
@@ -111,14 +113,15 @@ interface TikTokVideoPlayerProps {
 
 const TikTokVideoPlayer = ({ 
   src, post, user, onLike, onComment, 
-  hasPrevClip, hasNextClip 
+  hasPrevClip, hasNextClip, onNextClip, onPreviousClip 
 }: TikTokVideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const [isPlaying, setIsPlaying] = useState(false);
+  const [isPlaying, setIsPlaying] = useState(false); // Inicia pausado ou autoplay dependendo da politica
   const [isMuted, setIsMuted] = useState(false);
   const [progress, setProgress] = useState(0);
   const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
+  // Auto-play quando monta
   useEffect(() => {
     setIsPlaying(true);
     return () => setIsPlaying(false);
@@ -146,10 +149,10 @@ const TikTokVideoPlayer = ({
   return (
     <div className="relative w-full h-full bg-black">
       {/* Indicador de Área de Clips */}
-      <div className="absolute top-20 left-4 z-20">
-        <Badge className="bg-black/40 backdrop-blur-md text-white border-white/10 shadow-lg px-3 py-1 hover:bg-black/60 transition-colors">
-          <Film className="h-3 w-3 mr-2 text-pink-500 animate-pulse" />
-          CLIPS
+      <div className="absolute top-4 left-4 z-20">
+        <Badge className="bg-gradient-to-r from-purple-600 to-pink-600 text-white border-0 shadow-lg px-3 py-1">
+          <Film className="h-3 w-3 mr-2 animate-pulse" />
+          ÁREA DE CLIPS
         </Badge>
       </div>
       
@@ -163,77 +166,79 @@ const TikTokVideoPlayer = ({
         onClick={() => setIsPlaying(!isPlaying)}
       />
       
+      {/* Play/Pause Icon Overlay (se pausado) */}
       {!isPlaying && (
         <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
           <Play className="h-16 w-16 text-white/50" />
         </div>
       )}
 
-      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800 z-30">
+      {/* Barra de progresso */}
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800">
         <div 
           className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-100 ease-linear"
           style={{ width: `${progress}%` }}
         />
       </div>
       
-      {/* Botões Laterais */}
+      {/* Botões Laterais (Ações) */}
       <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6 z-20">
-        <div className="flex flex-col items-center group">
+        <div className="flex flex-col items-center">
           <Button
             variant="ghost"
             size="icon"
-            className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            className="h-12 w-12 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm transition-transform active:scale-90"
             onClick={onLike}
           >
-            <Heart className={cn("h-7 w-7 transition-colors drop-shadow-md", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
+            <Heart className={cn("h-7 w-7 transition-colors", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
           </Button>
-          <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.likes?.length || 0}</span>
+          <span className="text-white text-xs font-bold drop-shadow-md">{post.likes?.length || 0}</span>
         </div>
         
         <div className="flex flex-col items-center">
           <Button
             variant="ghost"
             size="icon"
-            className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            className="h-12 w-12 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm"
             onClick={onComment}
           >
-            <MessageCircle className="h-7 w-7 drop-shadow-md" />
+            <MessageCircle className="h-7 w-7" />
           </Button>
-          <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.comments?.length || 0}</span>
+          <span className="text-white text-xs font-bold drop-shadow-md">{post.comments?.length || 0}</span>
         </div>
         
         <Button
           variant="ghost"
           size="icon"
-          className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+          className="h-12 w-12 rounded-full bg-black/40 text-white hover:bg-black/60 backdrop-blur-sm"
           onClick={() => setIsMuted(!isMuted)}
         >
-          {isMuted ? <VolumeX className="h-6 w-6 drop-shadow-md" /> : <Volume2 className="h-6 w-6 drop-shadow-md" />}
+          {isMuted ? <VolumeX className="h-6 w-6" /> : <Volume2 className="h-6 w-6" />}
         </Button>
       </div>
       
       {/* Navegação Horizontal Visual */}
-      <div className="absolute top-1/2 left-2 z-10 -translate-y-1/2 pointer-events-none">
+      <div className="absolute top-1/2 left-2 z-10 -translate-y-1/2">
         {hasPrevClip && (
-            <div className="animate-pulse bg-black/20 p-2 rounded-full backdrop-blur-sm">
-                <ChevronLeft className="h-6 w-6 text-white/70" />
+            <div className="animate-pulse bg-black/20 p-1 rounded-full">
+                <ChevronLeft className="h-8 w-8 text-white/70" />
             </div>
         )}
       </div>
-      <div className="absolute top-1/2 right-2 z-10 -translate-y-1/2 pointer-events-none">
+      <div className="absolute top-1/2 right-2 z-10 -translate-y-1/2">
         {hasNextClip && (
-            <div className="animate-pulse bg-black/20 p-2 rounded-full backdrop-blur-sm">
-                <ChevronRight className="h-6 w-6 text-white/70" />
+            <div className="animate-pulse bg-black/20 p-1 rounded-full">
+                <ChevronRight className="h-8 w-8 text-white/70" />
             </div>
         )}
       </div>
 
       {/* Info do Post */}
-      <div className="absolute bottom-6 left-0 right-16 p-4 text-white z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-20">
+      <div className="absolute bottom-8 left-4 right-16 text-white z-10">
         <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-10 w-10 ring-2 ring-white/30 shadow-lg">
+          <Avatar className="h-10 w-10 ring-2 ring-white/50 shadow-lg">
             <AvatarImage src={post.profiles?.avatar_url}/>
-            <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 font-bold">
+            <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500">
               {post.profiles?.username?.[0]}
             </AvatarFallback>
           </Avatar>
@@ -245,15 +250,20 @@ const TikTokVideoPlayer = ({
             >
               @{post.profiles?.username}
             </UserLink>
-            <span className="text-xs text-white/70 flex items-center gap-1">
+            <span className="text-xs text-gray-200 flex items-center gap-1">
                 <Clock className="w-3 h-3" />
                 {new Date(post.created_at).toLocaleDateString('pt-BR')}
             </span>
           </div>
         </div>
-        <p className="text-white/95 text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
+        <p className="text-white/95 text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed">
             {post.content}
         </p>
+        
+        {/* Dica de navegação */}
+        <div className="mt-2 flex items-center gap-2 text-[10px] text-white/60 bg-black/30 w-fit px-2 py-1 rounded-full backdrop-blur-sm">
+           <ArrowUp className="h-3 w-3" /> Posts Normais | <ChevronLeft className="h-3 w-3" /> Clips <ChevronRight className="h-3 w-3" />
+        </div>
       </div>
     </div>
   );
@@ -265,7 +275,10 @@ export default function WorldFlow() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
+  // Estados de Navegação Matricial
+  // verticalIndex: controla qual "linha" do feed estamos (0, 1, 2, 3 [clips], 4...)
   const [verticalIndex, setVerticalIndex] = useState(0);
+  // horizontalClipIndex: controla qual vídeo estamos vendo quando estamos na linha de clips
   const [horizontalClipIndex, setHorizontalClipIndex] = useState(0);
 
   const [openingCommentsFor, setOpeningCommentsFor] = useState<any>(null);
@@ -297,46 +310,78 @@ export default function WorldFlow() {
     enabled: !!user,
   });
 
-  /* LÓGICA DE ESTRUTURAÇÃO DO FEED */
+  /* LÓGICA DE ESTRUTURAÇÃO DO FEED (CORE) 
+     Transforma a lista plana em uma estrutura onde o índice 3 é uma coleção de clips.
+  */
   const feedStructure = useMemo(() => {
     if (!rawPosts) return [];
+
     const standardPosts = rawPosts.filter(p => p.post_type === 'standard');
     const clipPosts = rawPosts.filter(p => p.post_type === 'viral_clips');
+
     const structure: any[] = [];
+
+    // Adiciona até 3 posts normais iniciais
     const initialBatch = standardPosts.slice(0, 3);
     initialBatch.forEach(post => structure.push({ type: 'standard', data: post }));
+
+    // Se houver clips, cria o "Slot" de Clips
     if (clipPosts.length > 0) {
-      structure.push({ type: 'clip_container', items: clipPosts });
+      structure.push({ 
+        type: 'clip_container', 
+        items: clipPosts // Array com todos os vídeos
+      });
     }
+
+    // Adiciona o restante dos posts normais
     const remainingBatch = standardPosts.slice(3);
     remainingBatch.forEach(post => structure.push({ type: 'standard', data: post }));
+
     return structure;
   }, [rawPosts]);
 
+  // Item atual baseado no índice vertical
   const currentFeedItem = feedStructure[verticalIndex];
+  
+  // Se o item atual for container de clips, pegamos o clip específico
+  const currentClip = currentFeedItem?.type === 'clip_container' 
+    ? currentFeedItem.items[horizontalClipIndex] 
+    : null;
 
   /* --- Controles de Navegação --- */
+
   const goDown = useCallback(() => {
-    if (verticalIndex < feedStructure.length - 1) setVerticalIndex(prev => prev + 1);
+    if (verticalIndex < feedStructure.length - 1) {
+      setVerticalIndex(prev => prev + 1);
+      // Opcional: Resetar o index horizontal ao sair e voltar?
+      // setHorizontalClipIndex(0); // Deixe comentado se quiser memorizar onde parou nos clips
+    }
   }, [verticalIndex, feedStructure.length]);
 
   const goUp = useCallback(() => {
-    if (verticalIndex > 0) setVerticalIndex(prev => prev - 1);
+    if (verticalIndex > 0) {
+      setVerticalIndex(prev => prev - 1);
+    }
   }, [verticalIndex]);
 
   const goRight = useCallback(() => {
     if (currentFeedItem?.type === 'clip_container') {
-      if (horizontalClipIndex < currentFeedItem.items.length - 1) setHorizontalClipIndex(prev => prev + 1);
+      if (horizontalClipIndex < currentFeedItem.items.length - 1) {
+        setHorizontalClipIndex(prev => prev + 1);
+      }
     }
   }, [currentFeedItem, horizontalClipIndex]);
 
   const goLeft = useCallback(() => {
     if (currentFeedItem?.type === 'clip_container') {
-      if (horizontalClipIndex > 0) setHorizontalClipIndex(prev => prev - 1);
+      if (horizontalClipIndex > 0) {
+        setHorizontalClipIndex(prev => prev - 1);
+      }
     }
   }, [currentFeedItem, horizontalClipIndex]);
 
-  /* --- Handlers de Input --- */
+  /* --- Handlers de Input (Wheel/Touch) --- */
+
   const handleTouchStart = (e: React.TouchEvent) => {
     setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
@@ -351,37 +396,57 @@ export default function WorldFlow() {
     const yDiff = touchStart.y - touchEnd.y;
     const minSwipe = 50;
 
+    // Lógica de Prioridade:
+    // Se estiver na área de clips, swipe horizontal tem prioridade.
+    // Caso contrário, ou se o swipe for verticalmente forte, navega na vertical.
+
     if (Math.abs(xDiff) > Math.abs(yDiff)) {
-      if (Math.abs(xDiff) > minSwipe && currentFeedItem?.type === 'clip_container') {
-        if (xDiff > 0) goRight(); else goLeft();
+      // Movimento Horizontal
+      if (Math.abs(xDiff) > minSwipe) {
+        if (currentFeedItem?.type === 'clip_container') {
+          // Estamos nos clips, navegar lateralmente
+          if (xDiff > 0) goRight(); // Swipe esquerda -> Próximo
+          else goLeft(); // Swipe direita -> Anterior
+        }
       }
     } else {
+      // Movimento Vertical
       if (Math.abs(yDiff) > minSwipe) {
-        if (yDiff > 0) goDown(); else goUp();
+        if (yDiff > 0) goDown();
+        else goUp();
       }
     }
     setTouchStart(null);
     setTouchEnd(null);
   };
 
+  // Suporte a Mouse Wheel para Desktop
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
+      // Evita scroll dentro de inputs ou modais abertos (básico)
       if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
+      
       e.preventDefault();
+      // Threshold para evitar disparos muito rápidos
       if (Math.abs(e.deltaY) > 20) {
-        if (e.deltaY > 0) goDown(); else goUp();
+        if (e.deltaY > 0) goDown();
+        else goUp();
       }
     };
     window.addEventListener('wheel', handleWheel, { passive: false });
     return () => window.removeEventListener('wheel', handleWheel);
   }, [goDown, goUp]);
 
-  /* --- Dados --- */
+  /* --- Funções de Dados (Likes/Comments) --- */
+  
   const handleLike = async (postId: string) => {
     try {
+      // Encontrar post nos dados crus para atualizar otimista ou refetch
       const post = rawPosts?.find(p => p.id === postId);
       if (!post) return;
+      
       const hasLiked = post.likes?.some((l:any) => l.user_id === user?.id);
+      
       if (hasLiked) {
         const likeId = post.likes.find((l:any) => l.user_id === user?.id)?.id;
         if (likeId) await supabase.from("likes").delete().eq("id", likeId);
@@ -425,34 +490,36 @@ export default function WorldFlow() {
     }
   });
 
+  /* --- Renderização --- */
+
+  // Função auxiliar para pegar URL limpa
   const getMediaUrl = (post: any) => {
     if (!post?.media_urls?.length) return null;
     return post.media_urls[0].replace(/^(image::|video::|audio::)/, '');
   };
 
-  /* --- Renderização do Conteúdo --- */
   const renderContent = () => {
     if (!currentFeedItem) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-white p-8 animate-in fade-in bg-gray-950">
-          <Globe className="h-24 w-24 text-blue-600 mb-6 opacity-30 animate-pulse" />
-          <h2 className="text-2xl font-bold tracking-tight">Tudo calmo por aqui...</h2>
-          <Button onClick={() => setShowCreateModal(true)} className="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full px-8 shadow-lg hover:shadow-blue-500/20">
-             Criar Primeiro Post
-          </Button>
+        <div className="flex flex-col items-center justify-center h-full text-white p-8 animate-in fade-in">
+          <Globe className="h-20 w-20 text-blue-500 mb-4 opacity-50" />
+          <h2 className="text-xl font-bold">Tudo calmo por aqui...</h2>
+          <Button onClick={() => setShowCreateModal(true)} className="mt-4 bg-blue-600 text-white">Criar Post</Button>
         </div>
       );
     }
 
-    // 1. LINHA DE CLIPS
+    // 1. Renderização da LINHA DE CLIPS
     if (currentFeedItem.type === 'clip_container') {
       const clip = currentFeedItem.items[horizontalClipIndex];
       const mediaUrl = getMediaUrl(clip);
-      if (!mediaUrl) return <div className="h-full flex items-center justify-center text-white bg-black">Clip indisponível</div>;
+      
+      // Se por acaso o clip não tiver mídia válida
+      if (!mediaUrl) return <div className="h-full flex items-center justify-center text-white">Clip sem vídeo</div>;
 
       return (
         <TikTokVideoPlayer
-          key={clip.id}
+          key={clip.id} // Key importante para resetar player ao mudar clip
           src={mediaUrl}
           post={clip}
           user={user}
@@ -466,108 +533,89 @@ export default function WorldFlow() {
       );
     }
 
-    // 2. POST STANDARD (IMERSIVO)
+    // 2. Renderização de POST STANDARD
     const post = currentFeedItem.data;
     const mediaUrl = getMediaUrl(post);
     const isVideo = mediaUrl && isVideoUrl(mediaUrl);
-    const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
     return (
-      <div className="h-full w-full relative bg-gray-900 overflow-hidden flex flex-col justify-center animate-in fade-in duration-500">
-        
-        {/* Background Layer - Imersivo */}
-        <div className="absolute inset-0 z-0">
-           {mediaUrl ? (
-             <>
-                {/* Imagem borrada de fundo para preencher espaço vazio */}
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-3xl z-0" />
-                <img src={mediaUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-xl scale-110" alt="" />
-                
-                {/* Mídia Principal Centralizada */}
-                <div className="absolute inset-0 flex items-center justify-center z-10 pb-24 md:pb-0">
-                    {isVideo ? (
-                      <video src={mediaUrl} className="w-full max-h-[80vh] md:max-h-full object-contain shadow-2xl" controls playsInline />
-                    ) : (
-                      <img src={mediaUrl} alt="Post media" className="w-full max-h-[75vh] md:max-h-full object-contain shadow-2xl drop-shadow-2xl" />
-                    )}
-                </div>
-             </>
-           ) : (
-             <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-blue-950 to-purple-950" />
-           )}
+      <div className="h-full relative bg-gray-900 overflow-hidden flex flex-col">
+        {/* Background Blur Effect */}
+        <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
+           {mediaUrl && <img src={mediaUrl} className="w-full h-full object-cover blur-3xl scale-110" alt="" />}
         </div>
 
-        {/* Overlay de Conteúdo Inferior (Estilo Instagram Reels/Stories) */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-8 px-5 flex flex-col justify-end">
-            
-            {/* Header do Post (Avatar e Nome) */}
-            <div className="flex items-center gap-3 mb-4">
-                <Avatar className="h-11 w-11 ring-2 ring-blue-500/50 shadow-lg">
-                <AvatarImage src={post.profiles?.avatar_url}/>
-                <AvatarFallback className="bg-blue-600 text-white font-bold">{post.profiles?.username?.[0]}</AvatarFallback>
-                </Avatar>
-                <div>
-                <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-white text-lg hover:text-blue-400 drop-shadow-md">
-                    @{post.profiles?.username}
-                </UserLink>
-                <div className="flex items-center gap-2 text-xs text-gray-300/80">
-                    <span>{new Date(post.created_at).toLocaleDateString('pt-BR')}</span>
-                    <span className="w-1 h-1 rounded-full bg-gray-500"></span>
-                    <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-300 px-1 py-0 bg-blue-500/10 backdrop-blur-sm">Post</Badge>
+        <ScrollArea className="flex-1 w-full z-10">
+          <div className="min-h-full flex flex-col justify-center p-4 pb-24 md:p-8">
+            <Card className="w-full max-w-xl mx-auto bg-gray-800/80 border-gray-700 backdrop-blur-md shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300">
+              <CardContent className="p-0">
+                {/* Header do Post */}
+                <div className="p-4 flex items-center gap-3 border-b border-gray-700/50">
+                  <Avatar className="h-10 w-10 ring-2 ring-blue-500/30">
+                    <AvatarImage src={post.profiles?.avatar_url}/>
+                    <AvatarFallback>{post.profiles?.username?.[0]}</AvatarFallback>
+                  </Avatar>
+                  <div className="flex-1">
+                    <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-white hover:text-blue-400 block">
+                      @{post.profiles?.username}
+                    </UserLink>
+                    <span className="text-gray-400 text-xs">
+                        {new Date(post.created_at).toLocaleDateString('pt-BR')}
+                    </span>
+                  </div>
+                  <Badge variant="outline" className="text-blue-300 border-blue-500/30 bg-blue-500/10">Feed</Badge>
                 </div>
-                </div>
-            </div>
 
-            {/* Texto do Post */}
-            {post.content && (
-                <ScrollArea className="max-h-[30vh] w-full mb-4 pr-2">
-                    <p className="text-white/95 text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
+                {/* Conteúdo Texto */}
+                {post.content && (
+                    <div className="p-4 text-white text-base leading-relaxed whitespace-pre-wrap">
                         {post.content}
-                    </p>
-                </ScrollArea>
-            )}
+                    </div>
+                )}
 
-            {/* Barra de Ações (Glassmorphism) */}
-            <div className="flex items-center justify-between mt-2">
-                <div className="flex gap-4">
-                    <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className={cn("rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 hover:bg-white/20 transition-all", isLiked ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-white")} 
-                        onClick={() => handleLike(post.id)}
-                    >
-                        <Heart className={cn("h-5 w-5 mr-2", isLiked && "fill-current")} />
-                        <span className="font-semibold">{post.likes?.length || 0}</span>
+                {/* Mídia */}
+                {mediaUrl && (
+                  <div className="bg-black w-full flex items-center justify-center max-h-[500px] overflow-hidden">
+                    {isVideo ? (
+                      <video src={mediaUrl} className="w-full h-auto max-h-[500px]" controls playsInline />
+                    ) : (
+                      <img src={mediaUrl} alt="Post media" className="w-full h-auto max-h-[500px] object-contain" />
+                    )}
+                  </div>
+                )}
+
+                {/* Footer Ações */}
+                <div className="p-3 flex items-center justify-around bg-gray-900/50 border-t border-gray-700/50">
+                    <Button variant="ghost" className="text-gray-300 hover:text-red-400 hover:bg-red-500/10 gap-2" onClick={() => handleLike(post.id)}>
+                        <Heart className={cn("h-5 w-5", post.likes?.some((l:any) => l.user_id === user?.id) && "fill-current text-red-500")} />
+                        {post.likes?.length || 0}
                     </Button>
-
-                    <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 text-white hover:bg-white/20 transition-all"
-                        onClick={() => setOpeningCommentsFor(post)}
-                    >
-                        <MessageCircle className="h-5 w-5 mr-2" />
-                        <span className="font-semibold">{post.comments?.length || 0}</span>
+                    <Button variant="ghost" className="text-gray-300 hover:text-blue-400 hover:bg-blue-500/10 gap-2" onClick={() => setOpeningCommentsFor(post)}>
+                        <MessageCircle className="h-5 w-5" />
+                        {post.comments?.length || 0}
+                    </Button>
+                    <Button variant="ghost" className="text-gray-300 hover:text-green-400 hover:bg-green-500/10">
+                        <Send className="h-5 w-5" />
                     </Button>
                 </div>
-                
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 bg-white/10 backdrop-blur-md text-white hover:bg-white/20">
-                    <Send className="h-5 w-5" />
-                </Button>
+              </CardContent>
+            </Card>
+          </div>
+        </ScrollArea>
+
+        {/* Indicador de Posição Inferior */}
+        <div className="absolute bottom-6 left-0 right-0 flex justify-center pointer-events-none z-20">
+            <div className="bg-black/50 backdrop-blur-md rounded-full px-4 py-2 text-xs text-white/60 flex items-center gap-2">
+                {verticalIndex < feedStructure.length - 1 && (
+                    <span className="flex items-center animate-bounce"><ArrowDown className="h-3 w-3 mr-1" /> Deslize para baixo</span>
+                )}
             </div>
         </div>
-
-        {/* Indicador de Deslize */}
-        {verticalIndex < feedStructure.length - 1 && (
-             <div className="absolute bottom-2 left-0 right-0 flex justify-center z-30 pointer-events-none opacity-50">
-                <ArrowDown className="h-5 w-5 text-white animate-bounce" />
-             </div>
-        )}
       </div>
     );
   };
 
-  /* Modal de Criação */
+  /* Modal de Criação (Reutilizado com pequenas melhorias visuais) */
   const CreatePostModal = () => {
     const [newPost, setNewPost] = useState("");
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
@@ -593,10 +641,12 @@ export default function WorldFlow() {
           if (file.type.startsWith("video/")) mediaUrls.push(`video::${urlData.publicUrl}`);
           else mediaUrls.push(`image::${urlData.publicUrl}`);
         }
+        
         await supabase.from("posts").insert({ 
             user_id: user?.id, content: newPost, media_urls: mediaUrls.length ? mediaUrls : null, 
-            post_type: postType, voting_period_active: true, is_community_approved: true
+            post_type: postType, voting_period_active: true, is_community_approved: true // Auto approve for demo
         });
+        
         toast({ title: "Publicado com sucesso!" });
         setNewPost(""); setMediaFiles([]); setShowCreateModal(false); refetch();
       } catch (e: any) { toast({ variant: "destructive", title: "Erro", description: e.message }); } 
@@ -605,27 +655,24 @@ export default function WorldFlow() {
 
     return (
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-xl shadow-2xl">
-          <DialogHeader><DialogTitle>Criar Novo Post</DialogTitle></DialogHeader>
-          <div className="grid grid-cols-2 gap-3 mb-4">
-             <Button variant={postType === 'standard' ? "default" : "outline"} onClick={() => setPostType('standard')} className={cn("h-12 border-gray-700", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "bg-transparent text-gray-400 hover:bg-gray-800")}>
-                <Globe className="mr-2 h-4 w-4"/> Feed Padrão
+        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-xl">
+          <DialogHeader><DialogTitle>Novo Post</DialogTitle></DialogHeader>
+          <div className="grid grid-cols-2 gap-2 mb-4">
+             <Button variant={postType === 'standard' ? "default" : "outline"} onClick={() => setPostType('standard')} className={postType === 'standard' ? "bg-blue-600" : "border-gray-600"}>
+                <Globe className="mr-2 h-4 w-4"/> Padrão
              </Button>
-             <Button variant={postType === 'viral_clips' ? "default" : "outline"} onClick={() => setPostType('viral_clips')} className={cn("h-12 border-gray-700", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "bg-transparent text-gray-400 hover:bg-gray-800")}>
-                <Film className="mr-2 h-4 w-4"/> Clip Viral
+             <Button variant={postType === 'viral_clips' ? "default" : "outline"} onClick={() => setPostType('viral_clips')} className={postType === 'viral_clips' ? "bg-pink-600" : "border-gray-600"}>
+                <Film className="mr-2 h-4 w-4"/> Clip
              </Button>
           </div>
-          <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)} placeholder="No que você está pensando?" className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[120px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" />
-          <div className="flex gap-2 mt-2 items-center">
+          <textarea value={newPost} onChange={(e) => setNewPost(e.target.value)} placeholder="Compartilhe algo..." className="w-full bg-gray-800 rounded-md p-3 min-h-[100px] text-white" />
+          <div className="flex gap-2 mt-2">
              <input type="file" ref={galleryInputRef} multiple className="hidden" accept="image/*,video/*" onChange={handleFileChange} />
-             <Button variant="outline" size="sm" className="border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white" onClick={() => galleryInputRef.current?.click()}>
-                <Images className="mr-2 h-4 w-4"/> Adicionar Mídia
-             </Button>
-             {mediaFiles.length > 0 && <span className="text-xs text-blue-400 font-medium px-2 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">{mediaFiles.length} arquivo(s) selecionado(s)</span>}
+             <Button variant="outline" size="sm" className="border-gray-600 text-gray-300" onClick={() => galleryInputRef.current?.click()}><Images className="mr-2 h-4 w-4"/> Mídia</Button>
+             <span className="text-xs text-gray-500 self-center">{mediaFiles.length} arquivos</span>
           </div>
-          <Button onClick={handleCreatePost} disabled={uploading} className="w-full mt-6 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md shadow-lg hover:shadow-blue-500/25 transition-all">
-             {uploading ? <Loader2 className="animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-             {uploading ? "Publicando..." : "Publicar"}
+          <Button onClick={handleCreatePost} disabled={uploading} className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600">
+             {uploading ? <Loader2 className="animate-spin" /> : "Publicar"}
           </Button>
         </DialogContent>
       </Dialog>
@@ -634,56 +681,35 @@ export default function WorldFlow() {
 
   return (
     <div 
-      className="fixed inset-0 overflow-hidden bg-black touch-none font-sans" 
+      className="fixed inset-0 overflow-hidden bg-black touch-none" 
       onTouchStart={handleTouchStart} 
       onTouchMove={handleTouchMove} 
       onTouchEnd={handleTouchEnd}
     >
-      {/* Header Fixo - Centralizado e Moderno */}
-      <div className="absolute top-0 left-0 right-0 z-50 p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent pointer-events-none h-20 transition-all">
-        
-        {/* Lado Esquerdo: Menu */}
-        <div className="justify-self-start pointer-events-auto">
-            <Sheet open={showMenu} onOpenChange={setShowMenu}>
-                <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 rounded-full h-10 w-10">
-                        <Menu className="h-6 w-6" />
-                    </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white">
-                    <SheetHeader><SheetTitle className="text-white text-left">Menu</SheetTitle></SheetHeader>
-                    <div className="mt-6 flex flex-col gap-4">
-                        <UserLink userId={user?.id} username="Meu Perfil" className="font-bold text-lg hover:text-blue-400 transition-colors"/>
-                        {/* Outros itens de menu aqui */}
-                    </div>
-                </SheetContent>
-            </Sheet>
-        </div>
-
-        {/* Centro: Logo Centralizada */}
-        <div className="justify-self-center flex flex-col items-center pointer-events-auto">
-            <h1 className="text-2xl font-black tracking-tighter text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] cursor-pointer select-none">
-              World<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
+      {/* Header Fixo */}
+      <div className="absolute top-0 left-0 right-0 z-50 p-4 flex justify-between items-start bg-gradient-to-b from-black/80 to-transparent pointer-events-none">
+        <div className="pointer-events-auto flex items-center gap-2">
+          <Sheet open={showMenu} onOpenChange={setShowMenu}>
+             <SheetTrigger asChild><Button variant="ghost" size="icon" className="text-white"><Menu /></Button></SheetTrigger>
+             <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white">
+                <SheetHeader><SheetTitle className="text-white">Menu</SheetTitle></SheetHeader>
+                <div className="mt-4"><UserLink userId={user?.id} username="Perfil" className="font-bold"/></div>
+             </SheetContent>
+          </Sheet>
+          <div>
+            <h1 className="text-lg font-black tracking-tighter text-white drop-shadow-md">
+              World<span className="text-blue-500">Flow</span>
             </h1>
             {currentFeedItem?.type === 'clip_container' && (
-                <span className="text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] animate-pulse -mt-1">Modo Clips</span>
+                <span className="text-[10px] text-pink-400 font-bold uppercase tracking-widest animate-pulse">Modo Clips</span>
             )}
+          </div>
         </div>
-
-        {/* Lado Direito: Ação de Criar */}
-        <div className="justify-self-end pointer-events-auto">
-            <Button 
-                onClick={() => setShowCreateModal(true)} 
-                size="icon" 
-                className="rounded-full h-10 w-10 bg-gradient-to-tr from-blue-600 to-purple-600 shadow-lg shadow-purple-500/20 hover:scale-105 transition-transform border border-white/10"
-            >
-                <Plus className="h-6 w-6 text-white" />
-            </Button>
-        </div>
+        <Button onClick={() => setShowCreateModal(true)} size="icon" className="pointer-events-auto rounded-full bg-gradient-to-tr from-pink-500 to-orange-500 shadow-lg hover:scale-105 transition-transform"><Plus /></Button>
       </div>
 
-      {/* Área Principal */}
-      <div className="w-full h-full pt-0 bg-black">
+      {/* Área Principal de Renderização */}
+      <div className="w-full h-full pt-0">
         {renderContent()}
       </div>
 
@@ -691,42 +717,24 @@ export default function WorldFlow() {
       <CreatePostModal />
       
       <Dialog open={!!openingCommentsFor} onOpenChange={(o) => !o && setOpeningCommentsFor(null)}>
-        <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-xl border-gray-800 text-white max-h-[80vh] flex flex-col shadow-2xl gap-0 p-0 overflow-hidden">
-          <DialogHeader className="p-4 border-b border-gray-800 bg-gray-900/50">
-              <DialogTitle className="text-center font-bold">Comentários</DialogTitle>
-          </DialogHeader>
-          
-          <ScrollArea className="flex-1 p-4">
-            {loadingComments ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-500" /></div> : 
+        <DialogContent className="max-w-lg bg-gray-900 border-gray-800 text-white max-h-[80vh] flex flex-col">
+          <DialogHeader><DialogTitle>Comentários</DialogTitle></DialogHeader>
+          <ScrollArea className="flex-1 pr-4">
+            {loadingComments ? <Loader2 className="mx-auto animate-spin" /> : 
               comments?.length ? comments.map((c:any) => (
-                <div key={c.id} className="flex gap-3 mb-4 animate-in slide-in-from-bottom-2">
-                  <Avatar className="h-8 w-8 ring-1 ring-gray-700"><AvatarImage src={c.author?.avatar_url}/><AvatarFallback className="text-xs bg-gray-700">U</AvatarFallback></Avatar>
-                  <div className="bg-gray-800/50 p-2 rounded-lg rounded-tl-none flex-1">
-                    <span className="font-bold text-xs text-gray-400 block mb-1">{c.author?.username}</span>
-                    <p className="text-sm text-white/90 leading-relaxed">{c.content}</p>
+                <div key={c.id} className="flex gap-3 mb-4 p-2 rounded hover:bg-white/5">
+                  <Avatar className="h-8 w-8"><AvatarImage src={c.author?.avatar_url}/><AvatarFallback>U</AvatarFallback></Avatar>
+                  <div>
+                    <span className="font-bold text-sm text-gray-200">{c.author?.username}</span>
+                    <p className="text-sm text-white/90">{c.content}</p>
                   </div>
                 </div>
-              )) : (
-                <div className="text-center py-10 opacity-50">
-                    <MessageCircle className="h-10 w-10 mx-auto mb-2 text-gray-500"/>
-                    <p className="text-sm">Nenhum comentário ainda.</p>
-                </div>
-              )
+              )) : <p className="text-center text-gray-500">Seja o primeiro a comentar!</p>
             }
           </ScrollArea>
-          
-          <div className="p-3 bg-gray-900 border-t border-gray-800">
-            <div className="flex gap-2 relative">
-                <Input 
-                    value={newCommentText} 
-                    onChange={e => setNewCommentText(e.target.value)} 
-                    placeholder="Escreva um comentário..." 
-                    className="bg-gray-800 border-gray-700 text-white focus-visible:ring-blue-500 pr-10 rounded-full pl-4"
-                />
-                <Button size="icon" onClick={() => addComment.mutate()} disabled={addComment.isPending || !newCommentText.trim()} className="absolute right-1 top-1 h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-500">
-                    <Send className="h-3 w-3"/>
-                </Button>
-            </div>
+          <div className="flex gap-2 mt-2 pt-2 border-t border-gray-800">
+            <Input value={newCommentText} onChange={e => setNewCommentText(e.target.value)} placeholder="Comente..." className="bg-gray-800 border-none text-white focus-visible:ring-blue-500"/>
+            <Button size="icon" onClick={() => addComment.mutate()} disabled={addComment.isPending} className="bg-blue-600"><Send className="h-4 w-4"/></Button>
           </div>
         </DialogContent>
       </Dialog>
