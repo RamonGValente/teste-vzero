@@ -21,9 +21,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
-import { Progress } from "@/components/ui/progress";
 
-/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (MANTIDAS) ---------- */
+/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (CORRIGIDAS) ---------- */
 const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promise<File> => {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -48,7 +47,10 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob((blob) => {
             if (blob) {
-              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '_compressed.jpg', { type: 'image/jpeg', lastModified: Date.now() });
+              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '_compressed.jpg', { 
+                type: 'image/jpeg', 
+                lastModified: Date.now() 
+              });
               resolve(compressedFile);
             } else { reject(new Error('Failed to compress image')); }
           }, 'image/jpeg', quality);
@@ -61,26 +63,63 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
 
 const compressVideo = async (file: File): Promise<File> => {
   return new Promise((resolve, reject) => {
-    if (file.size < 10 * 1024 * 1024) { resolve(file); return; }
+    // No celular, vamos apenas retornar o arquivo original se for pequeno
+    if (file.size < 50 * 1024 * 1024) { 
+      resolve(file); 
+      return; 
+    }
+    
+    // Para vídeos grandes, tentar compressão básica
     const videoUrl = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.src = videoUrl;
+    
     video.onloadedmetadata = () => {
-      const compressedFile = new File([file], file.name.replace(/\.[^/.]+$/, '') + '_compressed.mp4', { type: 'video/mp4', lastModified: Date.now() });
+      // Para celular, melhor não comprimir muito
+      const compressedFile = new File([file], file.name.replace(/\.[^/.]+$/, '') + '_compressed.mp4', { 
+        type: 'video/mp4', 
+        lastModified: Date.now() 
+      });
       URL.revokeObjectURL(videoUrl);
       resolve(compressedFile);
     };
-    video.onerror = () => { URL.revokeObjectURL(videoUrl); reject(new Error('Failed to load video')); };
+    
+    video.onerror = () => { 
+      URL.revokeObjectURL(videoUrl); 
+      // Se falhar, retorna o arquivo original
+      resolve(file);
+    };
+    
+    // Timeout para segurança
+    setTimeout(() => {
+      URL.revokeObjectURL(videoUrl);
+      resolve(file);
+    }, 5000);
   });
 };
 
 const processMediaFile = async (file: File): Promise<File> => {
   try {
-    if (file.type.startsWith('image/')) return await compressImage(file);
-    else if (file.type.startsWith('video/')) return await compressVideo(file);
+    console.log(`Processando arquivo: ${file.name}, tipo: ${file.type}, tamanho: ${file.size}`);
+    
+    if (file.type.startsWith('image/')) {
+      console.log('Comprimindo imagem...');
+      const compressed = await compressImage(file);
+      console.log(`Imagem comprimida: ${compressed.name}, tamanho: ${compressed.size}`);
+      return compressed;
+    }
+    else if (file.type.startsWith('video/')) {
+      console.log('Comprimindo vídeo...');
+      const compressed = await compressVideo(file);
+      console.log(`Vídeo comprimido: ${compressed.name}, tamanho: ${compressed.size}`);
+      return compressed;
+    }
+    
+    console.log('Arquivo não é imagem nem vídeo, retornando original');
     return file;
   } catch (error) {
     console.error('Erro ao comprimir arquivo:', error);
+    // Em caso de erro, retorna o arquivo original
     return file;
   }
 };
@@ -96,22 +135,6 @@ const isVideoUrl = (u: any): boolean => {
   const cleanUrl = stripPrefix(u);
   const videoExtensions = /\.(mp4|webm|ogg|mov|m4v|avi|mkv|flv|wmv)$/i;
   return u.startsWith('video::') || videoExtensions.test(cleanUrl);
-};
-
-/* ---------- FUNÇÃO PARA CALCULAR TEMPO RESTANTE ---------- */
-const calculateTimeRemaining = (endTime: string) => {
-  const now = new Date().getTime();
-  const end = new Date(endTime).getTime();
-  const diff = end - now;
-  
-  if (diff <= 0) return { minutes: 0, seconds: 0, percentage: 100 };
-  
-  const minutes = Math.floor((diff % (1000 * 60 * 60)) / (1000 * 60));
-  const seconds = Math.floor((diff % (1000 * 60)) / 1000);
-  const totalMinutes = 60;
-  const percentage = ((60 - minutes - (seconds / 60)) / totalMinutes) * 100;
-  
-  return { minutes, seconds, percentage };
 };
 
 /* ---------- COMPONENTE: VideoPlayer TikTok (Clips) ---------- */
@@ -628,56 +651,180 @@ export default function WorldFlow() {
     );
   };
 
-  /* Modal de Criação - ENVIA PARA ARENA COM TEMPORIZADOR DE 60 MINUTOS */
+  /* Modal de Criação - CORRIGIDO PARA CELULAR */
   const CreatePostModal = () => {
     const [newPost, setNewPost] = useState("");
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
     const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
     const galleryInputRef = useRef<HTMLInputElement>(null);
+    const [uploadProgress, setUploadProgress] = useState(0);
 
-    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
       const files = Array.from(e.target.files || []);
-      Promise.all(files.map(processMediaFile)).then(setMediaFiles).catch(console.error);
+      console.log(`Arquivos selecionados: ${files.length}`);
+      
+      if (files.length === 0) return;
+      
+      try {
+        // Processar arquivos um por um para melhor controle
+        const processedFiles: File[] = [];
+        
+        for (let i = 0; i < files.length; i++) {
+          const file = files[i];
+          console.log(`Processando arquivo ${i + 1}/${files.length}: ${file.name}`);
+          
+          try {
+            const processedFile = await processMediaFile(file);
+            processedFiles.push(processedFile);
+            console.log(`Arquivo ${file.name} processado com sucesso`);
+          } catch (error) {
+            console.error(`Erro ao processar ${file.name}:`, error);
+            // Adiciona o arquivo original mesmo com erro
+            processedFiles.push(file);
+          }
+        }
+        
+        setMediaFiles(processedFiles);
+        console.log(`Total de arquivos processados: ${processedFiles.length}`);
+      } catch (error) {
+        console.error('Erro geral no processamento de arquivos:', error);
+        toast({
+          variant: "destructive",
+          title: "Erro ao processar arquivos",
+          description: "Alguns arquivos podem não ter sido processados corretamente."
+        });
+      }
     };
 
     const handleCreatePost = async () => {
-      if (!newPost.trim() && mediaFiles.length === 0) {
-        toast({ variant: "destructive", title: "Erro", description: "Adicione texto ou mídia para postar" });
+      if (!user) {
+        toast({
+          variant: "destructive",
+          title: "Erro de autenticação",
+          description: "Você precisa estar logado para criar um post."
+        });
         return;
       }
+      
+      if (!newPost.trim() && mediaFiles.length === 0) {
+        toast({ 
+          variant: "destructive", 
+          title: "Erro", 
+          description: "Adicione texto ou mídia para postar" 
+        });
+        return;
+      }
+      
       setUploading(true);
+      setUploadProgress(0);
+      
       try {
         const mediaUrls: string[] = [];
-        for (const file of mediaFiles) {
-          const path = `${user?.id}/${Date.now()}-${file.name.replace(/[^a-z0-9]/gi, '_')}`; 
-          const { error: upErr } = await supabase.storage.from("media").upload(path, file);
-          if (upErr) throw upErr;
-          const { data: urlData } = supabase.storage.from("media").getPublicUrl(path);
-          if (file.type.startsWith("video/")) mediaUrls.push(`video::${urlData.publicUrl}`);
-          else mediaUrls.push(`image::${urlData.publicUrl}`);
+        
+        // Upload de mídias se houver
+        if (mediaFiles.length > 0) {
+          console.log(`Iniciando upload de ${mediaFiles.length} arquivos...`);
+          
+          for (let i = 0; i < mediaFiles.length; i++) {
+            const file = mediaFiles[i];
+            console.log(`Upload do arquivo ${i + 1}/${mediaFiles.length}: ${file.name}`);
+            
+            try {
+              // Nome do arquivo seguro para URL
+              const safeFileName = file.name
+                .toLowerCase()
+                .replace(/[^a-z0-9.]/g, '_')
+                .replace(/_+/g, '_');
+              
+              const path = `${user.id}/${Date.now()}-${safeFileName}`;
+              
+              console.log(`Fazendo upload para: ${path}`);
+              
+              // Fazer upload
+              const { error: upErr } = await supabase.storage
+                .from("media")
+                .upload(path, file, {
+                  cacheControl: '3600',
+                  upsert: false
+                });
+              
+              if (upErr) {
+                console.error(`Erro no upload de ${file.name}:`, upErr);
+                throw upErr;
+              }
+              
+              // Obter URL pública
+              const { data: urlData } = supabase.storage
+                .from("media")
+                .getPublicUrl(path);
+              
+              if (!urlData?.publicUrl) {
+                throw new Error(`Não foi possível obter URL pública para ${file.name}`);
+              }
+              
+              // Adicionar prefixo baseado no tipo
+              let prefixedUrl = '';
+              if (file.type.startsWith("video/")) {
+                prefixedUrl = `video::${urlData.publicUrl}`;
+              } else if (file.type.startsWith("image/")) {
+                prefixedUrl = `image::${urlData.publicUrl}`;
+              } else {
+                prefixedUrl = `file::${urlData.publicUrl}`;
+              }
+              
+              mediaUrls.push(prefixedUrl);
+              console.log(`Upload concluído: ${prefixedUrl}`);
+              
+            } catch (fileError: any) {
+              console.error(`Erro no arquivo ${file.name}:`, fileError);
+              toast({
+                variant: "destructive",
+                title: "Erro no upload",
+                description: `Erro ao enviar ${file.name}: ${fileError.message || 'Erro desconhecido'}`
+              });
+              continue; // Continua com outros arquivos
+            }
+            
+            // Atualizar progresso
+            setUploadProgress(Math.round(((i + 1) / mediaFiles.length) * 100));
+          }
         }
         
         // Calcular data de término da votação (60 minutos a partir de agora)
         const votingEndsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
         
-        // ENVIA PARA ARENA COM TEMPORIZADOR DE 60 MINUTOS
+        console.log('Criando post no banco de dados...');
+        console.log('Dados do post:', {
+          user_id: user.id,
+          content: newPost,
+          media_urls: mediaUrls.length > 0 ? mediaUrls : null,
+          post_type: postType,
+          voting_ends_at: votingEndsAt
+        });
+        
+        // Criar post no banco de dados
         const { data: newPostData, error } = await supabase
           .from("posts")
           .insert({ 
-            user_id: user?.id, 
+            user_id: user.id, 
             content: newPost, 
-            media_urls: mediaUrls.length ? mediaUrls : null, 
+            media_urls: mediaUrls.length > 0 ? mediaUrls : null, 
             post_type: postType, 
             voting_period_active: true, 
             voting_ends_at: votingEndsAt,
-            is_community_approved: false, // NÃO APROVADO AINDA - VAI PARA ARENA
+            is_community_approved: false,
             created_at: new Date().toISOString()
           })
           .select()
           .single();
         
-        if (error) throw error;
+        if (error) {
+          console.error('Erro ao criar post:', error);
+          throw error;
+        }
+        
+        console.log('Post criado com sucesso:', newPostData);
         
         // Notificação de sucesso
         toast({ 
@@ -706,6 +853,7 @@ export default function WorldFlow() {
         
         // Atualizar queries
         queryClient.invalidateQueries({ queryKey: ["arena-posts"] });
+        queryClient.invalidateQueries({ queryKey: ["posts"] });
         
         // Aguardar um pouco e navegar para Arena
         setTimeout(() => {
@@ -713,10 +861,16 @@ export default function WorldFlow() {
         }, 2000);
         
       } catch (e: any) { 
-        toast({ variant: "destructive", title: "Erro", description: e.message || "Erro ao criar post" }); 
+        console.error('Erro geral ao criar post:', e);
+        toast({ 
+          variant: "destructive", 
+          title: "Erro ao criar post", 
+          description: e.message || "Erro desconhecido. Tente novamente." 
+        }); 
       } 
       finally { 
         setUploading(false); 
+        setUploadProgress(0);
       }
     };
 
@@ -732,6 +886,7 @@ export default function WorldFlow() {
             </DialogTitle>
             <p className="text-sm text-gray-400">Seu post será enviado para a Arena para votação por 60 minutos</p>
           </DialogHeader>
+          
           <div className="grid grid-cols-2 gap-3 mb-4">
              <Button 
                 variant={postType === 'standard' ? "default" : "outline"} 
@@ -748,14 +903,24 @@ export default function WorldFlow() {
                 <Film className="mr-2 h-4 w-4"/> Clip Viral
              </Button>
           </div>
+          
           <textarea 
             value={newPost} 
             onChange={(e) => setNewPost(e.target.value)} 
             placeholder="No que você está pensando? Seu post será votado na Arena por 60 minutos..." 
             className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[120px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
           />
+          
           <div className="flex gap-2 mt-2 items-center">
-             <input type="file" ref={galleryInputRef} multiple className="hidden" accept="image/*,video/*" onChange={handleFileChange} />
+             <input 
+               type="file" 
+               ref={galleryInputRef} 
+               multiple 
+               className="hidden" 
+               accept="image/*,video/*" 
+               onChange={handleFileChange}
+               capture="environment" // Para celular, permite usar câmera diretamente
+             />
              <Button 
                 variant="outline" 
                 size="sm" 
@@ -764,12 +929,40 @@ export default function WorldFlow() {
              >
                 <Images className="mr-2 h-4 w-4"/> Adicionar Mídia
              </Button>
+             
              {mediaFiles.length > 0 && (
-                <span className="text-xs text-blue-400 font-medium px-2 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
-                  {mediaFiles.length} arquivo(s) selecionado(s)
-                </span>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-blue-400 font-medium px-2 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
+                    {mediaFiles.length} arquivo(s)
+                  </span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="h-6 w-6 p-0 text-red-400 hover:text-red-300"
+                    onClick={() => setMediaFiles([])}
+                  >
+                    ×
+                  </Button>
+                </div>
              )}
           </div>
+          
+          {/* Mostrar progresso do upload */}
+          {uploading && uploadProgress > 0 && (
+            <div className="mt-4">
+              <div className="flex justify-between text-xs text-gray-400 mb-1">
+                <span>Enviando...</span>
+                <span>{uploadProgress}%</span>
+              </div>
+              <div className="w-full bg-gray-800 rounded-full h-2">
+                <div 
+                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            </div>
+          )}
+          
           <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-800/30 rounded-lg">
             <div className="flex items-start gap-3">
               <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-full">
@@ -806,94 +999,28 @@ export default function WorldFlow() {
               </div>
             </div>
           </div>
+          
           <Button 
             onClick={handleCreatePost} 
-            disabled={uploading} 
-            className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md shadow-lg hover:shadow-blue-500/25 transition-all"
+            disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
+            className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
-             {uploading ? <Loader2 className="animate-spin mr-2" /> : <Send className="w-4 h-4 mr-2" />}
-             {uploading ? "Enviando para Arena..." : "Enviar para Votação (60min)"}
+             {uploading ? (
+               <div className="flex items-center">
+                 <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                 {uploadProgress > 0 ? `Enviando... ${uploadProgress}%` : "Processando..."}
+               </div>
+             ) : (
+               <>
+                 <Send className="w-4 h-4 mr-2" />
+                 Enviar para Votação (60min)
+               </>
+             )}
           </Button>
         </DialogContent>
       </Dialog>
     );
   };
-
-  /* --- Efeito para verificar posts da Arena periodicamente --- */
-  useEffect(() => {
-    const checkArenaPosts = async () => {
-      if (!arenaPosts || arenaPosts.length === 0) return;
-      
-      const now = new Date();
-      let hasUpdates = false;
-      
-      for (const post of arenaPosts) {
-        if (post.voting_ends_at) {
-          const endTime = new Date(post.voting_ends_at);
-          
-          // Se o tempo acabou
-          if (now > endTime) {
-            try {
-              // Contar votos do post
-              const hearts = post.post_votes?.filter((v: any) => v.vote_type === 'heart')?.length || 0;
-              const bombs = post.post_votes?.filter((v: any) => v.vote_type === 'bomb')?.length || 0;
-              
-              console.log(`Post ${post.id}: ${hearts} corações, ${bombs} bombas`);
-              
-              if (hearts > bombs) {
-                // Aprovar post para o feed
-                await supabase
-                  .from("posts")
-                  .update({ 
-                    is_community_approved: true,
-                    voting_period_active: false 
-                  })
-                  .eq("id", post.id);
-                
-                toast({
-                  title: "🎉 Post Aprovado!",
-                  description: `Seu post "${post.content?.substring(0, 30)}..." foi aprovado e agora está no feed!`,
-                  duration: 5000
-                });
-                
-                hasUpdates = true;
-              } else {
-                // Excluir post (e todos os dados relacionados devido ao CASCADE)
-                await supabase
-                  .from("posts")
-                  .delete()
-                  .eq("id", post.id);
-                
-                toast({
-                  title: "💣 Post Removido",
-                  description: `Seu post não recebeu votos suficientes e foi removido.`,
-                  variant: "destructive",
-                  duration: 5000
-                });
-                
-                hasUpdates = true;
-              }
-              
-            } catch (error) {
-              console.error("Erro ao processar post da Arena:", error);
-            }
-          }
-        }
-      }
-      
-      // Se houve atualizações, recarregar as queries
-      if (hasUpdates) {
-        queryClient.invalidateQueries({ queryKey: ["arena-posts"] });
-        queryClient.invalidateQueries({ queryKey: ["posts"] });
-        refetchFeed();
-        refetchArena();
-      }
-    };
-    
-    // Verificar a cada 30 segundos
-    const interval = setInterval(checkArenaPosts, 30000);
-    return () => clearInterval(interval);
-  }, [arenaPosts, queryClient, refetchFeed, refetchArena, toast]);
 
   return (
     <div 
