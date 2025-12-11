@@ -7,7 +7,8 @@ import {
   ChevronLeft, ChevronRight, Volume2, VolumeX,
   Clock, Loader2, Globe,
   Menu, ArrowDown,
-  Film, Plus, Bomb, Timer
+  Film, Plus, Bomb, Timer,
+  X, Camera as CameraIcon
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -22,9 +23,15 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (CORRIGIDAS) ---------- */
-const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promise<File> => {
+/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (SIMPLIFICADAS PARA MOBILE) ---------- */
+const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
   return new Promise((resolve, reject) => {
+    // Se o arquivo for pequeno, retorna sem compressão
+    if (file.size < 2 * 1024 * 1024) { // 2MB
+      resolve(file);
+      return;
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(file);
     reader.onload = (event) => {
@@ -34,93 +41,52 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.8): Promis
         const canvas = document.createElement('canvas');
         let width = img.width;
         let height = img.height;
+        
+        // Redimensiona apenas se for muito grande
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
           width = maxWidth;
         }
+        
         canvas.width = width;
         canvas.height = height;
         const ctx = canvas.getContext('2d');
-        if (!ctx) { reject(new Error('Canvas context not available')); return; }
-        ctx.imageSmoothingEnabled = true;
-        ctx.imageSmoothingQuality = 'high';
+        if (!ctx) { 
+          // Se não conseguir criar canvas, retorna arquivo original
+          resolve(file); 
+          return; 
+        }
+        
         ctx.drawImage(img, 0, 0, width, height);
         canvas.toBlob((blob) => {
-            if (blob) {
-              const compressedFile = new File([blob], file.name.replace(/\.[^/.]+$/, '') + '_compressed.jpg', { 
-                type: 'image/jpeg', 
-                lastModified: Date.now() 
-              });
-              resolve(compressedFile);
-            } else { reject(new Error('Failed to compress image')); }
-          }, 'image/jpeg', quality);
+          if (blob) {
+            const compressedFile = new File([blob], `image_${Date.now()}.jpg`, { 
+              type: 'image/jpeg', 
+              lastModified: Date.now() 
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file); // Fallback para arquivo original
+          }
+        }, 'image/jpeg', quality);
       };
-      img.onerror = () => reject(new Error('Failed to load image'));
+      img.onerror = () => resolve(file); // Fallback para arquivo original
     };
-    reader.onerror = () => reject(new Error('Failed to read file'));
+    reader.onerror = () => resolve(file); // Fallback para arquivo original
   });
 };
 
-const compressVideo = async (file: File): Promise<File> => {
-  return new Promise((resolve, reject) => {
-    // No celular, vamos apenas retornar o arquivo original se for pequeno
-    if (file.size < 50 * 1024 * 1024) { 
-      resolve(file); 
-      return; 
-    }
-    
-    // Para vídeos grandes, tentar compressão básica
-    const videoUrl = URL.createObjectURL(file);
-    const video = document.createElement('video');
-    video.src = videoUrl;
-    
-    video.onloadedmetadata = () => {
-      // Para celular, melhor não comprimir muito
-      const compressedFile = new File([file], file.name.replace(/\.[^/.]+$/, '') + '_compressed.mp4', { 
-        type: 'video/mp4', 
-        lastModified: Date.now() 
-      });
-      URL.revokeObjectURL(videoUrl);
-      resolve(compressedFile);
-    };
-    
-    video.onerror = () => { 
-      URL.revokeObjectURL(videoUrl); 
-      // Se falhar, retorna o arquivo original
-      resolve(file);
-    };
-    
-    // Timeout para segurança
-    setTimeout(() => {
-      URL.revokeObjectURL(videoUrl);
-      resolve(file);
-    }, 5000);
-  });
-};
-
+// Para mobile, não comprimir vídeos - deixar o dispositivo lidar com isso
 const processMediaFile = async (file: File): Promise<File> => {
   try {
-    console.log(`Processando arquivo: ${file.name}, tipo: ${file.type}, tamanho: ${file.size}`);
-    
     if (file.type.startsWith('image/')) {
-      console.log('Comprimindo imagem...');
-      const compressed = await compressImage(file);
-      console.log(`Imagem comprimida: ${compressed.name}, tamanho: ${compressed.size}`);
-      return compressed;
+      return await compressImage(file);
     }
-    else if (file.type.startsWith('video/')) {
-      console.log('Comprimindo vídeo...');
-      const compressed = await compressVideo(file);
-      console.log(`Vídeo comprimido: ${compressed.name}, tamanho: ${compressed.size}`);
-      return compressed;
-    }
-    
-    console.log('Arquivo não é imagem nem vídeo, retornando original');
+    // Para vídeos e outros tipos, retorna o arquivo original
     return file;
   } catch (error) {
-    console.error('Erro ao comprimir arquivo:', error);
-    // Em caso de erro, retorna o arquivo original
-    return file;
+    console.error('Erro ao processar arquivo:', error);
+    return file; // Retorna original em caso de erro
   }
 };
 
@@ -651,50 +617,68 @@ export default function WorldFlow() {
     );
   };
 
-  /* Modal de Criação - CORRIGIDO PARA CELULAR */
+  /* Modal de Criação - CORRIGIDO PARA MOBILE */
   const CreatePostModal = () => {
     const [newPost, setNewPost] = useState("");
     const [mediaFiles, setMediaFiles] = useState<File[]>([]);
     const [uploading, setUploading] = useState(false);
     const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
+    const [showMediaOptions, setShowMediaOptions] = useState(false);
+    
     const galleryInputRef = useRef<HTMLInputElement>(null);
-    const [uploadProgress, setUploadProgress] = useState(0);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+    const videoInputRef = useRef<HTMLInputElement>(null);
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-      const files = Array.from(e.target.files || []);
-      console.log(`Arquivos selecionados: ${files.length}`);
+    const handleFileSelect = async (files: FileList | null) => {
+      if (!files || files.length === 0) return;
       
-      if (files.length === 0) return;
+      const fileArray = Array.from(files);
+      console.log(`Arquivos selecionados: ${fileArray.length}`);
       
       try {
-        // Processar arquivos um por um para melhor controle
-        const processedFiles: File[] = [];
+        // Para mobile, processamos apenas o primeiro arquivo de cada vez
+        const file = fileArray[0];
         
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          console.log(`Processando arquivo ${i + 1}/${files.length}: ${file.name}`);
-          
-          try {
-            const processedFile = await processMediaFile(file);
-            processedFiles.push(processedFile);
-            console.log(`Arquivo ${file.name} processado com sucesso`);
-          } catch (error) {
-            console.error(`Erro ao processar ${file.name}:`, error);
-            // Adiciona o arquivo original mesmo com erro
-            processedFiles.push(file);
-          }
+        // Verificar tamanho do arquivo (limite de 50MB para mobile)
+        if (file.size > 50 * 1024 * 1024) {
+          toast({
+            variant: "destructive",
+            title: "Arquivo muito grande",
+            description: "O arquivo deve ter no máximo 50MB"
+          });
+          return;
         }
         
-        setMediaFiles(processedFiles);
-        console.log(`Total de arquivos processados: ${processedFiles.length}`);
+        const processedFile = await processMediaFile(file);
+        setMediaFiles([processedFile]);
+        console.log(`Arquivo processado: ${processedFile.name}`);
+        
       } catch (error) {
-        console.error('Erro geral no processamento de arquivos:', error);
+        console.error('Erro ao processar arquivo:', error);
         toast({
           variant: "destructive",
-          title: "Erro ao processar arquivos",
-          description: "Alguns arquivos podem não ter sido processados corretamente."
+          title: "Erro ao processar arquivo",
+          description: "Não foi possível processar o arquivo selecionado"
         });
       }
+    };
+
+    const openCamera = (mediaType: 'image' | 'video') => {
+      if (cameraInputRef.current) {
+        cameraInputRef.current.accept = mediaType === 'image' ? 'image/*' : 'video/*';
+        cameraInputRef.current.capture = 'environment'; // Câmera traseira
+        cameraInputRef.current.click();
+      }
+    };
+
+    const openGallery = () => {
+      if (galleryInputRef.current) {
+        galleryInputRef.current.click();
+      }
+    };
+
+    const removeMedia = () => {
+      setMediaFiles([]);
     };
 
     const handleCreatePost = async () => {
@@ -717,91 +701,62 @@ export default function WorldFlow() {
       }
       
       setUploading(true);
-      setUploadProgress(0);
       
       try {
         const mediaUrls: string[] = [];
         
         // Upload de mídias se houver
         if (mediaFiles.length > 0) {
-          console.log(`Iniciando upload de ${mediaFiles.length} arquivos...`);
+          const file = mediaFiles[0];
+          console.log(`Fazendo upload do arquivo: ${file.name}`);
           
-          for (let i = 0; i < mediaFiles.length; i++) {
-            const file = mediaFiles[i];
-            console.log(`Upload do arquivo ${i + 1}/${mediaFiles.length}: ${file.name}`);
-            
-            try {
-              // Nome do arquivo seguro para URL
-              const safeFileName = file.name
-                .toLowerCase()
-                .replace(/[^a-z0-9.]/g, '_')
-                .replace(/_+/g, '_');
-              
-              const path = `${user.id}/${Date.now()}-${safeFileName}`;
-              
-              console.log(`Fazendo upload para: ${path}`);
-              
-              // Fazer upload
-              const { error: upErr } = await supabase.storage
-                .from("media")
-                .upload(path, file, {
-                  cacheControl: '3600',
-                  upsert: false
-                });
-              
-              if (upErr) {
-                console.error(`Erro no upload de ${file.name}:`, upErr);
-                throw upErr;
-              }
-              
-              // Obter URL pública
-              const { data: urlData } = supabase.storage
-                .from("media")
-                .getPublicUrl(path);
-              
-              if (!urlData?.publicUrl) {
-                throw new Error(`Não foi possível obter URL pública para ${file.name}`);
-              }
-              
-              // Adicionar prefixo baseado no tipo
-              let prefixedUrl = '';
-              if (file.type.startsWith("video/")) {
-                prefixedUrl = `video::${urlData.publicUrl}`;
-              } else if (file.type.startsWith("image/")) {
-                prefixedUrl = `image::${urlData.publicUrl}`;
-              } else {
-                prefixedUrl = `file::${urlData.publicUrl}`;
-              }
-              
-              mediaUrls.push(prefixedUrl);
-              console.log(`Upload concluído: ${prefixedUrl}`);
-              
-            } catch (fileError: any) {
-              console.error(`Erro no arquivo ${file.name}:`, fileError);
-              toast({
-                variant: "destructive",
-                title: "Erro no upload",
-                description: `Erro ao enviar ${file.name}: ${fileError.message || 'Erro desconhecido'}`
-              });
-              continue; // Continua com outros arquivos
-            }
-            
-            // Atualizar progresso
-            setUploadProgress(Math.round(((i + 1) / mediaFiles.length) * 100));
+          // Nome seguro para o arquivo
+          const fileExt = file.name.split('.').pop() || '';
+          const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
+          const filePath = `${user.id}/${fileName}`;
+          
+          console.log(`Caminho do arquivo: ${filePath}`);
+          
+          // Fazer upload
+          const { error: uploadError } = await supabase.storage
+            .from("media")
+            .upload(filePath, file, {
+              cacheControl: '3600',
+              upsert: false
+            });
+          
+          if (uploadError) {
+            console.error('Erro no upload:', uploadError);
+            throw new Error(`Falha no upload: ${uploadError.message}`);
           }
+          
+          // Obter URL pública
+          const { data: urlData } = supabase.storage
+            .from("media")
+            .getPublicUrl(filePath);
+          
+          if (!urlData?.publicUrl) {
+            throw new Error("Não foi possível obter URL pública do arquivo");
+          }
+          
+          // Adicionar prefixo baseado no tipo
+          let prefixedUrl = '';
+          if (file.type.startsWith("video/")) {
+            prefixedUrl = `video::${urlData.publicUrl}`;
+          } else if (file.type.startsWith("image/")) {
+            prefixedUrl = `image::${urlData.publicUrl}`;
+          } else {
+            prefixedUrl = urlData.publicUrl;
+          }
+          
+          mediaUrls.push(prefixedUrl);
+          console.log(`Upload concluído: ${prefixedUrl}`);
         }
         
         // Calcular data de término da votação (60 minutos a partir de agora)
         const votingEndsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
         
         console.log('Criando post no banco de dados...');
-        console.log('Dados do post:', {
-          user_id: user.id,
-          content: newPost,
-          media_urls: mediaUrls.length > 0 ? mediaUrls : null,
-          post_type: postType,
-          voting_ends_at: votingEndsAt
-        });
         
         // Criar post no banco de dados
         const { data: newPostData, error } = await supabase
@@ -832,14 +787,6 @@ export default function WorldFlow() {
           description: (
             <div className="mt-2">
               <p>Seu post tem 60 minutos para receber votos!</p>
-              <div className="flex items-center gap-2 mt-1">
-                <Heart className="h-4 w-4 text-red-500" />
-                <span>+1 Coração = +1 ponto</span>
-              </div>
-              <div className="flex items-center gap-2 mt-1">
-                <Bomb className="h-4 w-4 text-gray-400" />
-                <span>+1 Bomba = -1 ponto</span>
-              </div>
               <p className="mt-2 font-medium">Boa sorte! 🍀</p>
             </div>
           ),
@@ -870,17 +817,16 @@ export default function WorldFlow() {
       } 
       finally { 
         setUploading(false); 
-        setUploadProgress(0);
       }
     };
 
     return (
       <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-xl shadow-2xl">
+        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <span>Criar Novo Post</span>
-              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500 animate-pulse">
+              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500">
                 <Timer className="h-3 w-3 mr-1" /> 60min
               </Badge>
             </DialogTitle>
@@ -911,57 +857,127 @@ export default function WorldFlow() {
             className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[120px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
           />
           
-          <div className="flex gap-2 mt-2 items-center">
-             <input 
-               type="file" 
-               ref={galleryInputRef} 
-               multiple 
-               className="hidden" 
-               accept="image/*,video/*" 
-               onChange={handleFileChange}
-               capture="environment" // Para celular, permite usar câmera diretamente
-             />
-             <Button 
-                variant="outline" 
-                size="sm" 
-                className="border-gray-700 bg-gray-800/50 text-gray-300 hover:bg-gray-700 hover:text-white"
-                onClick={() => galleryInputRef.current?.click()}
-             >
-                <Images className="mr-2 h-4 w-4"/> Adicionar Mídia
-             </Button>
-             
-             {mediaFiles.length > 0 && (
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-blue-400 font-medium px-2 py-1 bg-blue-500/10 rounded-full border border-blue-500/20">
-                    {mediaFiles.length} arquivo(s)
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-6 w-6 p-0 text-red-400 hover:text-red-300"
-                    onClick={() => setMediaFiles([])}
-                  >
-                    ×
-                  </Button>
-                </div>
-             )}
-          </div>
+          {/* Inputs de arquivo ocultos */}
+          <input 
+            type="file" 
+            ref={galleryInputRef} 
+            className="hidden" 
+            accept="image/*,video/*" 
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          <input 
+            type="file" 
+            ref={cameraInputRef} 
+            className="hidden" 
+            accept="image/*,video/*" 
+            capture="environment"
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
           
-          {/* Mostrar progresso do upload */}
-          {uploading && uploadProgress > 0 && (
-            <div className="mt-4">
-              <div className="flex justify-between text-xs text-gray-400 mb-1">
-                <span>Enviando...</span>
-                <span>{uploadProgress}%</span>
+          {/* Botões de seleção de mídia */}
+          <div className="mt-4">
+            {mediaFiles.length === 0 ? (
+              <>
+                {!showMediaOptions ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-14"
+                    onClick={() => setShowMediaOptions(true)}
+                  >
+                    <Plus className="mr-2 h-5 w-5" />
+                    Adicionar Mídia
+                  </Button>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+                        onClick={() => openCamera('image')}
+                      >
+                        <CameraIcon className="h-5 w-5" />
+                        <span className="text-xs">Tirar Foto</span>
+                      </Button>
+                      
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+                        onClick={() => openGallery()}
+                      >
+                        <Images className="h-5 w-5" />
+                        <span className="text-xs">Galeria</span>
+                      </Button>
+                    </div>
+                    
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full text-gray-400 hover:text-white"
+                      onClick={() => setShowMediaOptions(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="relative">
+                {mediaFiles[0].type.startsWith('image/') ? (
+                  <div className="relative rounded-lg overflow-hidden border border-gray-700">
+                    <img 
+                      src={URL.createObjectURL(mediaFiles[0])} 
+                      alt="Preview" 
+                      className="w-full h-48 object-cover"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full"
+                      onClick={removeMedia}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : mediaFiles[0].type.startsWith('video/') ? (
+                  <div className="relative rounded-lg overflow-hidden border border-gray-700">
+                    <video 
+                      src={URL.createObjectURL(mediaFiles[0])} 
+                      controls
+                      className="w-full h-48 object-cover"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full"
+                      onClick={removeMedia}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="border border-gray-700 rounded-lg p-4 flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      <span className="text-sm truncate">{mediaFiles[0].name}</span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={removeMedia}
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                )}
               </div>
-              <div className="w-full bg-gray-800 rounded-full h-2">
-                <div 
-                  className="bg-gradient-to-r from-blue-500 to-purple-500 h-2 rounded-full transition-all duration-300"
-                  style={{ width: `${uploadProgress}%` }}
-                />
-              </div>
-            </div>
-          )}
+            )}
+          </div>
           
           <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-800/30 rounded-lg">
             <div className="flex items-start gap-3">
@@ -969,10 +985,7 @@ export default function WorldFlow() {
                 <Timer className="h-5 w-5 text-white" />
               </div>
               <div className="flex-1">
-                <h4 className="font-bold text-blue-300 flex items-center gap-2">
-                  Sistema de Votação da Arena
-                  <Badge variant="outline" className="text-[10px] border-pink-500 text-pink-400">NOVO</Badge>
-                </h4>
+                <h4 className="font-bold text-blue-300">Sistema de Votação da Arena</h4>
                 <div className="grid grid-cols-2 gap-4 mt-2">
                   <div className="flex items-center gap-2">
                     <div className="bg-red-500/20 p-1.5 rounded-full">
@@ -1008,7 +1021,7 @@ export default function WorldFlow() {
              {uploading ? (
                <div className="flex items-center">
                  <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                 {uploadProgress > 0 ? `Enviando... ${uploadProgress}%` : "Processando..."}
+                 Enviando...
                </div>
              ) : (
                <>
