@@ -23,11 +23,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (SIMPLIFICADAS PARA MOBILE) ---------- */
+/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (SIMPLIFICADAS) ---------- */
 const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
-  return new Promise((resolve, reject) => {
+  return new Promise((resolve) => {
     // Se o arquivo for pequeno, retorna sem compressão
-    if (file.size < 2 * 1024 * 1024) { // 2MB
+    if (file.size < 3 * 1024 * 1024) { // 3MB
       resolve(file);
       return;
     }
@@ -42,7 +42,6 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promis
         let width = img.width;
         let height = img.height;
         
-        // Redimensiona apenas se for muito grande
         if (width > maxWidth) {
           height = (height * maxWidth) / width;
           width = maxWidth;
@@ -52,7 +51,6 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promis
         canvas.height = height;
         const ctx = canvas.getContext('2d');
         if (!ctx) { 
-          // Se não conseguir criar canvas, retorna arquivo original
           resolve(file); 
           return; 
         }
@@ -66,27 +64,25 @@ const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promis
             });
             resolve(compressedFile);
           } else {
-            resolve(file); // Fallback para arquivo original
+            resolve(file);
           }
         }, 'image/jpeg', quality);
       };
-      img.onerror = () => resolve(file); // Fallback para arquivo original
+      img.onerror = () => resolve(file);
     };
-    reader.onerror = () => resolve(file); // Fallback para arquivo original
+    reader.onerror = () => resolve(file);
   });
 };
 
-// Para mobile, não comprimir vídeos - deixar o dispositivo lidar com isso
 const processMediaFile = async (file: File): Promise<File> => {
   try {
     if (file.type.startsWith('image/')) {
       return await compressImage(file);
     }
-    // Para vídeos e outros tipos, retorna o arquivo original
     return file;
   } catch (error) {
     console.error('Erro ao processar arquivo:', error);
-    return file; // Retorna original em caso de erro
+    return file;
   }
 };
 
@@ -152,14 +148,6 @@ const TikTokVideoPlayer = ({
 
   return (
     <div className="relative w-full h-full bg-black">
-      {/* Indicador de Área de Clips */}
-      <div className="absolute top-20 left-4 z-20">
-        <Badge className="bg-black/40 backdrop-blur-md text-white border-white/10 shadow-lg px-3 py-1 hover:bg-black/60 transition-colors">
-          <Film className="h-3 w-3 mr-2 text-pink-500 animate-pulse" />
-          CLIPS
-        </Badge>
-      </div>
-      
       <video
         ref={videoRef}
         src={src}
@@ -218,22 +206,6 @@ const TikTokVideoPlayer = ({
           {isMuted ? <VolumeX className="h-6 w-6 drop-shadow-md" /> : <Volume2 className="h-6 w-6 drop-shadow-md" />}
         </Button>
       </div>
-      
-      {/* Navegação Horizontal Visual */}
-      <div className="absolute top-1/2 left-2 z-10 -translate-y-1/2 pointer-events-none">
-        {hasPrevClip && (
-            <div className="animate-pulse bg-black/20 p-2 rounded-full backdrop-blur-sm">
-                <ChevronLeft className="h-6 w-6 text-white/70" />
-            </div>
-        )}
-      </div>
-      <div className="absolute top-1/2 right-2 z-10 -translate-y-1/2 pointer-events-none">
-        {hasNextClip && (
-            <div className="animate-pulse bg-black/20 p-2 rounded-full backdrop-blur-sm">
-                <ChevronRight className="h-6 w-6 text-white/70" />
-            </div>
-        )}
-      </div>
 
       {/* Info do Post */}
       <div className="absolute bottom-6 left-0 right-16 p-4 text-white z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-20">
@@ -266,6 +238,406 @@ const TikTokVideoPlayer = ({
   );
 };
 
+/* ---------- MODAL DE CRIAÇÃO SEPARADO ---------- */
+interface CreatePostModalProps {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  user: any;
+  onSuccess: () => void;
+}
+
+const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, user, onSuccess }) => {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const navigate = useNavigate();
+
+  const [newPost, setNewPost] = useState("");
+  const [mediaFiles, setMediaFiles] = useState<File[]>([]);
+  const [uploading, setUploading] = useState(false);
+  const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
+  const [showMediaOptions, setShowMediaOptions] = useState(false);
+  
+  const galleryInputRef = useRef<HTMLInputElement>(null);
+  const cameraInputRef = useRef<HTMLInputElement>(null);
+
+  const handleFileSelect = async (files: FileList | null) => {
+    if (!files || files.length === 0) return;
+    
+    const file = files[0];
+    console.log(`Arquivo selecionado: ${file.name}, tamanho: ${file.size}, tipo: ${file.type}`);
+    
+    // Verificar tamanho máximo (100MB)
+    if (file.size > 100 * 1024 * 1024) {
+      toast({
+        variant: "destructive",
+        title: "Arquivo muito grande",
+        description: "O arquivo deve ter no máximo 100MB"
+      });
+      return;
+    }
+    
+    try {
+      const processedFile = await processMediaFile(file);
+      setMediaFiles([processedFile]);
+      setShowMediaOptions(false);
+    } catch (error) {
+      console.error('Erro ao processar arquivo:', error);
+      toast({
+        variant: "destructive",
+        title: "Erro ao processar arquivo",
+        description: "Não foi possível processar o arquivo selecionado"
+      });
+    }
+  };
+
+  const openCamera = () => {
+    if (cameraInputRef.current) {
+      cameraInputRef.current.click();
+    }
+  };
+
+  const openGallery = () => {
+    if (galleryInputRef.current) {
+      galleryInputRef.current.click();
+    }
+  };
+
+  const removeMedia = () => {
+    setMediaFiles([]);
+  };
+
+  const handleCreatePost = async () => {
+    if (!user) {
+      toast({
+        variant: "destructive",
+        title: "Erro de autenticação",
+        description: "Você precisa estar logado para criar um post."
+      });
+      return;
+    }
+    
+    if (!newPost.trim() && mediaFiles.length === 0) {
+      toast({ 
+        variant: "destructive", 
+        title: "Erro", 
+        description: "Adicione texto ou mídia para postar" 
+      });
+      return;
+    }
+    
+    setUploading(true);
+    
+    try {
+      const mediaUrls: string[] = [];
+      
+      if (mediaFiles.length > 0) {
+        const file = mediaFiles[0];
+        
+        // Gerar nome único para o arquivo
+        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
+        const filePath = `${user.id}/${fileName}`;
+        
+        console.log(`Fazendo upload para: ${filePath}`);
+        
+        // Upload para o storage
+        const { error: uploadError } = await supabase.storage
+          .from("media")
+          .upload(filePath, file);
+        
+        if (uploadError) {
+          console.error('Erro no upload:', uploadError);
+          throw new Error(`Falha no upload: ${uploadError.message}`);
+        }
+        
+        // Obter URL pública
+        const { data: urlData } = supabase.storage
+          .from("media")
+          .getPublicUrl(filePath);
+        
+        if (!urlData?.publicUrl) {
+          throw new Error("Não foi possível obter URL pública do arquivo");
+        }
+        
+        // Adicionar prefixo baseado no tipo
+        let prefixedUrl = '';
+        if (file.type.startsWith("video/")) {
+          prefixedUrl = `video::${urlData.publicUrl}`;
+        } else if (file.type.startsWith("image/")) {
+          prefixedUrl = `image::${urlData.publicUrl}`;
+        } else {
+          prefixedUrl = urlData.publicUrl;
+        }
+        
+        mediaUrls.push(prefixedUrl);
+      }
+      
+      // Calcular data de término da votação
+      const votingEndsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+      
+      // Criar post no banco de dados
+      const { data: newPostData, error } = await supabase
+        .from("posts")
+        .insert({ 
+          user_id: user.id, 
+          content: newPost, 
+          media_urls: mediaUrls.length > 0 ? mediaUrls : null, 
+          post_type: postType, 
+          voting_period_active: true, 
+          voting_ends_at: votingEndsAt,
+          is_community_approved: false,
+          created_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+      
+      if (error) {
+        console.error('Erro ao criar post:', error);
+        throw error;
+      }
+      
+      // Notificação de sucesso
+      toast({ 
+        title: "🎯 Post enviado para a Arena!",
+        description: "Seu post tem 60 minutos para receber votos!",
+        duration: 5000 
+      });
+      
+      // Limpar campos
+      setNewPost(""); 
+      setMediaFiles([]); 
+      onOpenChange(false);
+      
+      // Atualizar queries
+      queryClient.invalidateQueries({ queryKey: ["arena-posts"] });
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+      
+      // Navegar para Arena após 2 segundos
+      setTimeout(() => {
+        navigate('/arena');
+      }, 2000);
+      
+      onSuccess();
+      
+    } catch (e: any) { 
+      console.error('Erro geral ao criar post:', e);
+      toast({ 
+        variant: "destructive", 
+        title: "Erro ao criar post", 
+        description: e.message || "Erro desconhecido. Tente novamente." 
+      }); 
+    } 
+    finally { 
+      setUploading(false); 
+    }
+  };
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[90vw] max-h-[85vh] overflow-y-auto shadow-2xl p-0">
+        <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-4">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-lg font-bold">Criar Novo Post</span>
+              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500">
+                <Timer className="h-3 w-3 mr-1" /> 60min
+              </Badge>
+            </div>
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-8 w-8"
+              onClick={() => onOpenChange(false)}
+            >
+              <X className="h-4 w-4" />
+            </Button>
+          </div>
+          <p className="text-sm text-gray-400 mt-1">Seu post será enviado para a Arena para votação</p>
+        </div>
+        
+        <div className="p-4">
+          <div className="grid grid-cols-2 gap-3 mb-4">
+            <Button 
+              variant={postType === 'standard' ? "default" : "outline"} 
+              onClick={() => setPostType('standard')} 
+              className={cn("h-12", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
+            >
+              <Globe className="mr-2 h-4 w-4"/> Feed
+            </Button>
+            <Button 
+              variant={postType === 'viral_clips' ? "default" : "outline"} 
+              onClick={() => setPostType('viral_clips')} 
+              className={cn("h-12", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
+            >
+              <Film className="mr-2 h-4 w-4"/> Clip
+            </Button>
+          </div>
+          
+          <textarea 
+            value={newPost} 
+            onChange={(e) => setNewPost(e.target.value)} 
+            placeholder="No que você está pensando? Seu post será votado na Arena por 60 minutos..." 
+            className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
+          />
+          
+          {/* Inputs ocultos */}
+          <input 
+            type="file" 
+            ref={galleryInputRef} 
+            className="hidden" 
+            accept="image/*,video/*" 
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          <input 
+            type="file" 
+            ref={cameraInputRef} 
+            className="hidden" 
+            accept="image/*" 
+            capture="environment"
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          
+          {/* Área de mídia */}
+          <div className="mt-4">
+            {mediaFiles.length === 0 ? (
+              <>
+                {!showMediaOptions ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-14"
+                    onClick={() => setShowMediaOptions(true)}
+                  >
+                    <Plus className="mr-2 h-5 w-5" />
+                    Adicionar Mídia
+                  </Button>
+                ) : (
+                  <div className="space-y-3 animate-in fade-in">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+                        onClick={openCamera}
+                      >
+                        <CameraIcon className="h-5 w-5" />
+                        <span className="text-xs">Câmera</span>
+                      </Button>
+                      
+                      <Button
+                        type="button"
+                        variant="outline"
+                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+                        onClick={openGallery}
+                      >
+                        <Images className="h-5 w-5" />
+                        <span className="text-xs">Galeria</span>
+                      </Button>
+                    </div>
+                    
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      className="w-full text-gray-400 hover:text-white"
+                      onClick={() => setShowMediaOptions(false)}
+                    >
+                      Cancelar
+                    </Button>
+                  </div>
+                )}
+              </>
+            ) : (
+              <div className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800/30">
+                {mediaFiles[0].type.startsWith('image/') ? (
+                  <>
+                    <img 
+                      src={URL.createObjectURL(mediaFiles[0])} 
+                      alt="Preview" 
+                      className="w-full h-48 object-contain bg-black"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full bg-red-600 hover:bg-red-700"
+                      onClick={removeMedia}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                ) : (
+                  <>
+                    <video 
+                      src={URL.createObjectURL(mediaFiles[0])} 
+                      controls
+                      className="w-full h-48 object-contain bg-black"
+                    />
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full bg-red-600 hover:bg-red-700"
+                      onClick={removeMedia}
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+          
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
+            <div className="flex items-start gap-3">
+              <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-full">
+                <Timer className="h-4 w-4 text-white" />
+              </div>
+              <div className="flex-1">
+                <h4 className="font-bold text-blue-300 text-sm">Sistema de Votação</h4>
+                <div className="flex items-center gap-4 mt-2">
+                  <div className="flex items-center gap-2">
+                    <div className="bg-red-500/20 p-1 rounded-full">
+                      <Heart className="h-3 w-3 text-red-400" />
+                    </div>
+                    <span className="text-xs">Coração = +1</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="bg-gray-700/50 p-1 rounded-full">
+                      <Bomb className="h-3 w-3 text-gray-400" />
+                    </div>
+                    <span className="text-xs">Bomba = -1</span>
+                  </div>
+                </div>
+                <p className="text-xs text-blue-400/80 mt-2">
+                  ⏱️ 60 minutos de votação. Mais corações que bombas = post aprovado!
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          <Button 
+            onClick={handleCreatePost} 
+            disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
+            className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md hover:shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {uploading ? (
+              <div className="flex items-center">
+                <Loader2 className="animate-spin mr-2 h-4 w-4" />
+                Enviando...
+              </div>
+            ) : (
+              <>
+                <Send className="w-4 h-4 mr-2" />
+                Enviar para Votação
+              </>
+            )}
+          </Button>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
+
 /* ---------- COMPONENTE PRINCIPAL ---------- */
 export default function WorldFlow() {
   const { user } = useAuth();
@@ -281,9 +653,8 @@ export default function WorldFlow() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   
-  // Gestos
-  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
+  // Estado para controlar se algum modal está aberto
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
   /* Query dos posts - SÓ MOSTRA APROVADOS */
   const { data: rawPosts, refetch: refetchFeed } = useQuery({
@@ -298,7 +669,7 @@ export default function WorldFlow() {
             likes (id, user_id), 
             comments (id)
           `)
-          .eq("is_community_approved", true) // SÓ POSTS APROVADOS
+          .eq("is_community_approved", true)
           .order("created_at", { ascending: false });
         if (error) throw error;
         return (data || []).map(post => ({
@@ -310,8 +681,8 @@ export default function WorldFlow() {
     enabled: !!user,
   });
 
-  /* Query para verificar posts na arena (para notificações) */
-  const { data: arenaPosts, refetch: refetchArena } = useQuery({
+  /* Query para verificar posts na arena */
+  const { data: arenaPosts } = useQuery({
     queryKey: ["arena-posts", user?.id],
     queryFn: async () => {
       try {
@@ -353,36 +724,42 @@ export default function WorldFlow() {
 
   /* --- Controles de Navegação --- */
   const goDown = useCallback(() => {
-    if (verticalIndex < feedStructure.length - 1) setVerticalIndex(prev => prev + 1);
-  }, [verticalIndex, feedStructure.length]);
+    if (!isModalOpen && verticalIndex < feedStructure.length - 1) {
+      setVerticalIndex(prev => prev + 1);
+    }
+  }, [verticalIndex, feedStructure.length, isModalOpen]);
 
   const goUp = useCallback(() => {
-    if (verticalIndex > 0) setVerticalIndex(prev => prev - 1);
-  }, [verticalIndex]);
+    if (!isModalOpen && verticalIndex > 0) {
+      setVerticalIndex(prev => prev - 1);
+    }
+  }, [verticalIndex, isModalOpen]);
 
   const goRight = useCallback(() => {
-    if (currentFeedItem?.type === 'clip_container') {
+    if (!isModalOpen && currentFeedItem?.type === 'clip_container') {
       if (horizontalClipIndex < currentFeedItem.items.length - 1) setHorizontalClipIndex(prev => prev + 1);
     }
-  }, [currentFeedItem, horizontalClipIndex]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen]);
 
   const goLeft = useCallback(() => {
-    if (currentFeedItem?.type === 'clip_container') {
+    if (!isModalOpen && currentFeedItem?.type === 'clip_container') {
       if (horizontalClipIndex > 0) setHorizontalClipIndex(prev => prev - 1);
     }
-  }, [currentFeedItem, horizontalClipIndex]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen]);
 
   /* --- Handlers de Input --- */
   const handleTouchStart = (e: React.TouchEvent) => {
+    if (isModalOpen) return;
     setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
+    if (isModalOpen) return;
     setTouchEnd({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchEnd = () => {
-    if (!touchStart || !touchEnd) return;
+    if (isModalOpen || !touchStart || !touchEnd) return;
     const xDiff = touchStart.x - touchEnd.x;
     const yDiff = touchStart.y - touchEnd.y;
     const minSwipe = 50;
@@ -400,8 +777,12 @@ export default function WorldFlow() {
     setTouchEnd(null);
   };
 
+  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
+
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
+      if (isModalOpen) return;
       if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
       e.preventDefault();
       if (Math.abs(e.deltaY) > 20) {
@@ -410,10 +791,11 @@ export default function WorldFlow() {
     };
     window.addEventListener('wheel', handleWheel, { passive: false });
     return () => window.removeEventListener('wheel', handleWheel);
-  }, [goDown, goUp]);
+  }, [goDown, goUp, isModalOpen]);
 
-  /* --- Função para curtir posts no feed (usando tabela likes) --- */
+  /* --- Função para curtir posts --- */
   const handleLike = async (postId: string) => {
+    if (isModalOpen) return;
     try {
       const post = rawPosts?.find(p => p.id === postId);
       if (!post) return;
@@ -477,12 +859,7 @@ export default function WorldFlow() {
           <Globe className="h-24 w-24 text-blue-600 mb-6 opacity-30 animate-pulse" />
           <h2 className="text-2xl font-bold tracking-tight">Tudo calmo por aqui...</h2>
           <p className="text-gray-400 mt-2 text-center max-w-md">
-            Os posts mais votados na Arena aparecerão aqui!<br/>
-            {arenaPosts && arenaPosts.length > 0 && (
-              <span className="text-blue-400 font-medium">
-                Você tem {arenaPosts.length} post(s) sendo votado(s) na Arena!
-              </span>
-            )}
+            Os posts mais votados na Arena aparecerão aqui!
           </p>
           <Button 
             onClick={() => setShowCreateModal(true)} 
@@ -516,588 +893,152 @@ export default function WorldFlow() {
       );
     }
 
-    // 2. POST STANDARD (IMERSIVO)
+    // 2. POST STANDARD
     const post = currentFeedItem.data;
     const mediaUrl = getMediaUrl(post);
     const isVideo = mediaUrl && isVideoUrl(mediaUrl);
     const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
     return (
-      <div className="h-full w-full relative bg-gray-900 overflow-hidden flex flex-col justify-center animate-in fade-in duration-500">
-        
-        {/* Background Layer - Imersivo */}
+      <div className="h-full w-full relative bg-gray-900 overflow-hidden flex flex-col justify-center">
+        {/* Background */}
         <div className="absolute inset-0 z-0">
-           {mediaUrl ? (
-             <>
-                {/* Imagem borrada de fundo para preencher espaço vazio */}
-                <div className="absolute inset-0 bg-black/50 backdrop-blur-3xl z-0" />
-                <img src={mediaUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-xl scale-110" alt="" />
-                
-                {/* Mídia Principal Centralizada */}
-                <div className="absolute inset-0 flex items-center justify-center z-10 pb-24 md:pb-0">
-                    {isVideo ? (
-                      <video src={mediaUrl} className="w-full max-h-[80vh] md:max-h-full object-contain shadow-2xl" controls playsInline />
-                    ) : (
-                      <img src={mediaUrl} alt="Post media" className="w-full max-h-[75vh] md:max-h-full object-contain shadow-2xl drop-shadow-2xl" />
-                    )}
-                </div>
-             </>
-           ) : (
-             <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-blue-950 to-purple-950" />
-           )}
+          {mediaUrl ? (
+            <>
+              <div className="absolute inset-0 bg-black/50 backdrop-blur-3xl z-0" />
+              <img src={mediaUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-xl scale-110" alt="" />
+              
+              <div className="absolute inset-0 flex items-center justify-center z-10 pb-24 md:pb-0">
+                {isVideo ? (
+                  <video src={mediaUrl} className="w-full max-h-[80vh] md:max-h-full object-contain shadow-2xl" controls playsInline />
+                ) : (
+                  <img src={mediaUrl} alt="Post media" className="w-full max-h-[75vh] md:max-h-full object-contain shadow-2xl drop-shadow-2xl" />
+                )}
+              </div>
+            </>
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-gray-900 via-blue-950 to-purple-950" />
+          )}
         </div>
 
-        {/* Overlay de Conteúdo Inferior (Estilo Instagram Reels/Stories) */}
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-8 px-5 flex flex-col justify-end">
+        {/* Overlay de Conteúdo */}
+        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-8 px-5">
+          <div className="flex items-center gap-3 mb-4">
+            <Avatar className="h-11 w-11 ring-2 ring-blue-500/50 shadow-lg">
+              <AvatarImage src={post.profiles?.avatar_url}/>
+              <AvatarFallback className="bg-blue-600 text-white font-bold">{post.profiles?.username?.[0]}</AvatarFallback>
+            </Avatar>
+            <div>
+              <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-white text-lg hover:text-blue-400 drop-shadow-md">
+                @{post.profiles?.username}
+              </UserLink>
+              <div className="flex items-center gap-2 text-xs text-gray-300/80">
+                <span>{new Date(post.created_at).toLocaleDateString('pt-BR')}</span>
+                <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-300 px-1 py-0 bg-blue-500/10">Post</Badge>
+              </div>
+            </div>
+          </div>
+
+          {post.content && (
+            <ScrollArea className="max-h-[30vh] w-full mb-4 pr-2">
+              <p className="text-white/95 text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
+                {post.content}
+              </p>
+            </ScrollArea>
+          )}
+
+          <div className="flex items-center justify-between mt-2">
+            <div className="flex gap-4">
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className={cn("rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5", isLiked ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-white")} 
+                onClick={() => handleLike(post.id)}
+              >
+                <Heart className={cn("h-5 w-5 mr-2", isLiked && "fill-current")} />
+                <span className="font-semibold">{post.likes?.length || 0}</span>
+              </Button>
+
+              <Button 
+                variant="ghost" 
+                size="sm"
+                className="rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 text-white"
+                onClick={() => setOpeningCommentsFor(post)}
+              >
+                <MessageCircle className="h-5 w-5 mr-2" />
+                <span className="font-semibold">{post.comments?.length || 0}</span>
+              </Button>
+            </div>
             
-            {/* Header do Post (Avatar e Nome) */}
-            <div className="flex items-center gap-3 mb-4">
-                <Avatar className="h-11 w-11 ring-2 ring-blue-500/50 shadow-lg">
-                <AvatarImage src={post.profiles?.avatar_url}/>
-                <AvatarFallback className="bg-blue-600 text-white font-bold">{post.profiles?.username?.[0]}</AvatarFallback>
-                </Avatar>
-                <div>
-                <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-white text-lg hover:text-blue-400 drop-shadow-md">
-                    @{post.profiles?.username}
-                </UserLink>
-                <div className="flex items-center gap-2 text-xs text-gray-300/80">
-                    <span>{new Date(post.created_at).toLocaleDateString('pt-BR')}</span>
-                    <span className="w-1 h-1 rounded-full bg-gray-500"></span>
-                    <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-300 px-1 py-0 bg-blue-500/10 backdrop-blur-sm">Post</Badge>
-                </div>
-                </div>
-            </div>
-
-            {/* Texto do Post */}
-            {post.content && (
-                <ScrollArea className="max-h-[30vh] w-full mb-4 pr-2">
-                    <p className="text-white/95 text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
-                        {post.content}
-                    </p>
-                </ScrollArea>
-            )}
-
-            {/* Barra de Ações (Glassmorphism) */}
-            <div className="flex items-center justify-between mt-2">
-                <div className="flex gap-4">
-                    <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className={cn("rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 hover:bg-white/20 transition-all", isLiked ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-white")} 
-                        onClick={() => handleLike(post.id)}
-                    >
-                        <Heart className={cn("h-5 w-5 mr-2", isLiked && "fill-current")} />
-                        <span className="font-semibold">{post.likes?.length || 0}</span>
-                    </Button>
-
-                    <Button 
-                        variant="ghost" 
-                        size="sm"
-                        className="rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 text-white hover:bg-white/20 transition-all"
-                        onClick={() => setOpeningCommentsFor(post)}
-                    >
-                        <MessageCircle className="h-5 w-5 mr-2" />
-                        <span className="font-semibold">{post.comments?.length || 0}</span>
-                    </Button>
-                </div>
-                
-                <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 bg-white/10 backdrop-blur-md text-white hover:bg-white/20">
-                    <Send className="h-5 w-5" />
-                </Button>
-            </div>
+            <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 bg-white/10 backdrop-blur-md text-white">
+              <Send className="h-5 w-5" />
+            </Button>
+          </div>
         </div>
-
-        {/* Indicador de Deslize */}
-        {verticalIndex < feedStructure.length - 1 && (
-             <div className="absolute bottom-2 left-0 right-0 flex justify-center z-30 pointer-events-none opacity-50">
-                <ArrowDown className="h-5 w-5 text-white animate-bounce" />
-             </div>
-        )}
       </div>
     );
   };
 
-  /* Modal de Criação - CORRIGIDO PARA MOBILE */
-  const CreatePostModal = () => {
-    const [newPost, setNewPost] = useState("");
-    const [mediaFiles, setMediaFiles] = useState<File[]>([]);
-    const [uploading, setUploading] = useState(false);
-    const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
-    const [showMediaOptions, setShowMediaOptions] = useState(false);
-    
-    const galleryInputRef = useRef<HTMLInputElement>(null);
-    const cameraInputRef = useRef<HTMLInputElement>(null);
-    const videoInputRef = useRef<HTMLInputElement>(null);
-
-    const handleFileSelect = async (files: FileList | null) => {
-      if (!files || files.length === 0) return;
-      
-      const fileArray = Array.from(files);
-      console.log(`Arquivos selecionados: ${fileArray.length}`);
-      
-      try {
-        // Para mobile, processamos apenas o primeiro arquivo de cada vez
-        const file = fileArray[0];
-        
-        // Verificar tamanho do arquivo (limite de 50MB para mobile)
-        if (file.size > 50 * 1024 * 1024) {
-          toast({
-            variant: "destructive",
-            title: "Arquivo muito grande",
-            description: "O arquivo deve ter no máximo 50MB"
-          });
-          return;
-        }
-        
-        const processedFile = await processMediaFile(file);
-        setMediaFiles([processedFile]);
-        console.log(`Arquivo processado: ${processedFile.name}`);
-        
-      } catch (error) {
-        console.error('Erro ao processar arquivo:', error);
-        toast({
-          variant: "destructive",
-          title: "Erro ao processar arquivo",
-          description: "Não foi possível processar o arquivo selecionado"
-        });
-      }
-    };
-
-    const openCamera = (mediaType: 'image' | 'video') => {
-      if (cameraInputRef.current) {
-        cameraInputRef.current.accept = mediaType === 'image' ? 'image/*' : 'video/*';
-        cameraInputRef.current.capture = 'environment'; // Câmera traseira
-        cameraInputRef.current.click();
-      }
-    };
-
-    const openGallery = () => {
-      if (galleryInputRef.current) {
-        galleryInputRef.current.click();
-      }
-    };
-
-    const removeMedia = () => {
-      setMediaFiles([]);
-    };
-
-    const handleCreatePost = async () => {
-      if (!user) {
-        toast({
-          variant: "destructive",
-          title: "Erro de autenticação",
-          description: "Você precisa estar logado para criar um post."
-        });
-        return;
-      }
-      
-      if (!newPost.trim() && mediaFiles.length === 0) {
-        toast({ 
-          variant: "destructive", 
-          title: "Erro", 
-          description: "Adicione texto ou mídia para postar" 
-        });
-        return;
-      }
-      
-      setUploading(true);
-      
-      try {
-        const mediaUrls: string[] = [];
-        
-        // Upload de mídias se houver
-        if (mediaFiles.length > 0) {
-          const file = mediaFiles[0];
-          console.log(`Fazendo upload do arquivo: ${file.name}`);
-          
-          // Nome seguro para o arquivo
-          const fileExt = file.name.split('.').pop() || '';
-          const fileName = `${Date.now()}_${Math.random().toString(36).substring(2)}.${fileExt}`;
-          const filePath = `${user.id}/${fileName}`;
-          
-          console.log(`Caminho do arquivo: ${filePath}`);
-          
-          // Fazer upload
-          const { error: uploadError } = await supabase.storage
-            .from("media")
-            .upload(filePath, file, {
-              cacheControl: '3600',
-              upsert: false
-            });
-          
-          if (uploadError) {
-            console.error('Erro no upload:', uploadError);
-            throw new Error(`Falha no upload: ${uploadError.message}`);
-          }
-          
-          // Obter URL pública
-          const { data: urlData } = supabase.storage
-            .from("media")
-            .getPublicUrl(filePath);
-          
-          if (!urlData?.publicUrl) {
-            throw new Error("Não foi possível obter URL pública do arquivo");
-          }
-          
-          // Adicionar prefixo baseado no tipo
-          let prefixedUrl = '';
-          if (file.type.startsWith("video/")) {
-            prefixedUrl = `video::${urlData.publicUrl}`;
-          } else if (file.type.startsWith("image/")) {
-            prefixedUrl = `image::${urlData.publicUrl}`;
-          } else {
-            prefixedUrl = urlData.publicUrl;
-          }
-          
-          mediaUrls.push(prefixedUrl);
-          console.log(`Upload concluído: ${prefixedUrl}`);
-        }
-        
-        // Calcular data de término da votação (60 minutos a partir de agora)
-        const votingEndsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-        
-        console.log('Criando post no banco de dados...');
-        
-        // Criar post no banco de dados
-        const { data: newPostData, error } = await supabase
-          .from("posts")
-          .insert({ 
-            user_id: user.id, 
-            content: newPost, 
-            media_urls: mediaUrls.length > 0 ? mediaUrls : null, 
-            post_type: postType, 
-            voting_period_active: true, 
-            voting_ends_at: votingEndsAt,
-            is_community_approved: false,
-            created_at: new Date().toISOString()
-          })
-          .select()
-          .single();
-        
-        if (error) {
-          console.error('Erro ao criar post:', error);
-          throw error;
-        }
-        
-        console.log('Post criado com sucesso:', newPostData);
-        
-        // Notificação de sucesso
-        toast({ 
-          title: "🎯 Post enviado para a Arena!",
-          description: (
-            <div className="mt-2">
-              <p>Seu post tem 60 minutos para receber votos!</p>
-              <p className="mt-2 font-medium">Boa sorte! 🍀</p>
-            </div>
-          ),
-          duration: 5000 
-        });
-        
-        // Limpar campos
-        setNewPost(""); 
-        setMediaFiles([]); 
-        setShowCreateModal(false);
-        
-        // Atualizar queries
-        queryClient.invalidateQueries({ queryKey: ["arena-posts"] });
-        queryClient.invalidateQueries({ queryKey: ["posts"] });
-        
-        // Aguardar um pouco e navegar para Arena
-        setTimeout(() => {
-          navigate('/arena');
-        }, 2000);
-        
-      } catch (e: any) { 
-        console.error('Erro geral ao criar post:', e);
-        toast({ 
-          variant: "destructive", 
-          title: "Erro ao criar post", 
-          description: e.message || "Erro desconhecido. Tente novamente." 
-        }); 
-      } 
-      finally { 
-        setUploading(false); 
-      }
-    };
-
-    return (
-      <Dialog open={showCreateModal} onOpenChange={setShowCreateModal}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-xl max-h-[90vh] overflow-y-auto shadow-2xl">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <span>Criar Novo Post</span>
-              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500">
-                <Timer className="h-3 w-3 mr-1" /> 60min
-              </Badge>
-            </DialogTitle>
-            <p className="text-sm text-gray-400">Seu post será enviado para a Arena para votação por 60 minutos</p>
-          </DialogHeader>
-          
-          <div className="grid grid-cols-2 gap-3 mb-4">
-             <Button 
-                variant={postType === 'standard' ? "default" : "outline"} 
-                onClick={() => setPostType('standard')} 
-                className={cn("h-12 border-gray-700", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "bg-transparent text-gray-400 hover:bg-gray-800")}
-             >
-                <Globe className="mr-2 h-4 w-4"/> Feed Padrão
-             </Button>
-             <Button 
-                variant={postType === 'viral_clips' ? "default" : "outline"} 
-                onClick={() => setPostType('viral_clips')} 
-                className={cn("h-12 border-gray-700", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "bg-transparent text-gray-400 hover:bg-gray-800")}
-             >
-                <Film className="mr-2 h-4 w-4"/> Clip Viral
-             </Button>
-          </div>
-          
-          <textarea 
-            value={newPost} 
-            onChange={(e) => setNewPost(e.target.value)} 
-            placeholder="No que você está pensando? Seu post será votado na Arena por 60 minutos..." 
-            className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[120px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
-          />
-          
-          {/* Inputs de arquivo ocultos */}
-          <input 
-            type="file" 
-            ref={galleryInputRef} 
-            className="hidden" 
-            accept="image/*,video/*" 
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          <input 
-            type="file" 
-            ref={cameraInputRef} 
-            className="hidden" 
-            accept="image/*,video/*" 
-            capture="environment"
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          
-          {/* Botões de seleção de mídia */}
-          <div className="mt-4">
-            {mediaFiles.length === 0 ? (
-              <>
-                {!showMediaOptions ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-14"
-                    onClick={() => setShowMediaOptions(true)}
-                  >
-                    <Plus className="mr-2 h-5 w-5" />
-                    Adicionar Mídia
-                  </Button>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
-                        onClick={() => openCamera('image')}
-                      >
-                        <CameraIcon className="h-5 w-5" />
-                        <span className="text-xs">Tirar Foto</span>
-                      </Button>
-                      
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
-                        onClick={() => openGallery()}
-                      >
-                        <Images className="h-5 w-5" />
-                        <span className="text-xs">Galeria</span>
-                      </Button>
-                    </div>
-                    
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      className="w-full text-gray-400 hover:text-white"
-                      onClick={() => setShowMediaOptions(false)}
-                    >
-                      Cancelar
-                    </Button>
-                  </div>
-                )}
-              </>
-            ) : (
-              <div className="relative">
-                {mediaFiles[0].type.startsWith('image/') ? (
-                  <div className="relative rounded-lg overflow-hidden border border-gray-700">
-                    <img 
-                      src={URL.createObjectURL(mediaFiles[0])} 
-                      alt="Preview" 
-                      className="w-full h-48 object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-8 w-8 rounded-full"
-                      onClick={removeMedia}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : mediaFiles[0].type.startsWith('video/') ? (
-                  <div className="relative rounded-lg overflow-hidden border border-gray-700">
-                    <video 
-                      src={URL.createObjectURL(mediaFiles[0])} 
-                      controls
-                      className="w-full h-48 object-cover"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-8 w-8 rounded-full"
-                      onClick={removeMedia}
-                    >
-                      <X className="h-4 w-4" />
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="border border-gray-700 rounded-lg p-4 flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      <span className="text-sm truncate">{mediaFiles[0].name}</span>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={removeMedia}
-                    >
-                      Remover
-                    </Button>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-          
-          <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/30 to-purple-900/30 border border-blue-800/30 rounded-lg">
-            <div className="flex items-start gap-3">
-              <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-full">
-                <Timer className="h-5 w-5 text-white" />
-              </div>
-              <div className="flex-1">
-                <h4 className="font-bold text-blue-300">Sistema de Votação da Arena</h4>
-                <div className="grid grid-cols-2 gap-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-red-500/20 p-1.5 rounded-full">
-                      <Heart className="h-4 w-4 text-red-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-green-400">Coração</p>
-                      <p className="text-xs text-gray-400">+1 ponto</p>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="bg-gray-700/50 p-1.5 rounded-full">
-                      <Bomb className="h-4 w-4 text-gray-400" />
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-red-400">Bomba</p>
-                      <p className="text-xs text-gray-400">-1 ponto</p>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-xs text-blue-400/80 mt-3">
-                  ⏱️ Seu post terá 60 minutos para receber votos. Se tiver mais corações que bombas ao final, será aprovado para o feed!
-                </p>
-              </div>
-            </div>
-          </div>
-          
-          <Button 
-            onClick={handleCreatePost} 
-            disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
-            className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md shadow-lg hover:shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-             {uploading ? (
-               <div className="flex items-center">
-                 <Loader2 className="animate-spin mr-2 h-4 w-4" />
-                 Enviando...
-               </div>
-             ) : (
-               <>
-                 <Send className="w-4 h-4 mr-2" />
-                 Enviar para Votação (60min)
-               </>
-             )}
-          </Button>
-        </DialogContent>
-      </Dialog>
-    );
-  };
+  // Atualizar estado de modal aberto
+  useEffect(() => {
+    setIsModalOpen(showCreateModal || !!openingCommentsFor);
+  }, [showCreateModal, openingCommentsFor]);
 
   return (
     <div 
-      className="fixed inset-0 overflow-hidden bg-black touch-none font-sans" 
-      onTouchStart={handleTouchStart} 
-      onTouchMove={handleTouchMove} 
+      className="fixed inset-0 overflow-hidden bg-black touch-none font-sans"
+      onTouchStart={handleTouchStart}
+      onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Header Fixo - Centralizado e Moderno */}
-      <div className="absolute top-0 left-0 right-0 z-50 p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent pointer-events-none h-20 transition-all">
-        
-        {/* Lado Esquerdo: Menu */}
-        <div className="justify-self-start pointer-events-auto">
-            <Sheet open={showMenu} onOpenChange={setShowMenu}>
-                <SheetTrigger asChild>
-                    <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 rounded-full h-10 w-10">
-                        <Menu className="h-6 w-6" />
-                    </Button>
-                </SheetTrigger>
-                <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white">
-                    <SheetHeader><SheetTitle className="text-white text-left">Menu</SheetTitle></SheetHeader>
-                    <div className="mt-6 flex flex-col gap-4">
-                        <UserLink userId={user?.id} username="Meu Perfil" className="font-bold text-lg hover:text-blue-400 transition-colors"/>
-                        <Button 
-                          variant="ghost" 
-                          className="justify-start hover:bg-white/10 relative"
-                          onClick={() => navigate('/arena')}
-                        >
-                          <div className="flex items-center">
-                            <Timer className="h-4 w-4 mr-2" />
-                            Arena de Votação
-                            {arenaPosts && arenaPosts.length > 0 && (
-                              <Badge className="ml-2 bg-red-500 animate-pulse">{arenaPosts.length}</Badge>
-                            )}
-                          </div>
-                        </Button>
-                    </div>
-                </SheetContent>
-            </Sheet>
+      {/* Header */}
+      <div className="absolute top-0 left-0 right-0 z-40 p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-20">
+        <div className="justify-self-start">
+          <Sheet open={showMenu} onOpenChange={setShowMenu}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 rounded-full">
+                <Menu className="h-6 w-6" />
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white w-[280px]">
+              <SheetHeader>
+                <SheetTitle className="text-white">Menu</SheetTitle>
+              </SheetHeader>
+              <div className="mt-6 flex flex-col gap-4">
+                <UserLink userId={user?.id} username="Meu Perfil" className="font-bold text-lg hover:text-blue-400"/>
+                <Button 
+                  variant="ghost" 
+                  className="justify-start"
+                  onClick={() => navigate('/arena')}
+                >
+                  <Timer className="h-4 w-4 mr-2" />
+                  Arena de Votação
+                  {arenaPosts && arenaPosts.length > 0 && (
+                    <Badge className="ml-2 bg-red-500">{arenaPosts.length}</Badge>
+                  )}
+                </Button>
+              </div>
+            </SheetContent>
+          </Sheet>
         </div>
 
-        {/* Centro: Logo Centralizada */}
-        <div className="justify-self-center flex flex-col items-center pointer-events-auto">
-            <h1 className="text-2xl font-black tracking-tighter text-white drop-shadow-[0_2px_10px_rgba(0,0,0,0.5)] cursor-pointer select-none">
-              World<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
-            </h1>
-            {currentFeedItem?.type === 'clip_container' && (
-                <span className="text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] animate-pulse -mt-1">Modo Clips</span>
-            )}
+        <div className="justify-self-center flex flex-col items-center">
+          <h1 className="text-2xl font-black tracking-tighter text-white">
+            World<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
+          </h1>
+          {currentFeedItem?.type === 'clip_container' && (
+            <span className="text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] -mt-1">Clips</span>
+          )}
         </div>
 
-        {/* Lado Direito: Botão de Criar Post */}
-        <div className="justify-self-end pointer-events-auto">
-            <Button 
-                onClick={() => setShowCreateModal(true)} 
-                size="icon" 
-                className="rounded-full h-10 w-10 bg-gradient-to-tr from-blue-600 to-purple-600 shadow-lg shadow-purple-500/20 hover:scale-105 transition-transform border border-white/10 relative"
-                title="Criar novo post"
-            >
-                <Plus className="h-6 w-6 text-white" />
-                {arenaPosts && arenaPosts.length > 0 && (
-                  <span className="absolute -top-1 -right-1 h-3 w-3 bg-red-500 rounded-full animate-pulse border border-white"></span>
-                )}
-            </Button>
+        <div className="justify-self-end">
+          <Button 
+            onClick={() => setShowCreateModal(true)} 
+            size="icon" 
+            className="rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 shadow-lg"
+          >
+            <Plus className="h-6 w-6 text-white" />
+          </Button>
         </div>
       </div>
 
@@ -1106,46 +1047,75 @@ export default function WorldFlow() {
         {renderContent()}
       </div>
 
-      {/* Modais */}
-      <CreatePostModal />
+      {/* Modal de Criação */}
+      <CreatePostModal 
+        open={showCreateModal} 
+        onOpenChange={setShowCreateModal}
+        user={user}
+        onSuccess={() => refetchFeed()}
+      />
       
       {/* Modal de Comentários */}
-      <Dialog open={!!openingCommentsFor} onOpenChange={(o) => !o && setOpeningCommentsFor(null)}>
-        <DialogContent className="max-w-md bg-gray-900/95 backdrop-blur-xl border-gray-800 text-white max-h-[80vh] flex flex-col shadow-2xl gap-0 p-0 overflow-hidden">
-          <DialogHeader className="p-4 border-b border-gray-800 bg-gray-900/50">
-              <DialogTitle className="text-center font-bold">Comentários</DialogTitle>
-          </DialogHeader>
+      <Dialog open={!!openingCommentsFor} onOpenChange={(open) => !open && setOpeningCommentsFor(null)}>
+        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md max-h-[80vh] flex flex-col p-0">
+          <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-4">
+            <div className="flex items-center justify-between">
+              <h2 className="font-bold">Comentários</h2>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-8 w-8"
+                onClick={() => setOpeningCommentsFor(null)}
+              >
+                <X className="h-4 w-4" />
+              </Button>
+            </div>
+          </div>
           
           <ScrollArea className="flex-1 p-4">
-            {loadingComments ? <div className="flex justify-center py-8"><Loader2 className="animate-spin text-blue-500" /></div> : 
-              comments?.length ? comments.map((c:any) => (
-                <div key={c.id} className="flex gap-3 mb-4 animate-in slide-in-from-bottom-2">
-                  <Avatar className="h-8 w-8 ring-1 ring-gray-700"><AvatarImage src={c.profiles?.avatar_url}/><AvatarFallback className="text-xs bg-gray-700">U</AvatarFallback></Avatar>
-                  <div className="bg-gray-800/50 p-2 rounded-lg rounded-tl-none flex-1">
-                    <span className="font-bold text-xs text-gray-400 block mb-1">{c.profiles?.username}</span>
-                    <p className="text-sm text-white/90 leading-relaxed">{c.content}</p>
+            {loadingComments ? (
+              <div className="flex justify-center py-8">
+                <Loader2 className="animate-spin text-blue-500" />
+              </div>
+            ) : comments?.length ? (
+              comments.map((c:any) => (
+                <div key={c.id} className="flex gap-3 mb-4">
+                  <Avatar className="h-8 w-8">
+                    <AvatarImage src={c.profiles?.avatar_url}/>
+                    <AvatarFallback className="text-xs bg-gray-700">U</AvatarFallback>
+                  </Avatar>
+                  <div className="bg-gray-800/50 p-3 rounded-lg flex-1">
+                    <span className="font-bold text-xs text-gray-400 block mb-1">
+                      {c.profiles?.username}
+                    </span>
+                    <p className="text-sm text-white/90">{c.content}</p>
                   </div>
                 </div>
-              )) : (
-                <div className="text-center py-10 opacity-50">
-                    <MessageCircle className="h-10 w-10 mx-auto mb-2 text-gray-500"/>
-                    <p className="text-sm">Nenhum comentário ainda.</p>
-                </div>
-              )
-            }
+              ))
+            ) : (
+              <div className="text-center py-10 opacity-50">
+                <MessageCircle className="h-10 w-10 mx-auto mb-2 text-gray-500"/>
+                <p className="text-sm">Nenhum comentário ainda.</p>
+              </div>
+            )}
           </ScrollArea>
           
           <div className="p-3 bg-gray-900 border-t border-gray-800">
-            <div className="flex gap-2 relative">
-                <Input 
-                    value={newCommentText} 
-                    onChange={e => setNewCommentText(e.target.value)} 
-                    placeholder="Escreva um comentário..." 
-                    className="bg-gray-800 border-gray-700 text-white focus-visible:ring-blue-500 pr-10 rounded-full pl-4"
-                />
-                <Button size="icon" onClick={() => addComment.mutate()} disabled={addComment.isPending || !newCommentText.trim()} className="absolute right-1 top-1 h-8 w-8 rounded-full bg-blue-600 hover:bg-blue-500">
-                    <Send className="h-3 w-3"/>
-                </Button>
+            <div className="flex gap-2">
+              <Input 
+                value={newCommentText} 
+                onChange={e => setNewCommentText(e.target.value)} 
+                placeholder="Escreva um comentário..." 
+                className="bg-gray-800 border-gray-700 text-white rounded-full"
+              />
+              <Button 
+                size="icon" 
+                onClick={() => addComment.mutate()} 
+                disabled={addComment.isPending || !newCommentText.trim()} 
+                className="rounded-full bg-blue-600 hover:bg-blue-500"
+              >
+                <Send className="h-4 w-4"/>
+              </Button>
             </div>
           </div>
         </DialogContent>
