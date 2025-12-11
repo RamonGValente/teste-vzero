@@ -363,14 +363,16 @@ export default function AppLayout() {
           <Outlet />
         </div>
         
-        {/* Footer */}
-        <footer className="border-t bg-card/50 backdrop-blur-sm py-4 mt-auto">
-          <div className="container mx-auto px-4">
-            <p className="text-center text-sm text-muted-foreground">
-              Copyright © 2025 RTR-Sistemas
-            </p>
-          </div>
-        </footer>
+        {/* Footer - Renderizado apenas se NÃO for Feed ("/") e NÃO for Arena ("/arena") */}
+        {location.pathname !== "/" && location.pathname !== "/arena" && (
+          <footer className="border-t bg-card/50 backdrop-blur-sm py-4 mt-auto">
+            <div className="container mx-auto px-4">
+              <p className="text-center text-sm text-muted-foreground">
+                Copyright © 2025 RTR-Sistemas
+              </p>
+            </div>
+          </footer>
+        )}
       </main>
 
       <Dialog open={adModalOpen} onOpenChange={setAdModalOpen}>
