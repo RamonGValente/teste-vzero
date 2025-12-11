@@ -8,7 +8,7 @@ import {
   Clock, Loader2, Globe,
   Menu, ArrowDown,
   Film, Plus, Bomb, Timer,
-  X, Camera as CameraIcon
+  X, Camera as CameraIcon, Video as VideoIcon
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -23,11 +23,10 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
 
-/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS (SIMPLIFICADAS) ---------- */
+/* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS ---------- */
 const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
   return new Promise((resolve) => {
-    // Se o arquivo for pequeno, retorna sem compressão
-    if (file.size < 3 * 1024 * 1024) { // 3MB
+    if (file.size < 3 * 1024 * 1024) {
       resolve(file);
       return;
     }
@@ -171,7 +170,6 @@ const TikTokVideoPlayer = ({
         />
       </div>
       
-      {/* Botões Laterais */}
       <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6 z-20">
         <div className="flex flex-col items-center group">
           <Button
@@ -207,7 +205,6 @@ const TikTokVideoPlayer = ({
         </Button>
       </div>
 
-      {/* Info do Post */}
       <div className="absolute bottom-6 left-0 right-16 p-4 text-white z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-20">
         <div className="flex items-center gap-3 mb-3">
           <Avatar className="h-10 w-10 ring-2 ring-white/30 shadow-lg">
@@ -258,13 +255,43 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
   const [showMediaOptions, setShowMediaOptions] = useState(false);
   
   const galleryInputRef = useRef<HTMLInputElement>(null);
-  const cameraInputRef = useRef<HTMLInputElement>(null);
+  const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
+  const cameraVideoInputRef = useRef<HTMLInputElement>(null);
+
+  // Determinar tipos de mídia permitidos baseado no tipo de post
+  const getAcceptedMediaTypes = () => {
+    if (postType === 'viral_clips') {
+      return {
+        gallery: 'video/*',
+        cameraPhoto: null, // Clips não aceitam fotos
+        cameraVideo: 'video/*'
+      };
+    } else {
+      return {
+        gallery: 'image/*,video/*',
+        cameraPhoto: 'image/*',
+        cameraVideo: 'video/*'
+      };
+    }
+  };
+
+  const mediaTypes = getAcceptedMediaTypes();
 
   const handleFileSelect = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
     
     const file = files[0];
-    console.log(`Arquivo selecionado: ${file.name}, tamanho: ${file.size}, tipo: ${file.type}`);
+    console.log(`Arquivo selecionado: ${file.name}, tipo: ${file.type}`);
+    
+    // Verificar se é um vídeo para clips
+    if (postType === 'viral_clips' && !file.type.startsWith('video/')) {
+      toast({
+        variant: "destructive",
+        title: "Tipo de arquivo inválido",
+        description: "Para Clips, apenas vídeos são permitidos."
+      });
+      return;
+    }
     
     // Verificar tamanho máximo (100MB)
     if (file.size > 100 * 1024 * 1024) {
@@ -290,9 +317,15 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
     }
   };
 
-  const openCamera = () => {
-    if (cameraInputRef.current) {
-      cameraInputRef.current.click();
+  const openCameraPhoto = () => {
+    if (cameraPhotoInputRef.current) {
+      cameraPhotoInputRef.current.click();
+    }
+  };
+
+  const openCameraVideo = () => {
+    if (cameraVideoInputRef.current) {
+      cameraVideoInputRef.current.click();
     }
   };
 
@@ -334,7 +367,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
         const file = mediaFiles[0];
         
         // Gerar nome único para o arquivo
-        const fileExt = file.name.split('.').pop() || 'jpg';
+        const fileExt = file.name.split('.').pop() || (file.type.startsWith('video/') ? 'mp4' : 'jpg');
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
         
@@ -399,7 +432,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
       // Notificação de sucesso
       toast({ 
         title: "🎯 Post enviado para a Arena!",
-        description: "Seu post tem 60 minutos para receber votos!",
+        description: `Seu post ${postType === 'viral_clips' ? '(Clip)' : ''} tem 60 minutos para receber votos!`,
         duration: 5000 
       });
       
@@ -432,6 +465,69 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
     }
   };
 
+  // Renderizar opções de mídia baseadas no tipo de post
+  const renderMediaOptions = () => {
+    if (postType === 'viral_clips') {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+            onClick={openCameraVideo}
+          >
+            <VideoIcon className="h-5 w-5" />
+            <span className="text-xs">Gravar Vídeo</span>
+          </Button>
+          
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+            onClick={openGallery}
+          >
+            <Video className="h-5 w-5" />
+            <span className="text-xs">Galeria de Vídeos</span>
+          </Button>
+        </div>
+      );
+    } else {
+      return (
+        <div className="grid grid-cols-2 gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+            onClick={openCameraPhoto}
+          >
+            <CameraIcon className="h-5 w-5" />
+            <span className="text-xs">Tirar Foto</span>
+          </Button>
+          
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
+            onClick={openCameraVideo}
+          >
+            <VideoIcon className="h-5 w-5" />
+            <span className="text-xs">Gravar Vídeo</span>
+          </Button>
+          
+          <Button
+            type="button"
+            variant="outline"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 col-span-2"
+            onClick={openGallery}
+          >
+            <Images className="h-5 w-5" />
+            <span className="text-xs">Galeria (Fotos e Vídeos)</span>
+          </Button>
+        </div>
+      );
+    }
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[90vw] max-h-[85vh] overflow-y-auto shadow-2xl p-0">
@@ -439,8 +535,17 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <span className="text-lg font-bold">Criar Novo Post</span>
-              <Badge className="bg-gradient-to-r from-yellow-500 to-orange-500">
-                <Timer className="h-3 w-3 mr-1" /> 60min
+              <Badge className={cn(
+                postType === 'viral_clips' 
+                  ? "bg-gradient-to-r from-pink-500 to-purple-500" 
+                  : "bg-gradient-to-r from-yellow-500 to-orange-500"
+              )}>
+                {postType === 'viral_clips' ? (
+                  <Film className="h-3 w-3 mr-1" />
+                ) : (
+                  <Timer className="h-3 w-3 mr-1" />
+                )}
+                {postType === 'viral_clips' ? 'Clip' : '60min'}
               </Badge>
             </div>
             <Button
@@ -452,31 +557,45 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
               <X className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-sm text-gray-400 mt-1">Seu post será enviado para a Arena para votação</p>
+          <p className="text-sm text-gray-400 mt-1">
+            {postType === 'viral_clips' 
+              ? "Crie um Clip Viral (apenas vídeos)" 
+              : "Seu post será enviado para a Arena para votação"}
+          </p>
         </div>
         
         <div className="p-4">
           <div className="grid grid-cols-2 gap-3 mb-4">
             <Button 
               variant={postType === 'standard' ? "default" : "outline"} 
-              onClick={() => setPostType('standard')} 
+              onClick={() => {
+                setPostType('standard');
+                setMediaFiles([]); // Limpar mídia ao mudar tipo
+              }} 
               className={cn("h-12", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
             >
-              <Globe className="mr-2 h-4 w-4"/> Feed
+              <Globe className="mr-2 h-4 w-4"/> Post Normal
             </Button>
             <Button 
               variant={postType === 'viral_clips' ? "default" : "outline"} 
-              onClick={() => setPostType('viral_clips')} 
+              onClick={() => {
+                setPostType('viral_clips');
+                setMediaFiles([]); // Limpar mídia ao mudar tipo
+              }} 
               className={cn("h-12", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
             >
-              <Film className="mr-2 h-4 w-4"/> Clip
+              <Film className="mr-2 h-4 w-4"/> Clip Viral
             </Button>
           </div>
           
           <textarea 
             value={newPost} 
             onChange={(e) => setNewPost(e.target.value)} 
-            placeholder="No que você está pensando? Seu post será votado na Arena por 60 minutos..." 
+            placeholder={
+              postType === 'viral_clips' 
+                ? "Descreva seu Clip Viral (apenas vídeos serão aceitos)..." 
+                : "No que você está pensando? Seu post será votado na Arena por 60 minutos..."
+            } 
             className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
           />
           
@@ -485,14 +604,22 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             type="file" 
             ref={galleryInputRef} 
             className="hidden" 
-            accept="image/*,video/*" 
+            accept={mediaTypes.gallery || ''}
             onChange={(e) => handleFileSelect(e.target.files)}
           />
           <input 
             type="file" 
-            ref={cameraInputRef} 
+            ref={cameraPhotoInputRef} 
             className="hidden" 
-            accept="image/*" 
+            accept={mediaTypes.cameraPhoto || ''}
+            capture="environment"
+            onChange={(e) => handleFileSelect(e.target.files)}
+          />
+          <input 
+            type="file" 
+            ref={cameraVideoInputRef} 
+            className="hidden" 
+            accept={mediaTypes.cameraVideo || ''}
             capture="environment"
             onChange={(e) => handleFileSelect(e.target.files)}
           />
@@ -509,31 +636,11 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                     onClick={() => setShowMediaOptions(true)}
                   >
                     <Plus className="mr-2 h-5 w-5" />
-                    Adicionar Mídia
+                    {postType === 'viral_clips' ? 'Adicionar Vídeo' : 'Adicionar Mídia'}
                   </Button>
                 ) : (
                   <div className="space-y-3 animate-in fade-in">
-                    <div className="grid grid-cols-2 gap-3">
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
-                        onClick={openCamera}
-                      >
-                        <CameraIcon className="h-5 w-5" />
-                        <span className="text-xs">Câmera</span>
-                      </Button>
-                      
-                      <Button
-                        type="button"
-                        variant="outline"
-                        className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
-                        onClick={openGallery}
-                      >
-                        <Images className="h-5 w-5" />
-                        <span className="text-xs">Galeria</span>
-                      </Button>
-                    </div>
+                    {renderMediaOptions()}
                     
                     <Button
                       type="button"
@@ -583,17 +690,33 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                     </Button>
                   </>
                 )}
+                <div className="p-2 bg-black/50 absolute bottom-0 left-0 right-0">
+                  <p className="text-xs text-white truncate">
+                    {mediaFiles[0].name} ({Math.round(mediaFiles[0].size / 1024 / 1024 * 100) / 100}MB)
+                  </p>
+                </div>
               </div>
             )}
           </div>
           
           <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
             <div className="flex items-start gap-3">
-              <div className="bg-gradient-to-br from-blue-600 to-purple-600 p-2 rounded-full">
-                <Timer className="h-4 w-4 text-white" />
+              <div className={cn(
+                "p-2 rounded-full",
+                postType === 'viral_clips' 
+                  ? "bg-gradient-to-br from-pink-600 to-purple-600"
+                  : "bg-gradient-to-br from-blue-600 to-purple-600"
+              )}>
+                {postType === 'viral_clips' ? (
+                  <Film className="h-4 w-4 text-white" />
+                ) : (
+                  <Timer className="h-4 w-4 text-white" />
+                )}
               </div>
               <div className="flex-1">
-                <h4 className="font-bold text-blue-300 text-sm">Sistema de Votação</h4>
+                <h4 className="font-bold text-blue-300 text-sm">
+                  {postType === 'viral_clips' ? 'Clip Viral' : 'Sistema de Votação'}
+                </h4>
                 <div className="flex items-center gap-4 mt-2">
                   <div className="flex items-center gap-2">
                     <div className="bg-red-500/20 p-1 rounded-full">
@@ -609,7 +732,9 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                   </div>
                 </div>
                 <p className="text-xs text-blue-400/80 mt-2">
-                  ⏱️ 60 minutos de votação. Mais corações que bombas = post aprovado!
+                  {postType === 'viral_clips' 
+                    ? "🎬 Seu Clip Viral será votado por 60 minutos. Mais corações que bombas = clip aprovado!"
+                    : "⏱️ 60 minutos de votação. Mais corações que bombas = post aprovado!"}
                 </p>
               </div>
             </div>
@@ -618,7 +743,12 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           <Button 
             onClick={handleCreatePost} 
             disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
-            className="w-full mt-4 bg-gradient-to-r from-blue-600 to-purple-600 h-12 font-bold text-md hover:shadow-blue-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className={cn(
+              "w-full mt-4 h-12 font-bold text-md transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+              postType === 'viral_clips' 
+                ? "bg-gradient-to-r from-pink-600 to-purple-600 hover:shadow-pink-500/25" 
+                : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/25"
+            )}
           >
             {uploading ? (
               <div className="flex items-center">
@@ -628,7 +758,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             ) : (
               <>
                 <Send className="w-4 h-4 mr-2" />
-                Enviar para Votação
+                {postType === 'viral_clips' ? 'Enviar Clip para Votação' : 'Enviar para Votação'}
               </>
             )}
           </Button>
@@ -653,7 +783,6 @@ export default function WorldFlow() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
   
-  // Estado para controlar se algum modal está aberto
   const [isModalOpen, setIsModalOpen] = useState(false);
 
   /* Query dos posts - SÓ MOSTRA APROVADOS */
@@ -871,7 +1000,6 @@ export default function WorldFlow() {
       );
     }
 
-    // 1. LINHA DE CLIPS
     if (currentFeedItem.type === 'clip_container') {
       const clip = currentFeedItem.items[horizontalClipIndex];
       const mediaUrl = getMediaUrl(clip);
@@ -893,7 +1021,6 @@ export default function WorldFlow() {
       );
     }
 
-    // 2. POST STANDARD
     const post = currentFeedItem.data;
     const mediaUrl = getMediaUrl(post);
     const isVideo = mediaUrl && isVideoUrl(mediaUrl);
@@ -901,7 +1028,6 @@ export default function WorldFlow() {
 
     return (
       <div className="h-full w-full relative bg-gray-900 overflow-hidden flex flex-col justify-center">
-        {/* Background */}
         <div className="absolute inset-0 z-0">
           {mediaUrl ? (
             <>
@@ -921,7 +1047,6 @@ export default function WorldFlow() {
           )}
         </div>
 
-        {/* Overlay de Conteúdo */}
         <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-8 px-5">
           <div className="flex items-center gap-3 mb-4">
             <Avatar className="h-11 w-11 ring-2 ring-blue-500/50 shadow-lg">
@@ -934,7 +1059,9 @@ export default function WorldFlow() {
               </UserLink>
               <div className="flex items-center gap-2 text-xs text-gray-300/80">
                 <span>{new Date(post.created_at).toLocaleDateString('pt-BR')}</span>
-                <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-300 px-1 py-0 bg-blue-500/10">Post</Badge>
+                <Badge variant="outline" className="text-[10px] h-4 border-blue-500/30 text-blue-300 px-1 py-0 bg-blue-500/10">
+                  {post.post_type === 'viral_clips' ? 'Clip' : 'Post'}
+                </Badge>
               </div>
             </div>
           </div>
@@ -979,7 +1106,6 @@ export default function WorldFlow() {
     );
   };
 
-  // Atualizar estado de modal aberto
   useEffect(() => {
     setIsModalOpen(showCreateModal || !!openingCommentsFor);
   }, [showCreateModal, openingCommentsFor]);
@@ -991,7 +1117,6 @@ export default function WorldFlow() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Header */}
       <div className="absolute top-0 left-0 right-0 z-40 p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-20">
         <div className="justify-self-start">
           <Sheet open={showMenu} onOpenChange={setShowMenu}>
@@ -1042,12 +1167,10 @@ export default function WorldFlow() {
         </div>
       </div>
 
-      {/* Área Principal */}
       <div className="w-full h-full pt-0 bg-black">
         {renderContent()}
       </div>
 
-      {/* Modal de Criação */}
       <CreatePostModal 
         open={showCreateModal} 
         onOpenChange={setShowCreateModal}
@@ -1055,7 +1178,6 @@ export default function WorldFlow() {
         onSuccess={() => refetchFeed()}
       />
       
-      {/* Modal de Comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(open) => !open && setOpeningCommentsFor(null)}>
         <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md max-h-[80vh] flex flex-col p-0">
           <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-4">
@@ -1068,7 +1190,7 @@ export default function WorldFlow() {
                 onClick={() => setOpeningCommentsFor(null)}
               >
                 <X className="h-4 w-4" />
-              </Button>
+            </Button>
             </div>
           </div>
           
