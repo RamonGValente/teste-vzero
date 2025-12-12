@@ -1181,7 +1181,7 @@ export default function WorldFlow() {
         </div>
       </div>
 
-      {/* Conteúdo principal */}
+      {/* cConteúdo principal */}
       <div className="w-full h-full pt-16 sm:pt-20 bg-black">
         {renderContent()}
       </div>
