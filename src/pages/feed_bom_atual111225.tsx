@@ -170,16 +170,15 @@ const TikTokVideoPlayer = ({
         />
       </div>
       
-      {/* Botões de ação responsivos */}
-      <div className="absolute right-2 sm:right-4 bottom-28 sm:bottom-32 flex flex-col items-center gap-4 sm:gap-6 z-20">
+      <div className="absolute right-4 bottom-32 flex flex-col items-center gap-6 z-20">
         <div className="flex flex-col items-center group">
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
             onClick={onLike}
           >
-            <Heart className={cn("h-5 w-5 sm:h-7 sm:w-7 transition-colors drop-shadow-md", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
+            <Heart className={cn("h-7 w-7 transition-colors drop-shadow-md", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
           </Button>
           <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.likes?.length || 0}</span>
         </div>
@@ -188,10 +187,10 @@ const TikTokVideoPlayer = ({
           <Button
             variant="ghost"
             size="icon"
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
             onClick={onComment}
           >
-            <MessageCircle className="h-5 w-5 sm:h-7 sm:w-7 drop-shadow-md" />
+            <MessageCircle className="h-7 w-7 drop-shadow-md" />
           </Button>
           <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.comments?.length || 0}</span>
         </div>
@@ -199,19 +198,18 @@ const TikTokVideoPlayer = ({
         <Button
           variant="ghost"
           size="icon"
-          className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+          className="h-12 w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
           onClick={() => setIsMuted(!isMuted)}
         >
-          {isMuted ? <VolumeX className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" /> : <Volume2 className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" />}
+          {isMuted ? <VolumeX className="h-6 w-6 drop-shadow-md" /> : <Volume2 className="h-6 w-6 drop-shadow-md" />}
         </Button>
       </div>
 
-      {/* Informações do post responsivas */}
-      <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 text-white z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-16 sm:pt-20">
+      <div className="absolute bottom-6 left-0 right-16 p-4 text-white z-20 bg-gradient-to-t from-black/80 via-black/40 to-transparent pt-20">
         <div className="flex items-center gap-3 mb-3">
-          <Avatar className="h-8 w-8 sm:h-10 sm:w-10 ring-2 ring-white/30 shadow-lg">
+          <Avatar className="h-10 w-10 ring-2 ring-white/30 shadow-lg">
             <AvatarImage src={post.profiles?.avatar_url}/>
-            <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 font-bold text-xs sm:text-sm">
+            <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 font-bold">
               {post.profiles?.username?.[0]}
             </AvatarFallback>
           </Avatar>
@@ -219,7 +217,7 @@ const TikTokVideoPlayer = ({
              <UserLink 
               userId={post.user_id} 
               username={post.profiles?.username || ''}
-              className="font-bold text-white text-sm sm:text-md drop-shadow-md hover:text-pink-300 transition-colors"
+              className="font-bold text-white text-md drop-shadow-md hover:text-pink-300 transition-colors"
             >
               @{post.profiles?.username}
             </UserLink>
@@ -229,7 +227,7 @@ const TikTokVideoPlayer = ({
             </span>
           </div>
         </div>
-        <p className="text-white/95 text-xs sm:text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
+        <p className="text-white/95 text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
             {post.content}
         </p>
       </div>
@@ -260,11 +258,12 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
   const cameraVideoInputRef = useRef<HTMLInputElement>(null);
 
+  // Determinar tipos de mídia permitidos baseado no tipo de post
   const getAcceptedMediaTypes = () => {
     if (postType === 'viral_clips') {
       return {
         gallery: 'video/*',
-        cameraPhoto: null,
+        cameraPhoto: null, // Clips não aceitam fotos
         cameraVideo: 'video/*'
       };
     } else {
@@ -284,6 +283,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
     const file = files[0];
     console.log(`Arquivo selecionado: ${file.name}, tipo: ${file.type}`);
     
+    // Verificar se é um vídeo para clips
     if (postType === 'viral_clips' && !file.type.startsWith('video/')) {
       toast({
         variant: "destructive",
@@ -293,6 +293,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
       return;
     }
     
+    // Verificar tamanho máximo (100MB)
     if (file.size > 100 * 1024 * 1024) {
       toast({
         variant: "destructive",
@@ -365,12 +366,14 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
       if (mediaFiles.length > 0) {
         const file = mediaFiles[0];
         
+        // Gerar nome único para o arquivo
         const fileExt = file.name.split('.').pop() || (file.type.startsWith('video/') ? 'mp4' : 'jpg');
         const fileName = `${Date.now()}_${Math.random().toString(36).substring(7)}.${fileExt}`;
         const filePath = `${user.id}/${fileName}`;
         
         console.log(`Fazendo upload para: ${filePath}`);
         
+        // Upload para o storage
         const { error: uploadError } = await supabase.storage
           .from("media")
           .upload(filePath, file);
@@ -380,6 +383,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           throw new Error(`Falha no upload: ${uploadError.message}`);
         }
         
+        // Obter URL pública
         const { data: urlData } = supabase.storage
           .from("media")
           .getPublicUrl(filePath);
@@ -388,6 +392,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           throw new Error("Não foi possível obter URL pública do arquivo");
         }
         
+        // Adicionar prefixo baseado no tipo
         let prefixedUrl = '';
         if (file.type.startsWith("video/")) {
           prefixedUrl = `video::${urlData.publicUrl}`;
@@ -400,8 +405,10 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
         mediaUrls.push(prefixedUrl);
       }
       
+      // Calcular data de término da votação
       const votingEndsAt = new Date(Date.now() + 60 * 60 * 1000).toISOString();
       
+      // Criar post no banco de dados
       const { data: newPostData, error } = await supabase
         .from("posts")
         .insert({ 
@@ -422,19 +429,23 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
         throw error;
       }
       
+      // Notificação de sucesso
       toast({ 
         title: "🎯 Post enviado para a Arena!",
         description: `Seu post ${postType === 'viral_clips' ? '(Clip)' : ''} tem 60 minutos para receber votos!`,
         duration: 5000 
       });
       
+      // Limpar campos
       setNewPost(""); 
       setMediaFiles([]); 
       onOpenChange(false);
       
+      // Atualizar queries
       queryClient.invalidateQueries({ queryKey: ["arena-posts"] });
       queryClient.invalidateQueries({ queryKey: ["posts"] });
       
+      // Navegar para Arena após 2 segundos
       setTimeout(() => {
         navigate('/arena');
       }, 2000);
@@ -454,6 +465,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
     }
   };
 
+  // Renderizar opções de mídia baseadas no tipo de post
   const renderMediaOptions = () => {
     if (postType === 'viral_clips') {
       return (
@@ -461,20 +473,20 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           <Button
             type="button"
             variant="outline"
-            className="h-12 sm:h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 text-xs sm:text-sm"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
             onClick={openCameraVideo}
           >
-            <VideoIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            <VideoIcon className="h-5 w-5" />
             <span className="text-xs">Gravar Vídeo</span>
           </Button>
           
           <Button
             type="button"
             variant="outline"
-            className="h-12 sm:h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 text-xs sm:text-sm"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
             onClick={openGallery}
           >
-            <Video className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Video className="h-5 w-5" />
             <span className="text-xs">Galeria de Vídeos</span>
           </Button>
         </div>
@@ -485,30 +497,30 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           <Button
             type="button"
             variant="outline"
-            className="h-12 sm:h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 text-xs sm:text-sm"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
             onClick={openCameraPhoto}
           >
-            <CameraIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            <CameraIcon className="h-5 w-5" />
             <span className="text-xs">Tirar Foto</span>
           </Button>
           
           <Button
             type="button"
             variant="outline"
-            className="h-12 sm:h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 text-xs sm:text-sm"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50"
             onClick={openCameraVideo}
           >
-            <VideoIcon className="h-4 w-4 sm:h-5 sm:w-5" />
+            <VideoIcon className="h-5 w-5" />
             <span className="text-xs">Gravar Vídeo</span>
           </Button>
           
           <Button
             type="button"
             variant="outline"
-            className="h-12 sm:h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 col-span-2 text-xs sm:text-sm"
+            className="h-14 flex-col gap-1 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 col-span-2"
             onClick={openGallery}
           >
-            <Images className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Images className="h-5 w-5" />
             <span className="text-xs">Galeria (Fotos e Vídeos)</span>
           </Button>
         </div>
@@ -518,13 +530,12 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[95vw] sm:w-[90vw] max-h-[90vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl p-0">
-        <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-3 sm:p-4">
+      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[90vw] max-h-[85vh] overflow-y-auto shadow-2xl p-0">
+        <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-4">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-bold">Criar Novo Post</span>
+              <span className="text-lg font-bold">Criar Novo Post</span>
               <Badge className={cn(
-                "text-xs",
                 postType === 'viral_clips' 
                   ? "bg-gradient-to-r from-pink-500 to-purple-500" 
                   : "bg-gradient-to-r from-yellow-500 to-orange-500"
@@ -540,40 +551,40 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             <Button
               variant="ghost"
               size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
+              className="h-8 w-8"
               onClick={() => onOpenChange(false)}
             >
-              <X className="h-3 w-3 sm:h-4 sm:w-4" />
+              <X className="h-4 w-4" />
             </Button>
           </div>
-          <p className="text-xs sm:text-sm text-gray-400 mt-1">
+          <p className="text-sm text-gray-400 mt-1">
             {postType === 'viral_clips' 
               ? "Crie um Clip Viral (apenas vídeos)" 
               : "Seu post será enviado para a Arena para votação"}
           </p>
         </div>
         
-        <div className="p-3 sm:p-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
+        <div className="p-4">
+          <div className="grid grid-cols-2 gap-3 mb-4">
             <Button 
               variant={postType === 'standard' ? "default" : "outline"} 
               onClick={() => {
                 setPostType('standard');
-                setMediaFiles([]);
+                setMediaFiles([]); // Limpar mídia ao mudar tipo
               }} 
-              className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
+              className={cn("h-12", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
             >
-              <Globe className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Post Normal
+              <Globe className="mr-2 h-4 w-4"/> Post Normal
             </Button>
             <Button 
               variant={postType === 'viral_clips' ? "default" : "outline"} 
               onClick={() => {
                 setPostType('viral_clips');
-                setMediaFiles([]);
+                setMediaFiles([]); // Limpar mídia ao mudar tipo
               }} 
-              className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
+              className={cn("h-12", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
             >
-              <Film className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Clip Viral
+              <Film className="mr-2 h-4 w-4"/> Clip Viral
             </Button>
           </div>
           
@@ -582,12 +593,13 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             onChange={(e) => setNewPost(e.target.value)} 
             placeholder={
               postType === 'viral_clips' 
-                ? "Descreva seu Clip Viral..." 
+                ? "Descreva seu Clip Viral (apenas vídeos serão aceitos)..." 
                 : "No que você está pensando? Seu post será votado na Arena por 60 minutos..."
             } 
-            className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-3 sm:p-4 min-h-[80px] sm:min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none text-sm sm:text-base" 
+            className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-4 min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none" 
           />
           
+          {/* Inputs ocultos */}
           <input 
             type="file" 
             ref={galleryInputRef} 
@@ -612,17 +624,18 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             onChange={(e) => handleFileSelect(e.target.files)}
           />
           
-          <div className="mt-3 sm:mt-4">
+          {/* Área de mídia */}
+          <div className="mt-4">
             {mediaFiles.length === 0 ? (
               <>
                 {!showMediaOptions ? (
                   <Button
                     type="button"
                     variant="outline"
-                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-12 sm:h-14 text-sm sm:text-base"
+                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-14"
                     onClick={() => setShowMediaOptions(true)}
                   >
-                    <Plus className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                    <Plus className="mr-2 h-5 w-5" />
                     {postType === 'viral_clips' ? 'Adicionar Vídeo' : 'Adicionar Mídia'}
                   </Button>
                 ) : (
@@ -632,7 +645,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                     <Button
                       type="button"
                       variant="ghost"
-                      className="w-full text-gray-400 hover:text-white text-sm"
+                      className="w-full text-gray-400 hover:text-white"
                       onClick={() => setShowMediaOptions(false)}
                     >
                       Cancelar
@@ -647,16 +660,16 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                     <img 
                       src={URL.createObjectURL(mediaFiles[0])} 
                       alt="Preview" 
-                      className="w-full h-40 sm:h-48 object-contain bg-black"
+                      className="w-full h-48 object-contain bg-black"
                     />
                     <Button
                       type="button"
                       variant="destructive"
                       size="icon"
-                      className="absolute top-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full bg-red-600 hover:bg-red-700"
                       onClick={removeMedia}
                     >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </>
                 ) : (
@@ -664,16 +677,16 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                     <video 
                       src={URL.createObjectURL(mediaFiles[0])} 
                       controls
-                      className="w-full h-40 sm:h-48 object-contain bg-black"
+                      className="w-full h-48 object-contain bg-black"
                     />
                     <Button
                       type="button"
                       variant="destructive"
                       size="icon"
-                      className="absolute top-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
+                      className="absolute top-2 right-2 h-8 w-8 rounded-full bg-red-600 hover:bg-red-700"
                       onClick={removeMedia}
                     >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                      <X className="h-4 w-4" />
                     </Button>
                   </>
                 )}
@@ -686,7 +699,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             )}
           </div>
           
-          <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
+          <div className="mt-4 p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
             <div className="flex items-start gap-3">
               <div className={cn(
                 "p-2 rounded-full",
@@ -695,16 +708,16 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
                   : "bg-gradient-to-br from-blue-600 to-purple-600"
               )}>
                 {postType === 'viral_clips' ? (
-                  <Film className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  <Film className="h-4 w-4 text-white" />
                 ) : (
-                  <Timer className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  <Timer className="h-4 w-4 text-white" />
                 )}
               </div>
               <div className="flex-1">
-                <h4 className="font-bold text-blue-300 text-xs sm:text-sm">
+                <h4 className="font-bold text-blue-300 text-sm">
                   {postType === 'viral_clips' ? 'Clip Viral' : 'Sistema de Votação'}
                 </h4>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                <div className="flex items-center gap-4 mt-2">
                   <div className="flex items-center gap-2">
                     <div className="bg-red-500/20 p-1 rounded-full">
                       <Heart className="h-3 w-3 text-red-400" />
@@ -731,7 +744,7 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
             onClick={handleCreatePost} 
             disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
             className={cn(
-              "w-full mt-3 sm:mt-4 h-10 sm:h-12 font-bold text-sm sm:text-md transition-all disabled:opacity-50 disabled:cursor-not-allowed",
+              "w-full mt-4 h-12 font-bold text-md transition-all disabled:opacity-50 disabled:cursor-not-allowed",
               postType === 'viral_clips' 
                 ? "bg-gradient-to-r from-pink-600 to-purple-600 hover:shadow-pink-500/25" 
                 : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/25"
@@ -739,12 +752,12 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
           >
             {uploading ? (
               <div className="flex items-center">
-                <Loader2 className="animate-spin mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                <Loader2 className="animate-spin mr-2 h-4 w-4" />
                 Enviando...
               </div>
             ) : (
               <>
-                <Send className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
+                <Send className="w-4 h-4 mr-2" />
                 {postType === 'viral_clips' ? 'Enviar Clip para Votação' : 'Enviar para Votação'}
               </>
             )}
@@ -771,21 +784,6 @@ export default function WorldFlow() {
   const [showMenu, setShowMenu] = useState(false);
   
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
-  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
-  const [isMobile, setIsMobile] = useState(false);
-
-  // Detecta se é dispositivo móvel
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 640);
-    };
-    
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
 
   /* Query dos posts - SÓ MOSTRA APROVADOS */
   const { data: rawPosts, refetch: refetchFeed } = useQuery({
@@ -908,6 +906,9 @@ export default function WorldFlow() {
     setTouchEnd(null);
   };
 
+  const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
+  const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
+
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
       if (isModalOpen) return;
@@ -917,18 +918,9 @@ export default function WorldFlow() {
         if (e.deltaY > 0) goDown(); else goUp();
       }
     };
-    
-    // Apenas adiciona o evento wheel em desktop
-    if (!isMobile) {
-      window.addEventListener('wheel', handleWheel, { passive: false });
-    }
-    
-    return () => {
-      if (!isMobile) {
-        window.removeEventListener('wheel', handleWheel);
-      }
-    };
-  }, [goDown, goUp, isModalOpen, isMobile]);
+    window.addEventListener('wheel', handleWheel, { passive: false });
+    return () => window.removeEventListener('wheel', handleWheel);
+  }, [goDown, goUp, isModalOpen]);
 
   /* --- Função para curtir posts --- */
   const handleLike = async (postId: string) => {
@@ -992,15 +984,15 @@ export default function WorldFlow() {
   const renderContent = () => {
     if (!currentFeedItem) {
       return (
-        <div className="flex flex-col items-center justify-center h-full text-white p-4 sm:p-8 animate-in fade-in bg-gray-950">
-          <Globe className="h-16 w-16 sm:h-24 sm:w-24 text-blue-600 mb-4 sm:mb-6 opacity-30 animate-pulse" />
-          <h2 className="text-xl sm:text-2xl font-bold tracking-tight text-center">Tudo calmo por aqui...</h2>
-          <p className="text-gray-400 mt-2 text-center max-w-md text-sm sm:text-base">
+        <div className="flex flex-col items-center justify-center h-full text-white p-8 animate-in fade-in bg-gray-950">
+          <Globe className="h-24 w-24 text-blue-600 mb-6 opacity-30 animate-pulse" />
+          <h2 className="text-2xl font-bold tracking-tight">Tudo calmo por aqui...</h2>
+          <p className="text-gray-400 mt-2 text-center max-w-md">
             Os posts mais votados na Arena aparecerão aqui!
           </p>
           <Button 
             onClick={() => setShowCreateModal(true)} 
-            className="mt-4 sm:mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full px-6 sm:px-8 py-2 sm:py-3 text-sm sm:text-base shadow-lg hover:shadow-blue-500/20"
+            className="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 text-white rounded-full px-8 shadow-lg hover:shadow-blue-500/20"
           >
             Criar Novo Post
           </Button>
@@ -1011,7 +1003,7 @@ export default function WorldFlow() {
     if (currentFeedItem.type === 'clip_container') {
       const clip = currentFeedItem.items[horizontalClipIndex];
       const mediaUrl = getMediaUrl(clip);
-      if (!mediaUrl) return <div className="h-full flex items-center justify-center text-white bg-black p-4">Clip indisponível</div>;
+      if (!mediaUrl) return <div className="h-full flex items-center justify-center text-white bg-black">Clip indisponível</div>;
 
       return (
         <TikTokVideoPlayer
@@ -1042,11 +1034,11 @@ export default function WorldFlow() {
               <div className="absolute inset-0 bg-black/50 backdrop-blur-3xl z-0" />
               <img src={mediaUrl} className="absolute inset-0 w-full h-full object-cover opacity-30 blur-xl scale-110" alt="" />
               
-              <div className="absolute inset-0 flex items-center justify-center z-10 pb-16 sm:pb-24 md:pb-0">
+              <div className="absolute inset-0 flex items-center justify-center z-10 pb-24 md:pb-0">
                 {isVideo ? (
-                  <video src={mediaUrl} className="w-full max-h-[70vh] sm:max-h-[80vh] md:max-h-full object-contain shadow-2xl" controls playsInline />
+                  <video src={mediaUrl} className="w-full max-h-[80vh] md:max-h-full object-contain shadow-2xl" controls playsInline />
                 ) : (
-                  <img src={mediaUrl} alt="Post media" className="w-full max-h-[65vh] sm:max-h-[75vh] md:max-h-full object-contain shadow-2xl drop-shadow-2xl" />
+                  <img src={mediaUrl} alt="Post media" className="w-full max-h-[75vh] md:max-h-full object-contain shadow-2xl drop-shadow-2xl" />
                 )}
               </div>
             </>
@@ -1055,18 +1047,14 @@ export default function WorldFlow() {
           )}
         </div>
 
-        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-20 sm:pt-32 pb-4 sm:pb-8 px-3 sm:px-5">
-          <div className="flex items-center gap-3 mb-3 sm:mb-4">
-            <Avatar className="h-9 w-9 sm:h-11 sm:w-11 ring-2 ring-blue-500/50 shadow-lg">
+        <div className="absolute bottom-0 left-0 right-0 z-20 bg-gradient-to-t from-black via-black/80 to-transparent pt-32 pb-8 px-5">
+          <div className="flex items-center gap-3 mb-4">
+            <Avatar className="h-11 w-11 ring-2 ring-blue-500/50 shadow-lg">
               <AvatarImage src={post.profiles?.avatar_url}/>
-              <AvatarFallback className="bg-blue-600 text-white font-bold text-sm sm:text-base">{post.profiles?.username?.[0]}</AvatarFallback>
+              <AvatarFallback className="bg-blue-600 text-white font-bold">{post.profiles?.username?.[0]}</AvatarFallback>
             </Avatar>
-            <div className="flex-1 min-w-0">
-              <UserLink 
-                userId={post.user_id} 
-                username={post.profiles?.username||""} 
-                className="font-bold text-white text-sm sm:text-lg hover:text-blue-400 drop-shadow-md truncate block"
-              >
+            <div>
+              <UserLink userId={post.user_id} username={post.profiles?.username||""} className="font-bold text-white text-lg hover:text-blue-400 drop-shadow-md">
                 @{post.profiles?.username}
               </UserLink>
               <div className="flex items-center gap-2 text-xs text-gray-300/80">
@@ -1079,39 +1067,38 @@ export default function WorldFlow() {
           </div>
 
           {post.content && (
-            <ScrollArea className="max-h-[25vh] sm:max-h-[30vh] w-full mb-3 sm:mb-4 pr-2">
-              <p className="text-white/95 text-sm sm:text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
+            <ScrollArea className="max-h-[30vh] w-full mb-4 pr-2">
+              <p className="text-white/95 text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
                 {post.content}
               </p>
             </ScrollArea>
           )}
 
           <div className="flex items-center justify-between mt-2">
-            <div className="flex gap-2 sm:gap-4">
+            <div className="flex gap-4">
               <Button 
                 variant="ghost" 
                 size="sm"
-                className={cn("rounded-full h-8 sm:h-10 px-3 sm:px-4 bg-white/10 backdrop-blur-md border border-white/5 text-xs sm:text-sm", 
-                  isLiked ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-white")} 
+                className={cn("rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5", isLiked ? "text-red-400 bg-red-500/10 border-red-500/20" : "text-white")} 
                 onClick={() => handleLike(post.id)}
               >
-                <Heart className={cn("h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2", isLiked && "fill-current")} />
+                <Heart className={cn("h-5 w-5 mr-2", isLiked && "fill-current")} />
                 <span className="font-semibold">{post.likes?.length || 0}</span>
               </Button>
 
               <Button 
                 variant="ghost" 
                 size="sm"
-                className="rounded-full h-8 sm:h-10 px-3 sm:px-4 bg-white/10 backdrop-blur-md border border-white/5 text-white text-xs sm:text-sm"
+                className="rounded-full h-10 px-4 bg-white/10 backdrop-blur-md border border-white/5 text-white"
                 onClick={() => setOpeningCommentsFor(post)}
               >
-                <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 mr-1 sm:mr-2" />
+                <MessageCircle className="h-5 w-5 mr-2" />
                 <span className="font-semibold">{post.comments?.length || 0}</span>
               </Button>
             </div>
             
-            <Button variant="ghost" size="icon" className="rounded-full h-8 w-8 sm:h-10 sm:w-10 bg-white/10 backdrop-blur-md text-white">
-              <Send className="h-4 w-4 sm:h-5 sm:w-5" />
+            <Button variant="ghost" size="icon" className="rounded-full h-10 w-10 bg-white/10 backdrop-blur-md text-white">
+              <Send className="h-5 w-5" />
             </Button>
           </div>
         </div>
@@ -1130,30 +1117,29 @@ export default function WorldFlow() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
-      {/* Header responsivo */}
-      <div className="absolute top-0 left-0 right-0 z-40 p-3 sm:p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-16 sm:h-20">
+      <div className="absolute top-0 left-0 right-0 z-40 p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-20">
         <div className="justify-self-start">
           <Sheet open={showMenu} onOpenChange={setShowMenu}>
             <SheetTrigger asChild>
-              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 rounded-full h-9 w-9 sm:h-10 sm:w-10">
-                <Menu className="h-5 w-5 sm:h-6 sm:w-6" />
+              <Button variant="ghost" size="icon" className="text-white hover:bg-white/10 rounded-full">
+                <Menu className="h-6 w-6" />
               </Button>
             </SheetTrigger>
-            <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white w-[280px] sm:w-[320px]">
+            <SheetContent side="left" className="bg-gray-900 border-gray-800 text-white w-[280px]">
               <SheetHeader>
-                <SheetTitle className="text-white text-sm sm:text-base">Menu</SheetTitle>
+                <SheetTitle className="text-white">Menu</SheetTitle>
               </SheetHeader>
-              <div className="mt-4 sm:mt-6 flex flex-col gap-3 sm:gap-4">
-                <UserLink userId={user?.id} username="Meu Perfil" className="font-bold text-base sm:text-lg hover:text-blue-400"/>
+              <div className="mt-6 flex flex-col gap-4">
+                <UserLink userId={user?.id} username="Meu Perfil" className="font-bold text-lg hover:text-blue-400"/>
                 <Button 
                   variant="ghost" 
-                  className="justify-start text-sm sm:text-base"
+                  className="justify-start"
                   onClick={() => navigate('/arena')}
                 >
-                  <Timer className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                  <Timer className="h-4 w-4 mr-2" />
                   Arena de Votação
                   {arenaPosts && arenaPosts.length > 0 && (
-                    <Badge className="ml-2 bg-red-500 text-xs">{arenaPosts.length}</Badge>
+                    <Badge className="ml-2 bg-red-500">{arenaPosts.length}</Badge>
                   )}
                 </Button>
               </div>
@@ -1162,11 +1148,11 @@ export default function WorldFlow() {
         </div>
 
         <div className="justify-self-center flex flex-col items-center">
-          <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-white">
+          <h1 className="text-2xl font-black tracking-tighter text-white">
             World<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
           </h1>
           {currentFeedItem?.type === 'clip_container' && (
-            <span className="text-[8px] sm:text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] -mt-1">Clips</span>
+            <span className="text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] -mt-1">Clips</span>
           )}
         </div>
 
@@ -1174,19 +1160,17 @@ export default function WorldFlow() {
           <Button 
             onClick={() => setShowCreateModal(true)} 
             size="icon" 
-            className="rounded-full h-9 w-9 sm:h-10 sm:w-10 bg-gradient-to-tr from-blue-600 to-purple-600 shadow-lg"
+            className="rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 shadow-lg"
           >
-            <Plus className="h-4 w-4 sm:h-5 sm:w-5 text-white" />
+            <Plus className="h-6 w-6 text-white" />
           </Button>
         </div>
       </div>
 
-      {/* Conteúdo principal */}
-      <div className="w-full h-full pt-16 sm:pt-20 bg-black">
+      <div className="w-full h-full pt-0 bg-black">
         {renderContent()}
       </div>
 
-      {/* Modal de criação de post */}
       <CreatePostModal 
         open={showCreateModal} 
         onOpenChange={setShowCreateModal}
@@ -1194,66 +1178,65 @@ export default function WorldFlow() {
         onSuccess={() => refetchFeed()}
       />
       
-      {/* Modal de comentários */}
       <Dialog open={!!openingCommentsFor} onOpenChange={(open) => !open && setOpeningCommentsFor(null)}>
-        <DialogContent className="bg-gray-900 border-gray-800 text-white w-[95vw] sm:max-w-md max-h-[80vh] flex flex-col p-0">
-          <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-3 sm:p-4">
+        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-md max-h-[80vh] flex flex-col p-0">
+          <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-4">
             <div className="flex items-center justify-between">
-              <h2 className="font-bold text-sm sm:text-base">Comentários</h2>
+              <h2 className="font-bold">Comentários</h2>
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-7 w-7 sm:h-8 sm:w-8"
+                className="h-8 w-8"
                 onClick={() => setOpeningCommentsFor(null)}
               >
-                <X className="h-3 w-3 sm:h-4 sm:w-4" />
-              </Button>
+                <X className="h-4 w-4" />
+            </Button>
             </div>
           </div>
           
-          <ScrollArea className="flex-1 p-3 sm:p-4">
+          <ScrollArea className="flex-1 p-4">
             {loadingComments ? (
-              <div className="flex justify-center py-6 sm:py-8">
-                <Loader2 className="animate-spin text-blue-500 h-5 w-5 sm:h-6 sm:w-6" />
+              <div className="flex justify-center py-8">
+                <Loader2 className="animate-spin text-blue-500" />
               </div>
             ) : comments?.length ? (
               comments.map((c:any) => (
-                <div key={c.id} className="flex gap-2 sm:gap-3 mb-3 sm:mb-4">
-                  <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
+                <div key={c.id} className="flex gap-3 mb-4">
+                  <Avatar className="h-8 w-8">
                     <AvatarImage src={c.profiles?.avatar_url}/>
                     <AvatarFallback className="text-xs bg-gray-700">U</AvatarFallback>
                   </Avatar>
-                  <div className="bg-gray-800/50 p-2 sm:p-3 rounded-lg flex-1">
+                  <div className="bg-gray-800/50 p-3 rounded-lg flex-1">
                     <span className="font-bold text-xs text-gray-400 block mb-1">
                       {c.profiles?.username}
                     </span>
-                    <p className="text-xs sm:text-sm text-white/90">{c.content}</p>
+                    <p className="text-sm text-white/90">{c.content}</p>
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-center py-6 sm:py-10 opacity-50">
-                <MessageCircle className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-2 text-gray-500"/>
-                <p className="text-xs sm:text-sm">Nenhum comentário ainda.</p>
+              <div className="text-center py-10 opacity-50">
+                <MessageCircle className="h-10 w-10 mx-auto mb-2 text-gray-500"/>
+                <p className="text-sm">Nenhum comentário ainda.</p>
               </div>
             )}
           </ScrollArea>
           
-          <div className="p-2 sm:p-3 bg-gray-900 border-t border-gray-800">
+          <div className="p-3 bg-gray-900 border-t border-gray-800">
             <div className="flex gap-2">
               <Input 
                 value={newCommentText} 
                 onChange={e => setNewCommentText(e.target.value)} 
                 placeholder="Escreva um comentário..." 
-                className="bg-gray-800 border-gray-700 text-white rounded-full text-sm h-9 sm:h-10"
+                className="bg-gray-800 border-gray-700 text-white rounded-full"
               />
               <Button 
                 size="icon" 
                 onClick={() => addComment.mutate()} 
                 disabled={addComment.isPending || !newCommentText.trim()} 
-                className="rounded-full bg-blue-600 hover:bg-blue-500 h-9 w-9 sm:h-10 sm:w-10"
+                className="rounded-full bg-blue-600 hover:bg-blue-500"
               >
-                <Send className="h-3 w-3 sm:h-4 sm:w-4"/>
+                <Send className="h-4 w-4"/>
               </Button>
             </div>
           </div>
