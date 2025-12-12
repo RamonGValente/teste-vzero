@@ -8,7 +8,8 @@ import {
   Clock, Loader2, Globe,
   Menu, ArrowDown,
   Film, Plus, Bomb, Timer,
-  X, Camera as CameraIcon, Video as VideoIcon
+  X, Camera as CameraIcon, Video as VideoIcon,
+  Wand2, Sparkles
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -18,10 +19,173 @@ import { Badge } from "@/components/ui/badge";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { cn } from "@/lib/utils";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
+
+/* ---------- CONFIGURAÇÕES DE ESTILO IA ---------- */
+const AI_STYLES = [
+  { id: 'rejuvenate', label: 'Rejuvenescer', icon: Sparkles, color: 'bg-green-100 text-green-600', prompt: 'make them look 20 years younger, remove deep wrinkles, face lift, glowing youthful skin, high fidelity, 8k, soft studio lighting', filter: 'rejuvenate' },
+  { id: 'beauty', label: 'Embelezar', icon: Sparkles, color: 'bg-pink-100 text-pink-600', prompt: 'high quality, beautified, perfect lighting, 8k, smooth skin, makeup, glamour', filter: 'beauty' },
+  { id: 'hdr', label: 'HDR / Nitidez', icon: Sparkles, color: 'bg-orange-100 text-orange-600', prompt: 'hdr, high contrast, sharp focus, detailed, hyperrealistic, 4k', filter: 'hdr' },
+  { id: 'oil', label: 'Pintura a Óleo', icon: Sparkles, color: 'bg-yellow-100 text-yellow-700', prompt: 'oil painting style, van gogh style, thick brushstrokes, artistic, masterpiece', filter: 'oil' },
+  { id: 'cartoon', label: 'Cartoon 3D', icon: Sparkles, color: 'bg-blue-50 text-blue-500', prompt: '3d pixar style character, cute, big eyes, disney style, smooth render', filter: 'cartoon' },
+  { id: 'sketch', label: 'Esboço', icon: Sparkles, color: 'bg-stone-100 text-stone-600', prompt: 'pencil sketch, charcoal drawing, rough lines, black and white sketch', filter: 'sketch' },
+  { id: 'fantasy', label: 'Fantasia', icon: Sparkles, color: 'bg-indigo-100 text-indigo-600', prompt: 'fantasy art, magical atmosphere, glowing lights, ethereal, dreamlike', filter: 'fantasy' },
+  { id: 'bw', label: 'Preto & Branco', icon: Sparkles, color: 'bg-gray-100 text-gray-600', prompt: 'black and white photography, artistic, monochrome, noir film', filter: 'bw' },
+  { id: 'vintage', label: 'Vintage 1950', icon: Sparkles, color: 'bg-amber-100 text-amber-700', prompt: 'vintage photo, 1950s style, sepia, grain, old photo texture', filter: 'vintage' },
+  { id: 'cyberpunk', label: 'Cyberpunk', icon: Sparkles, color: 'bg-purple-100 text-purple-600', prompt: 'cyberpunk style, neon lights, magenta and cyan, futuristic, scifi city', filter: 'cyberpunk' },
+  { id: 'matrix', label: 'Matrix', icon: Sparkles, color: 'bg-emerald-100 text-emerald-600', prompt: 'matrix code style, green tint, hacker atmosphere, digital rain', filter: 'matrix' },
+  { id: 'anime', label: 'Anime', icon: Sparkles, color: 'bg-blue-100 text-blue-600', prompt: 'anime style, vibrant colors, 2d animation style, japanese animation', filter: 'anime' },
+  { id: 'terror', label: 'Terror', icon: Sparkles, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
+  { id: 'cold', label: 'Frio / Inverno', icon: Sparkles, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
+];
+
+/* ---------- FUNÇÕES DE IA PARA IMAGENS ---------- */
+const fileToBase64 = (file: File): Promise<string> => {
+  return new Promise((res, rej) => { 
+    const r = new FileReader(); 
+    r.onload = () => res(r.result as string); 
+    r.onerror = rej; 
+    r.readAsDataURL(file); 
+  });
+};
+
+const createFileFromBase64 = async (base64: string, filename: string): Promise<File> => {
+  const res = await fetch(base64); 
+  const blob = await res.blob(); 
+  return new File([blob], filename, { type: "image/jpeg", lastModified: Date.now() });
+};
+
+const processImageLocally = async (base64Image: string, filterType: string): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const img = new Image(); 
+    img.crossOrigin = "Anonymous";
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d')!;
+      canvas.width = img.width; 
+      canvas.height = img.height;
+      ctx.drawImage(img, 0, 0);
+
+      // Aplicar filtros baseados no tipo
+      if (filterType === 'rejuvenate') {
+        const tempCanvas = document.createElement('canvas');
+        tempCanvas.width = canvas.width; 
+        tempCanvas.height = canvas.height;
+        const tempCtx = tempCanvas.getContext('2d')!;
+        tempCtx.filter = 'blur(12px)'; 
+        tempCtx.drawImage(img, 0, 0);
+
+        ctx.globalCompositeOperation = 'screen';
+        ctx.globalAlpha = 0.6;
+        ctx.drawImage(tempCanvas, 0, 0);
+
+        ctx.globalCompositeOperation = 'overlay';
+        ctx.globalAlpha = 0.4;
+        ctx.filter = 'contrast(1.2)';
+        ctx.drawImage(img, 0, 0);
+
+        ctx.globalCompositeOperation = 'soft-light';
+        ctx.globalAlpha = 0.3;
+        ctx.fillStyle = '#ffb7a5';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.globalAlpha = 1.0;
+        ctx.filter = 'saturate(1.1)';
+        ctx.drawImage(canvas, 0, 0);
+      }
+      else if (filterType === 'oil') { 
+        ctx.filter = 'saturate(1.8) contrast(1.2) brightness(1.1)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'cartoon') { 
+        ctx.filter = 'saturate(2.0) contrast(1.3)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'sketch') { 
+        ctx.filter = 'grayscale(1) contrast(2.0) brightness(1.3)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'fantasy') {
+        ctx.filter = 'contrast(1.2) saturate(1.3)'; 
+        ctx.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = 'screen';
+        const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height); 
+        g.addColorStop(0, 'rgba(100,0,255,0.2)'); 
+        g.addColorStop(1, 'rgba(255,0,100,0.2)'); 
+        ctx.fillStyle = g; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      else if (filterType === 'beauty') { 
+        ctx.filter = 'brightness(1.05) saturate(1.2) contrast(1.05)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'hdr') { 
+        ctx.filter = 'contrast(1.3) saturate(1.3) brightness(1.1)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'bw') { 
+        ctx.filter = 'grayscale(1.0) contrast(1.2)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'vintage') { 
+        ctx.filter = 'sepia(0.8) brightness(0.9) contrast(1.2)'; 
+        ctx.drawImage(canvas, 0, 0); 
+        ctx.globalCompositeOperation = 'overlay'; 
+        ctx.fillStyle = 'rgba(255,200,100,0.15)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height); 
+      }
+      else if (filterType === 'cyberpunk') {
+        ctx.filter = 'contrast(1.4) saturate(1.5)'; 
+        ctx.drawImage(canvas, 0, 0);
+        ctx.globalCompositeOperation = 'color-dodge'; 
+        const g = ctx.createLinearGradient(0, 0, canvas.width, canvas.height); 
+        g.addColorStop(0, 'rgba(255,0,255,0.3)'); 
+        g.addColorStop(1, 'rgba(0,255,255,0.3)'); 
+        ctx.fillStyle = g; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+      else if (filterType === 'matrix') { 
+        ctx.filter = 'grayscale(1) contrast(1.5)'; 
+        ctx.drawImage(canvas, 0, 0); 
+        ctx.globalCompositeOperation = 'screen'; 
+        ctx.fillStyle = 'rgba(0,255,0,0.4)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height); 
+      }
+      else if (filterType === 'anime') { 
+        ctx.filter = 'saturate(2.5) contrast(1.2)'; 
+        ctx.drawImage(canvas, 0, 0); 
+      }
+      else if (filterType === 'terror') { 
+        ctx.filter = 'grayscale(0.8) contrast(1.8)'; 
+        ctx.drawImage(canvas, 0, 0); 
+        ctx.globalCompositeOperation = 'multiply'; 
+        ctx.fillStyle = 'rgba(100,0,0,0.4)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height); 
+      }
+      else if (filterType === 'cold') { 
+        ctx.filter = 'saturate(0.8) brightness(1.1)'; 
+        ctx.drawImage(canvas, 0, 0); 
+        ctx.globalCompositeOperation = 'soft-light'; 
+        ctx.fillStyle = 'rgba(0,200,255,0.3)'; 
+        ctx.fillRect(0, 0, canvas.width, canvas.height); 
+      }
+
+      ctx.filter = 'none'; 
+      ctx.globalCompositeOperation = 'source-over';
+      ctx.font = '16px sans-serif'; 
+      ctx.fillStyle = 'rgba(255,255,255,0.6)'; 
+      ctx.fillText('✨ AI Filter', 10, canvas.height - 10);
+      
+      resolve(canvas.toDataURL('image/jpeg', 0.9));
+    };
+    img.onerror = (e) => reject(e); 
+    img.src = base64Image;
+  });
+};
 
 /* ---------- FUNÇÕES DE COMPRESSÃO DE ARQUIVOS ---------- */
 const compressImage = async (file: File, maxWidth = 1200, quality = 0.7): Promise<File> => {
@@ -255,6 +419,17 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
   const [uploading, setUploading] = useState(false);
   const [postType, setPostType] = useState<'standard' | 'viral_clips'>('standard');
   const [showMediaOptions, setShowMediaOptions] = useState(false);
+  const [aiEditing, setAiEditing] = useState<{
+    open: boolean; 
+    imageIndex: number; 
+    selectedStyle: string | null; 
+    loading: boolean;
+  }>({
+    open: false, 
+    imageIndex: -1, 
+    selectedStyle: null, 
+    loading: false
+  });
   
   const galleryInputRef = useRef<HTMLInputElement>(null);
   const cameraPhotoInputRef = useRef<HTMLInputElement>(null);
@@ -336,6 +511,47 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
 
   const removeMedia = () => {
     setMediaFiles([]);
+  };
+
+  /* --- Funções de IA para Imagens --- */
+  const handleApplyStyle = async (styleId: string) => {
+    const selectedStyle = AI_STYLES.find(s => s.id === styleId);
+    if (!selectedStyle || aiEditing.imageIndex === -1) return;
+    
+    setAiEditing(prev => ({...prev, loading: true, selectedStyle: styleId}));
+    
+    try {
+      const base64Image = await fileToBase64(mediaFiles[aiEditing.imageIndex]);
+      let processed: string;
+      
+      try {
+        const res = await fetch('/.netlify/functions/huggingface-proxy', { 
+          method: "POST", 
+          headers: { "Content-Type": "application/json" }, 
+          body: JSON.stringify({ prompt: selectedStyle.prompt, image: base64Image }) 
+        });
+        const json = await res.json();
+        
+        if (!res.ok || !json.success) throw new Error("Fallback");
+        processed = json.image;
+        toast({ title: "✨ Sucesso Nuvem", description: selectedStyle.label });
+      } catch {
+        processed = await processImageLocally(base64Image, selectedStyle.filter);
+        toast({ title: "⚡ Sucesso Local", description: selectedStyle.label });
+      }
+      
+      const newFile = await createFileFromBase64(processed, `ai-${styleId}-${Date.now()}.jpg`);
+      setMediaFiles(p => { 
+        const n = [...p]; 
+        n[aiEditing.imageIndex] = newFile; 
+        return n; 
+      });
+      
+      setAiEditing({open: false, imageIndex: -1, selectedStyle: null, loading: false});
+    } catch { 
+      toast({ variant: "destructive", title: "Erro ao aplicar estilo" }); 
+      setAiEditing(p => ({...p, loading: false})); 
+    }
   };
 
   const handleCreatePost = async () => {
@@ -517,241 +733,320 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[95vw] sm:w-[90vw] max-h-[90vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl p-0">
-        <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <span className="text-base sm:text-lg font-bold">Criar Novo Post</span>
-              <Badge className={cn(
-                "text-xs",
-                postType === 'viral_clips' 
-                  ? "bg-gradient-to-r from-pink-500 to-purple-500" 
-                  : "bg-gradient-to-r from-yellow-500 to-orange-500"
-              )}>
-                {postType === 'viral_clips' ? (
-                  <Film className="h-3 w-3 mr-1" />
-                ) : (
-                  <Timer className="h-3 w-3 mr-1" />
-                )}
-                {postType === 'viral_clips' ? 'Clip' : '60min'}
-              </Badge>
+    <>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent className="bg-gray-900 border-gray-800 text-white max-w-lg w-[95vw] sm:w-[90vw] max-h-[90vh] sm:max-h-[85vh] overflow-y-auto shadow-2xl p-0">
+          <div className="sticky top-0 z-10 bg-gray-900 border-b border-gray-800 p-3 sm:p-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <span className="text-base sm:text-lg font-bold">Criar Novo Post</span>
+                <Badge className={cn(
+                  "text-xs",
+                  postType === 'viral_clips' 
+                    ? "bg-gradient-to-r from-pink-500 to-purple-500" 
+                    : "bg-gradient-to-r from-yellow-500 to-orange-500"
+                )}>
+                  {postType === 'viral_clips' ? (
+                    <Film className="h-3 w-3 mr-1" />
+                  ) : (
+                    <Timer className="h-3 w-3 mr-1" />
+                  )}
+                  {postType === 'viral_clips' ? 'Clip' : '60min'}
+                </Badge>
+              </div>
+              <Button
+                variant="ghost"
+                size="icon"
+                className="h-7 w-7 sm:h-8 sm:w-8"
+                onClick={() => onOpenChange(false)}
+              >
+                <X className="h-3 w-3 sm:h-4 sm:w-4" />
+              </Button>
             </div>
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-7 w-7 sm:h-8 sm:w-8"
-              onClick={() => onOpenChange(false)}
-            >
-              <X className="h-3 w-3 sm:h-4 sm:w-4" />
-            </Button>
-          </div>
-          <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            {postType === 'viral_clips' 
-              ? "Crie um Clip Viral (apenas vídeos)" 
-              : "Seu post será enviado para a Arena para votação"}
-          </p>
-        </div>
-        
-        <div className="p-3 sm:p-4">
-          <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
-            <Button 
-              variant={postType === 'standard' ? "default" : "outline"} 
-              onClick={() => {
-                setPostType('standard');
-                setMediaFiles([]);
-              }} 
-              className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
-            >
-              <Globe className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Post Normal
-            </Button>
-            <Button 
-              variant={postType === 'viral_clips' ? "default" : "outline"} 
-              onClick={() => {
-                setPostType('viral_clips');
-                setMediaFiles([]);
-              }} 
-              className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
-            >
-              <Film className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Clip Viral
-            </Button>
+            <p className="text-xs sm:text-sm text-gray-400 mt-1">
+              {postType === 'viral_clips' 
+                ? "Crie um Clip Viral (apenas vídeos)" 
+                : "Seu post será enviado para a Arena para votação"}
+            </p>
           </div>
           
-          <textarea 
-            value={newPost} 
-            onChange={(e) => setNewPost(e.target.value)} 
-            placeholder={
-              postType === 'viral_clips' 
-                ? "Descreva seu Clip Viral..." 
-                : "No que você está pensando? Seu post será votado na Arena por 60 minutos..."
-            } 
-            className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-3 sm:p-4 min-h-[80px] sm:min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none text-sm sm:text-base" 
-          />
-          
-          <input 
-            type="file" 
-            ref={galleryInputRef} 
-            className="hidden" 
-            accept={mediaTypes.gallery || ''}
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          <input 
-            type="file" 
-            ref={cameraPhotoInputRef} 
-            className="hidden" 
-            accept={mediaTypes.cameraPhoto || ''}
-            capture="environment"
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          <input 
-            type="file" 
-            ref={cameraVideoInputRef} 
-            className="hidden" 
-            accept={mediaTypes.cameraVideo || ''}
-            capture="environment"
-            onChange={(e) => handleFileSelect(e.target.files)}
-          />
-          
-          <div className="mt-3 sm:mt-4">
-            {mediaFiles.length === 0 ? (
-              <>
-                {!showMediaOptions ? (
-                  <Button
-                    type="button"
-                    variant="outline"
-                    className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-12 sm:h-14 text-sm sm:text-base"
-                    onClick={() => setShowMediaOptions(true)}
-                  >
-                    <Plus className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
-                    {postType === 'viral_clips' ? 'Adicionar Vídeo' : 'Adicionar Mídia'}
-                  </Button>
-                ) : (
-                  <div className="space-y-3 animate-in fade-in">
-                    {renderMediaOptions()}
-                    
+          <div className="p-3 sm:p-4">
+            <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <Button 
+                variant={postType === 'standard' ? "default" : "outline"} 
+                onClick={() => {
+                  setPostType('standard');
+                  setMediaFiles([]);
+                }} 
+                className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'standard' ? "bg-blue-600 hover:bg-blue-700" : "border-gray-700")}
+              >
+                <Globe className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Post Normal
+              </Button>
+              <Button 
+                variant={postType === 'viral_clips' ? "default" : "outline"} 
+                onClick={() => {
+                  setPostType('viral_clips');
+                  setMediaFiles([]);
+                }} 
+                className={cn("h-10 sm:h-12 text-xs sm:text-sm", postType === 'viral_clips' ? "bg-pink-600 hover:bg-pink-700" : "border-gray-700")}
+              >
+                <Film className="mr-1 sm:mr-2 h-3 w-3 sm:h-4 sm:w-4"/> Clip Viral
+              </Button>
+            </div>
+            
+            <textarea 
+              value={newPost} 
+              onChange={(e) => setNewPost(e.target.value)} 
+              placeholder={
+                postType === 'viral_clips' 
+                  ? "Descreva seu Clip Viral..." 
+                  : "No que você está pensando? Seu post será votado na Arena por 60 minutos..."
+              } 
+              className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-3 sm:p-4 min-h-[80px] sm:min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none text-sm sm:text-base" 
+            />
+            
+            <input 
+              type="file" 
+              ref={galleryInputRef} 
+              className="hidden" 
+              accept={mediaTypes.gallery || ''}
+              onChange={(e) => handleFileSelect(e.target.files)}
+            />
+            <input 
+              type="file" 
+              ref={cameraPhotoInputRef} 
+              className="hidden" 
+              accept={mediaTypes.cameraPhoto || ''}
+              capture="environment"
+              onChange={(e) => handleFileSelect(e.target.files)}
+            />
+            <input 
+              type="file" 
+              ref={cameraVideoInputRef} 
+              className="hidden" 
+              accept={mediaTypes.cameraVideo || ''}
+              capture="environment"
+              onChange={(e) => handleFileSelect(e.target.files)}
+            />
+            
+            <div className="mt-3 sm:mt-4">
+              {mediaFiles.length === 0 ? (
+                <>
+                  {!showMediaOptions ? (
                     <Button
                       type="button"
-                      variant="ghost"
-                      className="w-full text-gray-400 hover:text-white text-sm"
-                      onClick={() => setShowMediaOptions(false)}
+                      variant="outline"
+                      className="w-full border-dashed border-2 border-gray-700 bg-gray-800/30 hover:bg-gray-800/50 h-12 sm:h-14 text-sm sm:text-base"
+                      onClick={() => setShowMediaOptions(true)}
                     >
-                      Cancelar
+                      <Plus className="mr-2 h-4 w-4 sm:h-5 sm:w-5" />
+                      {postType === 'viral_clips' ? 'Adicionar Vídeo' : 'Adicionar Mídia'}
                     </Button>
+                  ) : (
+                    <div className="space-y-3 animate-in fade-in">
+                      {renderMediaOptions()}
+                      
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        className="w-full text-gray-400 hover:text-white text-sm"
+                        onClick={() => setShowMediaOptions(false)}
+                      >
+                        Cancelar
+                      </Button>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800/30">
+                  {mediaFiles[0].type.startsWith('image/') ? (
+                    <>
+                      <img 
+                        src={URL.createObjectURL(mediaFiles[0])} 
+                        alt="Preview" 
+                        className="w-full h-40 sm:h-48 object-contain bg-black"
+                      />
+                      <div className="absolute top-2 right-2 flex gap-2">
+                        <Button
+                          type="button"
+                          variant="secondary"
+                          size="icon"
+                          className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-blue-600 hover:bg-blue-700"
+                          onClick={() => setAiEditing({ 
+                            open: true, 
+                            imageIndex: 0, 
+                            selectedStyle: null, 
+                            loading: false 
+                          })}
+                        >
+                          <Wand2 className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="destructive"
+                          size="icon"
+                          className="h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
+                          onClick={removeMedia}
+                        >
+                          <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                        </Button>
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <video 
+                        src={URL.createObjectURL(mediaFiles[0])} 
+                        controls
+                        className="w-full h-40 sm:h-48 object-contain bg-black"
+                      />
+                      <Button
+                        type="button"
+                        variant="destructive"
+                        size="icon"
+                        className="absolute top-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
+                        onClick={removeMedia}
+                      >
+                        <X className="h-3 w-3 sm:h-4 sm:w-4" />
+                      </Button>
+                    </>
+                  )}
+                  <div className="p-2 bg-black/50 absolute bottom-0 left-0 right-0">
+                    <p className="text-xs text-white truncate">
+                      {mediaFiles[0].name} ({Math.round(mediaFiles[0].size / 1024 / 1024 * 100) / 100}MB)
+                    </p>
                   </div>
-                )}
-              </>
-            ) : (
-              <div className="relative rounded-lg overflow-hidden border border-gray-700 bg-gray-800/30">
-                {mediaFiles[0].type.startsWith('image/') ? (
-                  <>
-                    <img 
-                      src={URL.createObjectURL(mediaFiles[0])} 
-                      alt="Preview" 
-                      className="w-full h-40 sm:h-48 object-contain bg-black"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
-                      onClick={removeMedia}
-                    >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                    </Button>
-                  </>
-                ) : (
-                  <>
-                    <video 
-                      src={URL.createObjectURL(mediaFiles[0])} 
-                      controls
-                      className="w-full h-40 sm:h-48 object-contain bg-black"
-                    />
-                    <Button
-                      type="button"
-                      variant="destructive"
-                      size="icon"
-                      className="absolute top-2 right-2 h-7 w-7 sm:h-8 sm:w-8 rounded-full bg-red-600 hover:bg-red-700"
-                      onClick={removeMedia}
-                    >
-                      <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                    </Button>
-                  </>
-                )}
-                <div className="p-2 bg-black/50 absolute bottom-0 left-0 right-0">
-                  <p className="text-xs text-white truncate">
-                    {mediaFiles[0].name} ({Math.round(mediaFiles[0].size / 1024 / 1024 * 100) / 100}MB)
+                </div>
+              )}
+            </div>
+            
+            <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
+              <div className="flex items-start gap-3">
+                <div className={cn(
+                  "p-2 rounded-full",
+                  postType === 'viral_clips' 
+                    ? "bg-gradient-to-br from-pink-600 to-purple-600"
+                    : "bg-gradient-to-br from-blue-600 to-purple-600"
+                )}>
+                  {postType === 'viral_clips' ? (
+                    <Film className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  ) : (
+                    <Timer className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  )}
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-bold text-blue-300 text-xs sm:text-sm">
+                    {postType === 'viral_clips' ? 'Clip Viral' : 'Sistema de Votação'}
+                  </h4>
+                  <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
+                    <div className="flex items-center gap-2">
+                      <div className="bg-red-500/20 p-1 rounded-full">
+                        <Heart className="h-3 w-3 text-red-400" />
+                      </div>
+                      <span className="text-xs">Coração = +1</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <div className="bg-gray-700/50 p-1 rounded-full">
+                        <Bomb className="h-3 w-3 text-gray-400" />
+                      </div>
+                      <span className="text-xs">Bomba = -1</span>
+                    </div>
+                  </div>
+                  <p className="text-xs text-blue-400/80 mt-2">
+                    {postType === 'viral_clips' 
+                      ? "🎬 Seu Clip Viral será votado por 60 minutos. Mais corações que bombas = clip aprovado!"
+                      : "⏱️ 60 minutos de votação. Mais corações que bombas = post aprovado!"}
                   </p>
                 </div>
               </div>
-            )}
-          </div>
-          
-          <div className="mt-3 sm:mt-4 p-3 sm:p-4 bg-gradient-to-r from-blue-900/20 to-purple-900/20 border border-blue-800/30 rounded-lg">
-            <div className="flex items-start gap-3">
-              <div className={cn(
-                "p-2 rounded-full",
+            </div>
+            
+            <Button 
+              onClick={handleCreatePost} 
+              disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
+              className={cn(
+                "w-full mt-3 sm:mt-4 h-10 sm:h-12 font-bold text-sm sm:text-md transition-all disabled:opacity-50 disabled:cursor-not-allowed",
                 postType === 'viral_clips' 
-                  ? "bg-gradient-to-br from-pink-600 to-purple-600"
-                  : "bg-gradient-to-br from-blue-600 to-purple-600"
-              )}>
-                {postType === 'viral_clips' ? (
-                  <Film className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
-                ) : (
-                  <Timer className="h-3 w-3 sm:h-4 sm:w-4 text-white" />
+                  ? "bg-gradient-to-r from-pink-600 to-purple-600 hover:shadow-pink-500/25" 
+                  : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/25"
+              )}
+            >
+              {uploading ? (
+                <div className="flex items-center">
+                  <Loader2 className="animate-spin mr-2 h-3 w-3 sm:h-4 sm:w-4" />
+                  Enviando...
+                </div>
+              ) : (
+                <>
+                  <Send className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
+                  {postType === 'viral_clips' ? 'Enviar Clip para Votação' : 'Enviar para Votação'}
+                </>
+              )}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Estilo IA */}
+      <Dialog open={aiEditing.open} onOpenChange={o => setAiEditing(p => ({...p, open: o}))}>
+        <DialogContent className="sm:max-w-md rounded-2xl bg-gray-900 border-gray-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wand2 className="h-5 w-5 text-purple-400"/> 
+              Estúdio Mágico
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {mediaFiles[aiEditing.imageIndex] && (
+              <div className="relative aspect-square rounded-xl overflow-hidden bg-gray-800 flex items-center justify-center">
+                <img 
+                  src={URL.createObjectURL(mediaFiles[aiEditing.imageIndex])} 
+                  className="w-full h-full object-contain"
+                  alt="Imagem para edição"
+                />
+                {aiEditing.loading && (
+                  <div className="absolute inset-0 bg-black/60 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                    <Wand2 className="h-10 w-10 animate-spin text-purple-400 mb-2"/>
+                    <span className="font-bold">Aplicando mágica...</span>
+                  </div>
                 )}
               </div>
-              <div className="flex-1">
-                <h4 className="font-bold text-blue-300 text-xs sm:text-sm">
-                  {postType === 'viral_clips' ? 'Clip Viral' : 'Sistema de Votação'}
-                </h4>
-                <div className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 mt-2">
-                  <div className="flex items-center gap-2">
-                    <div className="bg-red-500/20 p-1 rounded-full">
-                      <Heart className="h-3 w-3 text-red-400" />
-                    </div>
-                    <span className="text-xs">Coração = +1</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <div className="bg-gray-700/50 p-1 rounded-full">
-                      <Bomb className="h-3 w-3 text-gray-400" />
-                    </div>
-                    <span className="text-xs">Bomba = -1</span>
-                  </div>
-                </div>
-                <p className="text-xs text-blue-400/80 mt-2">
-                  {postType === 'viral_clips' 
-                    ? "🎬 Seu Clip Viral será votado por 60 minutos. Mais corações que bombas = clip aprovado!"
-                    : "⏱️ 60 minutos de votação. Mais corações que bombas = post aprovado!"}
-                </p>
+            )}
+            <ScrollArea className="h-48">
+              <div className="grid grid-cols-2 gap-2 pr-4">
+                {AI_STYLES.map(s => { 
+                  const Icon = s.icon; 
+                  return (
+                    <button 
+                      key={s.id} 
+                      disabled={aiEditing.loading} 
+                      onClick={() => handleApplyStyle(s.id)} 
+                      className={cn(
+                        "flex items-center gap-3 p-3 rounded-xl border border-gray-700 text-left transition-all hover:bg-gray-800", 
+                        aiEditing.loading && "opacity-50"
+                      )}
+                    >
+                      <div className={cn("p-2 rounded-lg", s.color)}>
+                        <Icon className="h-5 w-5"/>
+                      </div>
+                      <span className="text-sm font-medium">{s.label}</span>
+                    </button>
+                  );
+                })}
               </div>
-            </div>
+            </ScrollArea>
           </div>
-          
-          <Button 
-            onClick={handleCreatePost} 
-            disabled={uploading || (!newPost.trim() && mediaFiles.length === 0)} 
-            className={cn(
-              "w-full mt-3 sm:mt-4 h-10 sm:h-12 font-bold text-sm sm:text-md transition-all disabled:opacity-50 disabled:cursor-not-allowed",
-              postType === 'viral_clips' 
-                ? "bg-gradient-to-r from-pink-600 to-purple-600 hover:shadow-pink-500/25" 
-                : "bg-gradient-to-r from-blue-600 to-purple-600 hover:shadow-blue-500/25"
-            )}
-          >
-            {uploading ? (
-              <div className="flex items-center">
-                <Loader2 className="animate-spin mr-2 h-3 w-3 sm:h-4 sm:w-4" />
-                Enviando...
-              </div>
-            ) : (
-              <>
-                <Send className="w-3 h-3 sm:w-4 sm:h-4 mr-2" />
-                {postType === 'viral_clips' ? 'Enviar Clip para Votação' : 'Enviar para Votação'}
-              </>
-            )}
-          </Button>
-        </div>
-      </DialogContent>
-    </Dialog>
+          <DialogFooter>
+            <Button 
+              variant="ghost" 
+              onClick={() => setAiEditing(p => ({...p, open: false}))}
+              className="text-gray-400 hover:text-white"
+            >
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
@@ -1163,7 +1458,7 @@ export default function WorldFlow() {
 
         <div className="justify-self-center flex flex-col items-center">
           <h1 className="text-xl sm:text-2xl font-black tracking-tighter text-white">
-            World<span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
+            World <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-400 to-purple-500">Flow</span>
           </h1>
           {currentFeedItem?.type === 'clip_container' && (
             <span className="text-[8px] sm:text-[9px] text-pink-400 font-bold uppercase tracking-[0.2em] -mt-1">Clips</span>
