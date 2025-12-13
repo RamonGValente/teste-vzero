@@ -6,10 +6,11 @@ import {
   Camera, Video, Images, Play,
   ChevronLeft, ChevronRight, Volume2, VolumeX,
   Clock, Loader2, Globe,
-  Menu, ArrowDown,
+  Menu, ArrowDown, ArrowUp, ArrowLeft, ArrowRight,
   Film, Plus, Bomb, Timer,
   X, Camera as CameraIcon, Video as VideoIcon,
-  Wand2, Sparkles
+  Wand2, Sparkles, Info, Check, HelpCircle,
+  MoveVertical, MoveHorizontal, Hand
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -41,6 +42,280 @@ const AI_STYLES = [
   { id: 'terror', label: 'Terror', icon: Sparkles, color: 'bg-red-100 text-red-600', prompt: 'horror style, dark atmosphere, scary, zombie apocalypse, blood', filter: 'terror' },
   { id: 'cold', label: 'Frio / Inverno', icon: Sparkles, color: 'bg-cyan-100 text-cyan-600', prompt: 'cold atmosphere, winter, blue tones, ice, snow', filter: 'cold' },
 ];
+
+/* ---------- COMPONENTE DE TUTORIAL CORRIGIDO ---------- */
+interface TutorialOverlayProps {
+  isVisible: boolean;
+  currentStep: number;
+  onClose: () => void;
+  onNext: () => void;
+  currentFeedItem: any;
+}
+
+const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
+  isVisible,
+  currentStep,
+  onClose,
+  onNext,
+  currentFeedItem
+}) => {
+  const [mounted, setMounted] = useState(false);
+
+  // Efeito para controlar a montagem do componente
+  useEffect(() => {
+    if (isVisible) {
+      setMounted(true);
+    } else {
+      const timer = setTimeout(() => setMounted(false), 300);
+      return () => clearTimeout(timer);
+    }
+  }, [isVisible]);
+
+  const tutorialSteps = [
+    {
+      title: "🎉 Bem-vindo ao World Flow!",
+      description: "Explore os posts mais votados da comunidade. Vamos te mostrar como navegar.",
+      icon: <Globe className="w-6 h-6 text-white" />,
+      showGesture: false,
+      gestureType: null,
+      position: 'center'
+    },
+    {
+      title: "📱 Navegação Vertical",
+      description: "Deslize para CIMA ou para BAIXO para navegar entre os posts.",
+      icon: <MoveVertical className="w-6 h-6 text-white" />,
+      showGesture: true,
+      gestureType: 'vertical',
+      position: 'top'
+    },
+    {
+      title: "🎬 Acessando os Clips",
+      description: "Deslize para a DIREITA a partir de qualquer post para acessar a seção de Clips!",
+      icon: <Film className="w-6 h-6 text-white" />,
+      showGesture: true,
+      gestureType: 'right_swipe',
+      position: 'center'
+    },
+    {
+      title: "↔️ Navegando entre Clips",
+      description: "Dentro da seção de Clips, deslize para ESQUERDA ou DIREITA para navegar entre os vídeos.",
+      icon: <MoveHorizontal className="w-6 h-6 text-white" />,
+      showGesture: true,
+      gestureType: 'horizontal',
+      position: 'center'
+    },
+    {
+      title: "✨ Interações Rápidas",
+      description: "Toque nos ícones para curtir, comentar e compartilhar posts.",
+      icon: <Heart className="w-6 h-6 text-white" />,
+      showGesture: true,
+      gestureType: 'tap',
+      position: 'bottom'
+    },
+    {
+      title: "🚀 Tudo pronto!",
+      description: "Agora você já sabe como navegar. Divirta-se explorando!",
+      icon: <Check className="w-6 h-6 text-white" />,
+      showGesture: false,
+      gestureType: null,
+      position: 'center'
+    }
+  ];
+
+  if (!mounted || !isVisible) return null;
+
+  const currentStepData = tutorialSteps[currentStep];
+
+  const renderGesture = () => {
+    if (!currentStepData.showGesture) return null;
+
+    if (currentStepData.gestureType === 'vertical') {
+      return (
+        <div className="absolute top-1/4 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+          <div className="bg-gradient-to-r from-blue-500/20 to-purple-500/20 backdrop-blur-sm border border-white/10 rounded-2xl p-6 animate-pulse">
+            <div className="flex flex-col items-center gap-4">
+              <ArrowUp className="w-10 h-10 text-blue-300 animate-bounce" />
+              <div className="flex items-center gap-6">
+                <span className="text-sm font-medium text-white/80">Para cima</span>
+                <div className="w-8 h-1 bg-gradient-to-r from-blue-500 to-purple-500 rounded-full"></div>
+                <span className="text-sm font-medium text-white/80">Para baixo</span>
+              </div>
+              <ArrowDown className="w-10 h-10 text-blue-300 animate-bounce" />
+            </div>
+            <div className="text-center mt-4">
+              <p className="text-xs text-blue-200 font-medium">Deslize verticalmente</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (currentStepData.gestureType === 'right_swipe') {
+      return (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+          <div className="bg-gradient-to-r from-pink-500/20 to-purple-500/20 backdrop-blur-sm border border-white/10 rounded-2xl p-6 animate-pulse">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-4">
+                <div className="flex flex-col items-center">
+                  <div className="w-32 h-32 bg-gradient-to-r from-gray-800 to-gray-900 border-2 border-pink-500/30 rounded-xl flex items-center justify-center relative overflow-hidden">
+                    <div className="absolute inset-0 bg-gradient-to-r from-transparent via-pink-500/10 to-transparent animate-pulse"></div>
+                    <div className="text-center">
+                      <div className="flex items-center justify-center mb-2">
+                        <span className="text-xs text-pink-300 bg-pink-900/50 px-2 py-1 rounded-full">Post Normal</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <ArrowRight className="w-8 h-8 text-pink-400 animate-bounce" />
+                        <span className="text-lg font-bold text-pink-300">→</span>
+                        <div className="bg-gradient-to-r from-pink-600 to-purple-600 w-24 h-12 rounded-lg flex items-center justify-center">
+                          <Film className="w-6 h-6 text-white" />
+                          <span className="text-xs font-bold ml-2 text-white">Clips</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-pink-200 font-medium mt-2">Deslize para a direita para acessar os Clips</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (currentStepData.gestureType === 'horizontal') {
+      return (
+        <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 pointer-events-none">
+          <div className="bg-gradient-to-r from-pink-500/20 to-purple-500/20 backdrop-blur-sm border border-white/10 rounded-2xl p-6 animate-pulse">
+            <div className="flex flex-col items-center gap-4">
+              <div className="flex items-center gap-8">
+                <ArrowLeft className="w-10 h-10 text-pink-300 animate-bounce" />
+                <div className="flex flex-col items-center gap-2">
+                  <div className="w-24 h-1 bg-gradient-to-r from-pink-500 to-purple-500 rounded-full"></div>
+                  <p className="text-xs text-pink-200 font-medium">Deslize horizontalmente</p>
+                </div>
+                <ArrowRight className="w-10 h-10 text-pink-300 animate-bounce" />
+              </div>
+              <div className="text-center mt-4">
+                <p className="text-xs text-pink-200 font-medium">Para navegar entre os Clips</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      );
+    }
+
+    if (currentStepData.gestureType === 'tap') {
+      return (
+        <div className="absolute bottom-32 right-8 z-50 pointer-events-none">
+          <div className="bg-gradient-to-r from-green-500/20 to-emerald-500/20 backdrop-blur-sm border border-white/10 rounded-2xl p-4 animate-pulse">
+            <div className="flex flex-col items-center gap-2">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-r from-green-500 to-emerald-500 flex items-center justify-center">
+                <Hand className="w-6 h-6 text-white" />
+              </div>
+              <p className="text-xs text-green-200 font-medium">Toque aqui</p>
+            </div>
+            <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-l-transparent border-r-transparent border-t-emerald-300"></div>
+          </div>
+        </div>
+      );
+    }
+
+    return null;
+  };
+
+  const positionClasses = {
+    top: "top-10 left-1/2 transform -translate-x-1/2",
+    center: "top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2",
+    bottom: "bottom-24 left-1/2 transform -translate-x-1/2"
+  };
+
+  return (
+    <>
+      {/* Overlay de fundo */}
+      <div className="fixed inset-0 z-[100] bg-black/80 backdrop-blur-sm transition-opacity duration-300">
+        
+        {/* Card do tutorial */}
+        <div className={cn(
+          "absolute z-[101] bg-gradient-to-br from-gray-900/95 to-black/95 border border-white/10 rounded-2xl shadow-2xl p-6 max-w-sm w-[90vw] backdrop-blur-sm transition-all duration-300",
+          positionClasses[currentStepData.position as keyof typeof positionClasses]
+        )}>
+          <div className="flex items-start gap-4 mb-4">
+            <div className="bg-gradient-to-r from-blue-600 to-purple-600 p-3 rounded-xl">
+              {currentStepData.icon}
+            </div>
+            <div className="flex-1">
+              <h3 className="text-xl font-bold text-white mb-2">{currentStepData.title}</h3>
+              <p className="text-white/80 text-sm">{currentStepData.description}</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center justify-between mt-6">
+            <div className="flex items-center gap-2">
+              {tutorialSteps.map((_, idx) => (
+                <div 
+                  key={idx} 
+                  className={cn(
+                    "w-2 h-2 rounded-full transition-all duration-300",
+                    idx === currentStep ? "w-6 bg-white" : "bg-white/30"
+                  )}
+                />
+              ))}
+            </div>
+            
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={onClose}
+                className="bg-white/10 border-white/20 text-white hover:bg-white/20 text-xs"
+              >
+                Pular
+              </Button>
+              
+              <Button
+                onClick={onNext}
+                className={cn(
+                  "bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-xs",
+                  currentStep === tutorialSteps.length - 1 && "from-green-600 to-emerald-600"
+                )}
+              >
+                {currentStep === tutorialSteps.length - 1 ? (
+                  <>
+                    Começar
+                    <Check className="w-4 h-4 ml-2" />
+                  </>
+                ) : (
+                  <>
+                    Próximo
+                    <ArrowRight className="w-4 h-4 ml-2" />
+                  </>
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+
+        {/* Gestos */}
+        {renderGesture()}
+
+        {/* Dica específica para Clips */}
+        {currentFeedItem?.type === 'clip_container' && (currentStep === 2 || currentStep === 3) && (
+          <div className="absolute top-20 right-4 animate-pulse z-[101]">
+            <div className="bg-gradient-to-r from-pink-900/90 to-purple-900/90 border border-pink-500/30 rounded-xl p-3 max-w-xs backdrop-blur-sm">
+              <div className="flex items-center gap-2">
+                <Film className="w-5 h-5 text-pink-300" />
+                <div>
+                  <p className="font-bold text-white text-xs">💡 Você está nos Clips!</p>
+                  <p className="text-white/80 text-xs">Deslize horizontalmente para navegar</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+};
 
 /* ---------- FUNÇÕES DE IA PARA IMAGENS ---------- */
 const fileToBase64 = (file: File): Promise<string> => {
@@ -262,8 +537,8 @@ const isVideoUrl = (u: any): boolean => {
   return u.startsWith('video::') || videoExtensions.test(cleanUrl);
 };
 
-/* ---------- COMPONENTE: VideoPlayer TikTok (Clips) ---------- */
-interface TikTokVideoPlayerProps {
+/* ---------- COMPONENTE: VideoPlayer Udg (Clips) ---------- */
+interface UdgVideoPlayerProps {
   src: string;
   post: any;
   user: any;
@@ -273,12 +548,14 @@ interface TikTokVideoPlayerProps {
   hasNextClip: boolean;
   onNextClip: () => void;
   onPreviousClip: () => void;
+  showTutorial?: boolean;
 }
 
-const TikTokVideoPlayer = ({ 
+const UdgVideoPlayer = ({ 
   src, post, user, onLike, onComment, 
-  hasPrevClip, hasNextClip 
-}: TikTokVideoPlayerProps) => {
+  hasPrevClip, hasNextClip,
+  showTutorial = false
+}: UdgVideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
@@ -1069,6 +1346,70 @@ export default function WorldFlow() {
   const [touchStart, setTouchStart] = useState<{x: number, y: number} | null>(null);
   const [touchEnd, setTouchEnd] = useState<{x: number, y: number} | null>(null);
   const [isMobile, setIsMobile] = useState(false);
+  const [showTutorial, setShowTutorial] = useState(false);
+  const [tutorialStep, setTutorialStep] = useState(0);
+
+  // Handler para erros de extensão
+  useEffect(() => {
+    const handleExtensionError = (e: ErrorEvent) => {
+      if (e.message?.includes?.('Could not establish connection') || 
+          e.message?.includes?.('Receiving end does not exist')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    const handleUnhandledRejection = (e: PromiseRejectionEvent) => {
+      if (e.reason?.message?.includes?.('Could not establish connection')) {
+        e.preventDefault();
+        e.stopPropagation();
+        return false;
+      }
+    };
+
+    window.addEventListener('error', handleExtensionError);
+    window.addEventListener('unhandledrejection', handleUnhandledRejection);
+
+    return () => {
+      window.removeEventListener('error', handleExtensionError);
+      window.removeEventListener('unhandledrejection', handleUnhandledRejection);
+    };
+  }, []);
+
+  // Verifica se é a primeira visita do usuário
+  useEffect(() => {
+    if (!user) return;
+    
+    const hasSeenTutorial = localStorage.getItem('worldFlowTutorialSeen');
+    
+    if (!hasSeenTutorial) {
+      const timer = setTimeout(() => {
+        setShowTutorial(true);
+        setTutorialStep(0);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+  // Salva quando o tutorial for concluído
+  const handleTutorialComplete = () => {
+    localStorage.setItem('worldFlowTutorialSeen', 'true');
+    setShowTutorial(false);
+    setTutorialStep(0);
+  };
+
+  const handleNextTutorialStep = () => {
+    if (tutorialStep < 5) {
+      setTutorialStep(prev => prev + 1);
+    } else {
+      handleTutorialComplete();
+    }
+  };
+
+  const skipTutorial = () => {
+    handleTutorialComplete();
+  };
 
   // Detecta se é dispositivo móvel
   useEffect(() => {
@@ -1083,7 +1424,7 @@ export default function WorldFlow() {
   }, []);
 
   /* Query dos posts - SÓ MOSTRA APROVADOS */
-  const { data: rawPosts, refetch: refetchFeed } = useQuery({
+  const { data: rawPosts, refetch: refetchFeed, isLoading: postsLoading } = useQuery({
     queryKey: ["posts", user?.id],
     queryFn: async () => {
       try {
@@ -1150,51 +1491,85 @@ export default function WorldFlow() {
 
   /* --- Controles de Navegação --- */
   const goDown = useCallback(() => {
-    if (!isModalOpen && verticalIndex < feedStructure.length - 1) {
+    if (!isModalOpen && !showTutorial && verticalIndex < feedStructure.length - 1) {
       setVerticalIndex(prev => prev + 1);
     }
-  }, [verticalIndex, feedStructure.length, isModalOpen]);
+  }, [verticalIndex, feedStructure.length, isModalOpen, showTutorial]);
 
   const goUp = useCallback(() => {
-    if (!isModalOpen && verticalIndex > 0) {
+    if (!isModalOpen && !showTutorial && verticalIndex > 0) {
       setVerticalIndex(prev => prev - 1);
     }
-  }, [verticalIndex, isModalOpen]);
+  }, [verticalIndex, isModalOpen, showTutorial]);
 
+  /* --- NOVA LÓGICA PARA GESTOS HORIZONTAIS --- */
   const goRight = useCallback(() => {
-    if (!isModalOpen && currentFeedItem?.type === 'clip_container') {
-      if (horizontalClipIndex < currentFeedItem.items.length - 1) setHorizontalClipIndex(prev => prev + 1);
+    if (!isModalOpen && !showTutorial) {
+      if (currentFeedItem?.type === 'clip_container') {
+        // Dentro do container de clips, navega para o próximo clip
+        if (horizontalClipIndex < currentFeedItem.items.length - 1) {
+          setHorizontalClipIndex(prev => prev + 1);
+        }
+      } else {
+        // Fora dos clips, procura pelo container de clips
+        const clipContainerIndex = feedStructure.findIndex(item => item.type === 'clip_container');
+        if (clipContainerIndex !== -1) {
+          setVerticalIndex(clipContainerIndex);
+          setHorizontalClipIndex(0); // Reseta para o primeiro clip
+        }
+      }
     }
-  }, [currentFeedItem, horizontalClipIndex, isModalOpen]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex, feedStructure]);
 
   const goLeft = useCallback(() => {
-    if (!isModalOpen && currentFeedItem?.type === 'clip_container') {
-      if (horizontalClipIndex > 0) setHorizontalClipIndex(prev => prev - 1);
+    if (!isModalOpen && !showTutorial) {
+      if (currentFeedItem?.type === 'clip_container') {
+        // Dentro do container de clips, navega para o clip anterior
+        if (horizontalClipIndex > 0) {
+          setHorizontalClipIndex(prev => prev - 1);
+        } else {
+          // Se estiver no primeiro clip, volta para o post anterior
+          const prevItemIndex = verticalIndex - 1;
+          if (prevItemIndex >= 0) {
+            setVerticalIndex(prevItemIndex);
+          }
+        }
+      } else {
+        // Fora dos clips, não faz nada com gesto para esquerda
+        // (opcional: pode voltar para o post anterior)
+        if (verticalIndex > 0) {
+          setVerticalIndex(prev => prev - 1);
+        }
+      }
     }
-  }, [currentFeedItem, horizontalClipIndex, isModalOpen]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex]);
 
   /* --- Handlers de Input --- */
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isModalOpen) return;
+    if (isModalOpen || showTutorial) return;
     setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isModalOpen) return;
+    if (isModalOpen || showTutorial) return;
     setTouchEnd({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchEnd = () => {
-    if (isModalOpen || !touchStart || !touchEnd) return;
+    if (isModalOpen || showTutorial || !touchStart || !touchEnd) return;
     const xDiff = touchStart.x - touchEnd.x;
     const yDiff = touchStart.y - touchEnd.y;
     const minSwipe = 50;
 
+    /* --- MODIFICAÇÃO PRINCIPAL AQUI --- */
+    // Se o gesto for horizontal e significativo
     if (Math.abs(xDiff) > Math.abs(yDiff)) {
-      if (Math.abs(xDiff) > minSwipe && currentFeedItem?.type === 'clip_container') {
+      if (Math.abs(xDiff) > minSwipe) {
+        // Chama goRight ou goLeft independente do tipo de conteúdo
         if (xDiff > 0) goRight(); else goLeft();
       }
     } else {
+      // Gestos verticais funcionam normalmente
       if (Math.abs(yDiff) > minSwipe) {
         if (yDiff > 0) goDown(); else goUp();
       }
@@ -1205,7 +1580,7 @@ export default function WorldFlow() {
 
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (isModalOpen) return;
+      if (isModalOpen || showTutorial) return;
       if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
       e.preventDefault();
       if (Math.abs(e.deltaY) > 20) {
@@ -1223,11 +1598,11 @@ export default function WorldFlow() {
         window.removeEventListener('wheel', handleWheel);
       }
     };
-  }, [goDown, goUp, isModalOpen, isMobile]);
+  }, [goDown, goUp, isModalOpen, isMobile, showTutorial]);
 
   /* --- Função para curtir posts --- */
   const handleLike = async (postId: string) => {
-    if (isModalOpen) return;
+    if (isModalOpen || showTutorial) return;
     try {
       const post = rawPosts?.find(p => p.id === postId);
       if (!post) return;
@@ -1285,6 +1660,15 @@ export default function WorldFlow() {
 
   /* --- Renderização do Conteúdo --- */
   const renderContent = () => {
+    if (postsLoading) {
+      return (
+        <div className="flex flex-col items-center justify-center h-full text-white p-4 sm:p-8 bg-gray-950">
+          <Loader2 className="h-12 w-12 animate-spin text-blue-500 mb-4" />
+          <p className="text-gray-400">Carregando conteúdo...</p>
+        </div>
+      );
+    }
+
     if (!currentFeedItem) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-white p-4 sm:p-8 animate-in fade-in bg-gray-950">
@@ -1309,18 +1693,21 @@ export default function WorldFlow() {
       if (!mediaUrl) return <div className="h-full flex items-center justify-center text-white bg-black p-4">Clip indisponível</div>;
 
       return (
-        <TikTokVideoPlayer
-          key={clip.id}
-          src={mediaUrl}
-          post={clip}
-          user={user}
-          onLike={() => handleLike(clip.id)}
-          onComment={() => setOpeningCommentsFor(clip)}
-          hasPrevClip={horizontalClipIndex > 0}
-          hasNextClip={horizontalClipIndex < currentFeedItem.items.length - 1}
-          onNextClip={goRight}
-          onPreviousClip={goLeft}
-        />
+        <div className="relative w-full h-full">
+          <UdgVideoPlayer
+            key={clip.id}
+            src={mediaUrl}
+            post={clip}
+            user={user}
+            onLike={() => handleLike(clip.id)}
+            onComment={() => setOpeningCommentsFor(clip)}
+            hasPrevClip={horizontalClipIndex > 0}
+            hasNextClip={horizontalClipIndex < currentFeedItem.items.length - 1}
+            onNextClip={goRight}
+            onPreviousClip={goLeft}
+            showTutorial={showTutorial && tutorialStep >= 2 && tutorialStep <= 3}
+          />
+        </div>
       );
     }
 
@@ -1425,6 +1812,15 @@ export default function WorldFlow() {
       onTouchMove={handleTouchMove}
       onTouchEnd={handleTouchEnd}
     >
+      {/* Tutorial Overlay - CORRIGIDO */}
+      <TutorialOverlay 
+        isVisible={showTutorial}
+        currentStep={tutorialStep}
+        onClose={skipTutorial}
+        onNext={handleNextTutorialStep}
+        currentFeedItem={currentFeedItem}
+      />
+
       {/* Header responsivo */}
       <div className="absolute top-0 left-0 right-0 z-40 p-3 sm:p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-16 sm:h-20">
         <div className="justify-self-start">
@@ -1451,6 +1847,19 @@ export default function WorldFlow() {
                     <Badge className="ml-2 bg-red-500 text-xs">{arenaPosts.length}</Badge>
                   )}
                 </Button>
+                {!localStorage.getItem('worldFlowTutorialSeen') && (
+                  <Button 
+                    variant="ghost" 
+                    className="justify-start text-sm sm:text-base"
+                    onClick={() => {
+                      setShowTutorial(true);
+                      setTutorialStep(0);
+                    }}
+                  >
+                    <HelpCircle className="h-3 w-3 sm:h-4 sm:w-4 mr-2" />
+                    Ver Tutorial Novamente
+                  </Button>
+                )}
               </div>
             </SheetContent>
           </Sheet>
@@ -1476,7 +1885,7 @@ export default function WorldFlow() {
         </div>
       </div>
 
-      {/* cConteúdo principal */}
+      {/* Conteúdo principal */}
       <div className="w-full h-full pt-16 sm:pt-20 bg-black">
         {renderContent()}
       </div>
