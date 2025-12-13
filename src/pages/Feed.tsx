@@ -1511,10 +1511,11 @@ export default function WorldFlow() {
           setHorizontalClipIndex(prev => prev + 1);
         }
       } else {
-        // Fora dos clips, NÃO FAZ NADA com gesto para direita
-        // Mantém o comportamento original (navega para próximo post)
-        if (verticalIndex < feedStructure.length - 1) {
-          setVerticalIndex(prev => prev + 1);
+        // Fora dos clips, deslizar para a DIREITA vai para os clips
+        const clipContainerIndex = feedStructure.findIndex(item => item.type === 'clip_container');
+        if (clipContainerIndex !== -1) {
+          setVerticalIndex(clipContainerIndex);
+          setHorizontalClipIndex(0); // Reseta para o primeiro clip
         }
       }
     }
@@ -1534,11 +1535,9 @@ export default function WorldFlow() {
           }
         }
       } else {
-        // Fora dos clips, deslizar para ESQUERDA vai para os clips
-        const clipContainerIndex = feedStructure.findIndex(item => item.type === 'clip_container');
-        if (clipContainerIndex !== -1) {
-          setVerticalIndex(clipContainerIndex);
-          setHorizontalClipIndex(0); // Reseta para o primeiro clip
+        // Fora dos clips, deslizar para a ESQUERDA vai para o próximo post
+        if (verticalIndex < feedStructure.length - 1) {
+          setVerticalIndex(prev => prev + 1);
         }
       }
     }
@@ -1565,12 +1564,12 @@ export default function WorldFlow() {
     // Se o gesto for horizontal e significativo
     if (Math.abs(xDiff) > Math.abs(yDiff)) {
       if (Math.abs(xDiff) > minSwipe) {
-        // xDiff > 0 significa swipe left (dedo vai da direita para a esquerda)
-        // xDiff < 0 significa swipe right (dedo vai da esquerda para a direita)
+        // xDiff > 0 significa swipe left (dedo foi da direita para a esquerda)
+        // xDiff < 0 significa swipe right (dedo foi da esquerda para a direita)
         if (xDiff > 0) {
-          goLeft(); // swipe left
+          goLeft(); // swipe left (para esquerda)
         } else {
-          goRight(); // swipe right
+          goRight(); // swipe right (para direita)
         }
       }
     } else {
