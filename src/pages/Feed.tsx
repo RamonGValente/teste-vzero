@@ -1,5 +1,3 @@
-[file name]: feed.tsx
-[file content begin]
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1969,4 +1967,3 @@ export default function WorldFlow() {
     </div>
   );
 }
-[file content end]
