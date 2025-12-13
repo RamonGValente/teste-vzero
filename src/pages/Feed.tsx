@@ -164,16 +164,16 @@ const TutorialOverlay: React.FC<TutorialOverlayProps> = ({
                         <span className="text-xs text-pink-300 bg-pink-900/50 px-2 py-1 rounded-full">Post Normal</span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <ArrowRight className="w-8 h-8 text-pink-400 animate-bounce" />
-                        <span className="text-lg font-bold text-pink-300">→</span>
                         <div className="bg-gradient-to-r from-pink-600 to-purple-600 w-24 h-12 rounded-lg flex items-center justify-center">
                           <Film className="w-6 h-6 text-white" />
                           <span className="text-xs font-bold ml-2 text-white">Clips</span>
                         </div>
+                        <span className="text-lg font-bold text-pink-300">←</span>
+                        <ArrowLeft className="w-8 h-8 text-pink-400 animate-bounce" />
                       </div>
                     </div>
                   </div>
-                  <p className="text-xs text-pink-200 font-medium mt-2">Deslize para a direita para acessar os Clips</p>
+                  <p className="text-xs text-pink-200 font-medium mt-2">Deslize para a esquerda para acessar os Clips</p>
                 </div>
               </div>
             </div>
@@ -1502,7 +1502,7 @@ export default function WorldFlow() {
     }
   }, [verticalIndex, isModalOpen, showTutorial]);
 
-  /* --- NOVA LÓGICA PARA GESTOS HORIZONTAIS --- */
+  /* --- LÓGICA CORRIGIDA PARA GESTOS HORIZONTAIS --- */
   const goRight = useCallback(() => {
     if (!isModalOpen && !showTutorial) {
       if (currentFeedItem?.type === 'clip_container') {
@@ -1511,11 +1511,10 @@ export default function WorldFlow() {
           setHorizontalClipIndex(prev => prev + 1);
         }
       } else {
-        // Fora dos clips, procura pelo container de clips
-        const clipContainerIndex = feedStructure.findIndex(item => item.type === 'clip_container');
-        if (clipContainerIndex !== -1) {
-          setVerticalIndex(clipContainerIndex);
-          setHorizontalClipIndex(0); // Reseta para o primeiro clip
+        // Fora dos clips, NÃO FAZ NADA com gesto para direita
+        // Mantém o comportamento original (navega para próximo post)
+        if (verticalIndex < feedStructure.length - 1) {
+          setVerticalIndex(prev => prev + 1);
         }
       }
     }
@@ -1535,14 +1534,15 @@ export default function WorldFlow() {
           }
         }
       } else {
-        // Fora dos clips, não faz nada com gesto para esquerda
-        // (opcional: pode voltar para o post anterior)
-        if (verticalIndex > 0) {
-          setVerticalIndex(prev => prev - 1);
+        // Fora dos clips, deslizar para ESQUERDA vai para os clips
+        const clipContainerIndex = feedStructure.findIndex(item => item.type === 'clip_container');
+        if (clipContainerIndex !== -1) {
+          setVerticalIndex(clipContainerIndex);
+          setHorizontalClipIndex(0); // Reseta para o primeiro clip
         }
       }
     }
-  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex, feedStructure]);
 
   /* --- Handlers de Input --- */
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1561,12 +1561,17 @@ export default function WorldFlow() {
     const yDiff = touchStart.y - touchEnd.y;
     const minSwipe = 50;
 
-    /* --- MODIFICAÇÃO PRINCIPAL AQUI --- */
+    /* --- LÓGICA CORRIGIDA --- */
     // Se o gesto for horizontal e significativo
     if (Math.abs(xDiff) > Math.abs(yDiff)) {
       if (Math.abs(xDiff) > minSwipe) {
-        // Chama goRight ou goLeft independente do tipo de conteúdo
-        if (xDiff > 0) goRight(); else goLeft();
+        // xDiff > 0 significa swipe left (dedo vai da direita para a esquerda)
+        // xDiff < 0 significa swipe right (dedo vai da esquerda para a direita)
+        if (xDiff > 0) {
+          goLeft(); // swipe left
+        } else {
+          goRight(); // swipe right
+        }
       }
     } else {
       // Gestos verticais funcionam normalmente
