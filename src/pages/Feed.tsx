@@ -1,3 +1,5 @@
+[file name]: feed.tsx
+[file content begin]
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -1523,6 +1525,7 @@ export default function WorldFlow() {
 
   const goLeft = useCallback(() => {
     if (!isModalOpen && !showTutorial) {
+      // O gesto para esquerda só funciona quando estiver nos Clips
       if (currentFeedItem?.type === 'clip_container') {
         // Dentro do container de clips, navega para o clip anterior
         if (horizontalClipIndex > 0) {
@@ -1534,14 +1537,10 @@ export default function WorldFlow() {
             setVerticalIndex(prevItemIndex);
           }
         }
-      } else {
-        // Fora dos clips, deslizar para a ESQUERDA vai para o próximo post
-        if (verticalIndex < feedStructure.length - 1) {
-          setVerticalIndex(prev => prev + 1);
-        }
       }
+      // Se não estiver nos Clips, o gesto para esquerda não faz nada
     }
-  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex, feedStructure]);
+  }, [currentFeedItem, horizontalClipIndex, isModalOpen, showTutorial, verticalIndex]);
 
   /* --- Handlers de Input --- */
   const handleTouchStart = (e: React.TouchEvent) => {
@@ -1970,3 +1969,4 @@ export default function WorldFlow() {
     </div>
   );
 }
+[file content end]
