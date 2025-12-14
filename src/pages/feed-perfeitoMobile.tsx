@@ -10,10 +10,7 @@ import {
   Film, Plus, Bomb, Timer,
   X, Camera as CameraIcon, Video as VideoIcon,
   Wand2, Sparkles, Info, Check, HelpCircle,
-  MoveVertical, MoveHorizontal, Hand,
-  Share2, Bookmark, MoreHorizontal,
-  ThumbsUp, ThumbsDown, Eye, TrendingUp,
-  Grid3x3, List, LayoutGrid
+  MoveVertical, MoveHorizontal, Hand
 } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { UserLink } from "@/components/UserLink";
@@ -27,7 +24,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 /* ---------- CONFIGURAÇÕES DE ESTILO IA ---------- */
 const AI_STYLES = [
@@ -541,25 +537,33 @@ const isVideoUrl = (u: any): boolean => {
   return u.startsWith('video::') || videoExtensions.test(cleanUrl);
 };
 
-/* ---------- COMPONENTE: VideoPlayer para Desktop ---------- */
-interface DesktopVideoPlayerProps {
+/* ---------- COMPONENTE: VideoPlayer Udg (Clips) ---------- */
+interface UdgVideoPlayerProps {
   src: string;
   post: any;
   user: any;
   onLike: () => void;
   onComment: () => void;
+  hasPrevClip: boolean;
+  hasNextClip: boolean;
+  onNextClip: () => void;
+  onPreviousClip: () => void;
+  showTutorial?: boolean;
 }
 
-const DesktopVideoPlayer = ({ 
-  src, post, user, onLike, onComment
-}: DesktopVideoPlayerProps) => {
+const UdgVideoPlayer = ({ 
+  src, post, user, onLike, onComment, 
+  hasPrevClip, hasNextClip,
+  showTutorial = false
+}: UdgVideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [progress, setProgress] = useState(0);
   const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
 
   useEffect(() => {
-    setIsPlaying(false);
+    setIsPlaying(true);
     return () => setIsPlaying(false);
   }, [post.id]);
 
@@ -574,62 +578,101 @@ const DesktopVideoPlayer = ({
     if (videoRef.current) videoRef.current.muted = isMuted;
   }, [isMuted]);
 
+  const handleTimeUpdate = () => {
+    if (videoRef.current) {
+      const current = videoRef.current.currentTime;
+      const duration = videoRef.current.duration;
+      setProgress((current / duration) * 100);
+    }
+  };
+
   return (
-    <div className="relative w-full bg-black rounded-lg overflow-hidden group">
+    <div className="relative w-full h-full bg-black">
       <video
         ref={videoRef}
         src={src}
-        className="w-full h-[300px] object-cover cursor-pointer"
+        className="w-full h-full object-cover"
+        loop
+        playsInline
+        onTimeUpdate={handleTimeUpdate}
         onClick={() => setIsPlaying(!isPlaying)}
-        poster="/video-placeholder.jpg"
       />
       
       {!isPlaying && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/40 pointer-events-none group-hover:bg-black/20 transition-all">
-          <div className="bg-black/60 p-3 rounded-full">
-            <Play className="h-8 w-8 text-white" />
-          </div>
+        <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
+          <Play className="h-16 w-16 text-white/50" />
         </div>
       )}
 
-      {/* Controles flutuantes */}
-      <div className="absolute bottom-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800 z-30">
+        <div 
+          className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-100 ease-linear"
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      
+      {/* Botões de ação responsivos */}
+      <div className="absolute right-2 sm:right-4 bottom-28 sm:bottom-32 flex flex-col items-center gap-4 sm:gap-6 z-20">
+        <div className="flex flex-col items-center group">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            onClick={onLike}
+          >
+            <Heart className={cn("h-5 w-5 sm:h-7 sm:w-7 transition-colors drop-shadow-md", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
+          </Button>
+          <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.likes?.length || 0}</span>
+        </div>
+        
+        <div className="flex flex-col items-center">
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
+            onClick={onComment}
+          >
+            <MessageCircle className="h-5 w-5 sm:h-7 sm:w-7 drop-shadow-md" />
+          </Button>
+          <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.comments?.length || 0}</span>
+        </div>
+        
         <Button
           variant="ghost"
           size="icon"
-          className="h-8 w-8 rounded-full bg-black/50 text-white hover:bg-black/70"
+          className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
           onClick={() => setIsMuted(!isMuted)}
         >
-          {isMuted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />}
+          {isMuted ? <VolumeX className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" /> : <Volume2 className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" />}
         </Button>
       </div>
 
-      {/* Informações do post */}
-      <div className="p-3 bg-gradient-to-t from-black/80 to-transparent absolute bottom-0 left-0 right-0">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Avatar className="h-6 w-6">
-              <AvatarImage src={post.profiles?.avatar_url}/>
-              <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 text-xs">
-                {post.profiles?.username?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <span className="text-xs font-medium text-white truncate">
+      {/* Informações do post responsivas */}
+      <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 text-white z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-16 sm:pt-20">
+        <div className="flex items-center gap-3 mb-3">
+          <Avatar className="h-8 w-8 sm:h-10 sm:w-10 ring-2 ring-white/30 shadow-lg">
+            <AvatarImage src={post.profiles?.avatar_url}/>
+            <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 font-bold text-xs sm:text-sm">
+              {post.profiles?.username?.[0]}
+            </AvatarFallback>
+          </Avatar>
+          <div className="flex flex-col">
+             <UserLink 
+              userId={post.user_id} 
+              username={post.profiles?.username || ''}
+              className="font-bold text-white text-sm sm:text-md drop-shadow-md hover:text-pink-300 transition-colors"
+            >
               @{post.profiles?.username}
+            </UserLink>
+            <span className="text-xs text-white/70 flex items-center gap-1">
+                <Clock className="w-3 h-3" />
+                {new Date(post.created_at).toLocaleDateString('pt-BR')}
             </span>
           </div>
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-6 w-6 text-white hover:text-red-500 hover:bg-white/10"
-              onClick={onLike}
-            >
-              <Heart className={cn("h-3 w-3", isLiked && "fill-current")} />
-            </Button>
-            <span className="text-xs text-white">{post.likes?.length || 0}</span>
-          </div>
         </div>
+        <p className="text-white/95 text-xs sm:text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
+            {post.content}
+        </p>
       </div>
     </div>
   );
@@ -1284,351 +1327,6 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
   );
 };
 
-/* ---------- COMPONENTE DE FEED PARA DESKTOP ---------- */
-interface DesktopFeedLayoutProps {
-  posts: any[];
-  user: any;
-  handleLike: (postId: string) => void;
-  setOpeningCommentsFor: (post: any) => void;
-  isLoading: boolean;
-  setShowCreateModal: (show: boolean) => void;
-}
-
-const DesktopFeedLayout = ({ 
-  posts, 
-  user, 
-  handleLike, 
-  setOpeningCommentsFor, 
-  isLoading,
-  setShowCreateModal 
-}: DesktopFeedLayoutProps) => {
-  const [activeTab, setActiveTab] = useState("trending");
-  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
-  
-  const getMediaUrl = (post: any) => {
-    if (!post?.media_urls?.length) return null;
-    return post.media_urls[0].replace(/^(image::|video::|audio::)/, '');
-  };
-
-  // Separar posts normais e clips
-  const standardPosts = useMemo(() => 
-    posts.filter(post => post.post_type === 'standard'), 
-    [posts]
-  );
-  
-  const clipPosts = useMemo(() => 
-    posts.filter(post => post.post_type === 'viral_clips'), 
-    [posts]
-  );
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full min-h-[60vh]">
-        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-full bg-white overflow-hidden">
-      {/* Header do Desktop */}
-      <div className="sticky top-0 z-50 bg-white/95 backdrop-blur-sm border-b border-gray-200">
-        <div className="container mx-auto px-4 py-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-black tracking-tighter text-gray-900">
-                  World <span className="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-purple-600">Flow</span>
-                </h1>
-                <Badge className="bg-gradient-to-r from-blue-600 to-purple-600 text-xs text-white">
-                  Beta
-                </Badge>
-              </div>
-              
-              <div className="hidden md:flex items-center gap-1">
-                <Button 
-                  variant={activeTab === "trending" ? "default" : "ghost"} 
-                  size="sm"
-                  onClick={() => setActiveTab("trending")}
-                  className={cn(
-                    "rounded-full",
-                    activeTab === "trending" && "bg-blue-600 hover:bg-blue-700 text-white"
-                  )}
-                >
-                  <TrendingUp className="h-4 w-4 mr-2" />
-                  Em Alta
-                </Button>
-                <Button 
-                  variant={activeTab === "following" ? "default" : "ghost"} 
-                  size="sm"
-                  onClick={() => setActiveTab("following")}
-                  className={cn(
-                    "rounded-full",
-                    activeTab === "following" && "bg-blue-600 hover:bg-blue-700 text-white"
-                  )}
-                >
-                  <Eye className="h-4 w-4 mr-2" />
-                  Seguindo
-                </Button>
-              </div>
-            </div>
-            
-            <div className="flex items-center gap-4">
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className={cn(
-                    "h-9 w-9 rounded-lg",
-                    viewMode === "grid" ? "bg-blue-100 border-blue-300 text-blue-600" : "border-gray-300 text-gray-600"
-                  )}
-                  onClick={() => setViewMode("grid")}
-                >
-                  <Grid3x3 className="h-4 w-4" />
-                </Button>
-                <Button
-                  variant="outline"
-                  size="icon"
-                  className={cn(
-                    "h-9 w-9 rounded-lg",
-                    viewMode === "list" ? "bg-blue-100 border-blue-300 text-blue-600" : "border-gray-300 text-gray-600"
-                  )}
-                  onClick={() => setViewMode("list")}
-                >
-                  <List className="h-4 w-4" />
-                </Button>
-              </div>
-              
-              <Button 
-                onClick={() => setShowCreateModal(true)} 
-                className="rounded-full bg-gradient-to-tr from-blue-600 to-purple-600 hover:shadow-lg hover:shadow-blue-500/25 transition-all text-white"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Criar
-              </Button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Conteúdo Principal Desktop */}
-      <div className="container mx-auto px-4 py-6 h-[calc(100vh-80px)] overflow-hidden">
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-full">
-          {/* Coluna Principal - Posts */}
-          <div className="lg:col-span-2 h-full overflow-y-auto pr-4">
-            <ScrollArea className="h-full">
-              <div className="space-y-6 pb-8">
-                {standardPosts.length === 0 ? (
-                  <div className="text-center py-12">
-                    <Globe className="h-16 w-16 mx-auto text-gray-400 mb-4" />
-                    <h3 className="text-lg font-semibold text-gray-700">Nenhum post encontrado</h3>
-                    <p className="text-gray-500">Seja o primeiro a criar um post!</p>
-                  </div>
-                ) : (
-                  standardPosts.map((post) => {
-                    const mediaUrl = getMediaUrl(post);
-                    const isVideo = mediaUrl && isVideoUrl(mediaUrl);
-                    const isLiked = post.likes?.some((l: any) => l.user_id === user?.id);
-
-                    return (
-                      <div key={post.id} className="bg-white rounded-xl border border-gray-200 overflow-hidden hover:border-gray-300 transition-all duration-300 hover:shadow-lg">
-                        {/* Header do post */}
-                        <div className="p-4 border-b border-gray-200">
-                          <div className="flex items-start justify-between">
-                            <div className="flex items-center space-x-3">
-                              <Avatar className="h-10 w-10">
-                                <AvatarImage src={post.profiles?.avatar_url} />
-                                <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 text-white">
-                                  {post.profiles?.username?.[0]}
-                                </AvatarFallback>
-                              </Avatar>
-                              <div>
-                                <UserLink
-                                  userId={post.user_id}
-                                  username={post.profiles?.username || ''}
-                                  className="font-bold hover:text-blue-600 text-sm text-gray-900"
-                                >
-                                  @{post.profiles?.username}
-                                </UserLink>
-                                <div className="flex items-center gap-2 text-xs text-gray-500">
-                                  <span>{new Date(post.created_at).toLocaleDateString('pt-BR')}</span>
-                                  <Badge variant="outline" className="text-[10px] h-4 border-blue-500 text-blue-600 px-1 py-0 bg-blue-50">
-                                    Post
-                                  </Badge>
-                                </div>
-                              </div>
-                            </div>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-gray-500">
-                              <MoreHorizontal className="h-4 w-4" />
-                            </Button>
-                          </div>
-
-                          {post.content && (
-                            <p className="mt-3 text-gray-700 whitespace-pre-wrap">{post.content}</p>
-                          )}
-                        </div>
-
-                        {/* Mídia */}
-                        {mediaUrl && (
-                          <div className="relative bg-gray-100">
-                            {isVideo ? (
-                              <video
-                                src={mediaUrl}
-                                controls
-                                className="w-full max-h-[500px] object-contain cursor-pointer"
-                              />
-                            ) : (
-                              <img
-                                src={mediaUrl}
-                                alt="Post media"
-                                className="w-full max-h-[500px] object-contain cursor-pointer hover:opacity-95 transition-opacity"
-                              />
-                            )}
-                          </div>
-                        )}
-
-                        {/* Ações */}
-                        <div className="p-4 border-t border-gray-200">
-                          <div className="flex items-center justify-between">
-                            <div className="flex items-center space-x-4">
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className={`flex items-center gap-2 ${isLiked ? 'text-red-600' : 'text-gray-500'} hover:text-red-600`}
-                                onClick={() => handleLike(post.id)}
-                              >
-                                <Heart className={`h-5 w-5 ${isLiked ? 'fill-current' : ''}`} />
-                                <span>{post.likes?.length || 0}</span>
-                              </Button>
-
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="flex items-center gap-2 text-gray-500 hover:text-blue-600"
-                                onClick={() => setOpeningCommentsFor(post)}
-                              >
-                                <MessageCircle className="h-5 w-5" />
-                                <span>{post.comments?.length || 0}</span>
-                              </Button>
-
-                              <Button variant="ghost" size="sm" className="text-gray-500 hover:text-green-600">
-                                <Share2 className="h-5 w-5" />
-                              </Button>
-                            </div>
-
-                            <Button variant="ghost" size="sm" className="text-gray-500 hover:text-yellow-600">
-                              <Bookmark className="h-5 w-5" />
-                            </Button>
-                          </div>
-                        </div>
-                      </div>
-                    );
-                  })
-                )}
-              </div>
-            </ScrollArea>
-          </div>
-
-          {/* Coluna Lateral - Clips */}
-          <div className="lg:col-span-1 h-full overflow-y-auto">
-            <div className="space-y-6">
-              {/* Seção de Clips */}
-              <div className="bg-white rounded-xl border border-gray-200 p-4">
-                <div className="flex items-center justify-between mb-4">
-                  <h2 className="font-bold text-lg flex items-center gap-2 text-gray-900">
-                    <Film className="h-5 w-5 text-pink-600" />
-                    Clips em Alta
-                  </h2>
-                  <Badge className="bg-gradient-to-r from-pink-600 to-purple-600 text-xs text-white">
-                    {clipPosts.length} clips
-                  </Badge>
-                </div>
-                
-                {clipPosts.length === 0 ? (
-                  <div className="text-center py-8">
-                    <Film className="h-12 w-12 mx-auto text-gray-300 mb-3" />
-                    <p className="text-gray-500 text-sm">Nenhum clip disponível</p>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {clipPosts.slice(0, 5).map((clip) => {
-                      const mediaUrl = getMediaUrl(clip);
-                      const isLiked = clip.likes?.some((l: any) => l.user_id === user?.id);
-
-                      return (
-                        <div key={clip.id} className="group cursor-pointer">
-                          <div className="relative bg-black rounded-lg overflow-hidden">
-                            {mediaUrl ? (
-                              <>
-                                <DesktopVideoPlayer
-                                  src={mediaUrl}
-                                  post={clip}
-                                  user={user}
-                                  onLike={() => handleLike(clip.id)}
-                                  onComment={() => setOpeningCommentsFor(clip)}
-                                />
-                                <div className="absolute top-2 left-2 bg-black/60 text-white text-xs px-2 py-1 rounded">
-                                  <Play className="h-3 w-3 inline mr-1" />
-                                  Clip
-                                </div>
-                              </>
-                            ) : (
-                              <div className="h-[200px] bg-gradient-to-br from-gray-900 to-black flex items-center justify-center">
-                                <Film className="h-12 w-12 text-gray-700" />
-                              </div>
-                            )}
-                          </div>
-                          
-                          <div className="mt-2">
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-2">
-                                <Avatar className="h-6 w-6">
-                                  <AvatarImage src={clip.profiles?.avatar_url} />
-                                  <AvatarFallback className="text-xs">{clip.profiles?.username?.[0]}</AvatarFallback>
-                                </Avatar>
-                                <span className="text-xs font-medium truncate text-gray-900">@{clip.profiles?.username}</span>
-                              </div>
-                              <div className="flex items-center gap-3">
-                                <div className="flex items-center gap-1">
-                                  <Heart className={cn("h-3 w-3", isLiked ? "fill-red-600 text-red-600" : "text-gray-400")} />
-                                  <span className="text-xs text-gray-600">{clip.likes?.length || 0}</span>
-                                </div>
-                                <div className="flex items-center gap-1">
-                                  <MessageCircle className="h-3 w-3 text-gray-400" />
-                                  <span className="text-xs text-gray-600">{clip.comments?.length || 0}</span>
-                                </div>
-                              </div>
-                            </div>
-                            {clip.content && (
-                              <p className="text-xs text-gray-600 mt-2 line-clamp-2">{clip.content}</p>
-                            )}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-                
-                {clipPosts.length > 5 && (
-                  <Button 
-                    variant="outline" 
-                    className="w-full mt-4 border-gray-300 text-gray-600 hover:text-gray-900 hover:border-gray-400"
-                    onClick={() => {
-                      // Aqui você pode implementar navegação para página de clips
-                    }}
-                  >
-                    Ver todos os clips
-                  </Button>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-};
-
 /* ---------- COMPONENTE PRINCIPAL ---------- */
 export default function WorldFlow() {
   const { user } = useAuth();
@@ -1716,7 +1414,7 @@ export default function WorldFlow() {
   // Detecta se é dispositivo móvel
   useEffect(() => {
     const checkMobile = () => {
-      setIsMobile(window.innerWidth < 1024); // Alterado para 1024px para desktop maior
+      setIsMobile(window.innerWidth < 640);
     };
     
     checkMobile();
@@ -1844,17 +1542,17 @@ export default function WorldFlow() {
 
   /* --- Handlers de Input --- */
   const handleTouchStart = (e: React.TouchEvent) => {
-    if (isModalOpen || showTutorial || !isMobile) return;
+    if (isModalOpen || showTutorial) return;
     setTouchStart({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchMove = (e: React.TouchEvent) => {
-    if (isModalOpen || showTutorial || !isMobile) return;
+    if (isModalOpen || showTutorial) return;
     setTouchEnd({ x: e.touches[0].clientX, y: e.touches[0].clientY });
   };
 
   const handleTouchEnd = () => {
-    if (isModalOpen || showTutorial || !isMobile || !touchStart || !touchEnd) return;
+    if (isModalOpen || showTutorial || !touchStart || !touchEnd) return;
     const xDiff = touchStart.x - touchEnd.x;
     const yDiff = touchStart.y - touchEnd.y;
     const minSwipe = 50;
@@ -1881,10 +1579,9 @@ export default function WorldFlow() {
     setTouchEnd(null);
   };
 
-  // Remover navegação por wheel para desktop
   useEffect(() => {
     const handleWheel = (e: WheelEvent) => {
-      if (isModalOpen || showTutorial || !isMobile) return;
+      if (isModalOpen || showTutorial) return;
       if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
       e.preventDefault();
       if (Math.abs(e.deltaY) > 20) {
@@ -1892,13 +1589,13 @@ export default function WorldFlow() {
       }
     };
     
-    // Apenas adiciona o evento wheel em mobile
-    if (isMobile) {
+    // Apenas adiciona o evento wheel em desktop
+    if (!isMobile) {
       window.addEventListener('wheel', handleWheel, { passive: false });
     }
     
     return () => {
-      if (isMobile) {
+      if (!isMobile) {
         window.removeEventListener('wheel', handleWheel);
       }
     };
@@ -1962,136 +1659,8 @@ export default function WorldFlow() {
     return post.media_urls[0].replace(/^(image::|video::|audio::)/, '');
   };
 
-  /* --- COMPONENTE DE VIDEO PLAYER PARA MOBILE --- */
-  const UdgVideoPlayer = ({ 
-    src, post, user, onLike, onComment, 
-    hasPrevClip, hasNextClip,
-    showTutorial = false
-  }: any) => {
-    const videoRef = useRef<HTMLVideoElement>(null);
-    const [isPlaying, setIsPlaying] = useState(false);
-    const [isMuted, setIsMuted] = useState(false);
-    const [progress, setProgress] = useState(0);
-    const isLiked = post.likes?.some((l:any) => l.user_id === user?.id);
-
-    useEffect(() => {
-      setIsPlaying(true);
-      return () => setIsPlaying(false);
-    }, [post.id]);
-
-    useEffect(() => {
-      if (videoRef.current) {
-        if (isPlaying) videoRef.current.play().catch(e => console.log("Interação necessária para play com som", e));
-        else videoRef.current.pause();
-      }
-    }, [isPlaying]);
-
-    useEffect(() => {
-      if (videoRef.current) videoRef.current.muted = isMuted;
-    }, [isMuted]);
-
-    const handleTimeUpdate = () => {
-      if (videoRef.current) {
-        const current = videoRef.current.currentTime;
-        const duration = videoRef.current.duration;
-        setProgress((current / duration) * 100);
-      }
-    };
-
-    return (
-      <div className="relative w-full h-full bg-black">
-        <video
-          ref={videoRef}
-          src={src}
-          className="w-full h-full object-cover"
-          loop
-          playsInline
-          onTimeUpdate={handleTimeUpdate}
-          onClick={() => setIsPlaying(!isPlaying)}
-        />
-        
-        {!isPlaying && (
-          <div className="absolute inset-0 flex items-center justify-center bg-black/20 pointer-events-none">
-            <Play className="h-16 w-16 text-white/50" />
-          </div>
-        )}
-
-        <div className="absolute bottom-0 left-0 right-0 h-1 bg-gray-800 z-30">
-          <div 
-            className="h-full bg-gradient-to-r from-pink-500 to-purple-500 transition-all duration-100 ease-linear"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
-        
-        {/* Botões de ação responsivos */}
-        <div className="absolute right-2 sm:right-4 bottom-28 sm:bottom-32 flex flex-col items-center gap-4 sm:gap-6 z-20">
-          <div className="flex flex-col items-center group">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
-              onClick={onLike}
-            >
-              <Heart className={cn("h-5 w-5 sm:h-7 sm:w-7 transition-colors drop-shadow-md", isLiked ? "fill-red-500 text-red-500" : "text-white")} />
-            </Button>
-            <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.likes?.length || 0}</span>
-          </div>
-          
-          <div className="flex flex-col items-center">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
-              onClick={onComment}
-            >
-              <MessageCircle className="h-5 w-5 sm:h-7 sm:w-7 drop-shadow-md" />
-            </Button>
-            <span className="text-white text-xs font-bold drop-shadow-md mt-1">{post.comments?.length || 0}</span>
-          </div>
-          
-          <Button
-            variant="ghost"
-            size="icon"
-            className="h-10 w-10 sm:h-12 sm:w-12 rounded-full bg-black/20 text-white hover:bg-black/50 backdrop-blur-md transition-all active:scale-90"
-            onClick={() => setIsMuted(!isMuted)}
-          >
-            {isMuted ? <VolumeX className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" /> : <Volume2 className="h-4 w-4 sm:h-6 sm:w-6 drop-shadow-md" />}
-          </Button>
-        </div>
-
-        {/* Informações do post responsivas */}
-        <div className="absolute bottom-0 left-0 right-0 p-3 sm:p-4 text-white z-20 bg-gradient-to-t from-black/90 via-black/40 to-transparent pt-16 sm:pt-20">
-          <div className="flex items-center gap-3 mb-3">
-            <Avatar className="h-8 w-8 sm:h-10 sm:w-10 ring-2 ring-white/30 shadow-lg">
-              <AvatarImage src={post.profiles?.avatar_url}/>
-              <AvatarFallback className="bg-gradient-to-tr from-purple-500 to-orange-500 font-bold text-xs sm:text-sm">
-                {post.profiles?.username?.[0]}
-              </AvatarFallback>
-            </Avatar>
-            <div className="flex flex-col">
-               <UserLink 
-                userId={post.user_id} 
-                username={post.profiles?.username || ''}
-                className="font-bold text-white text-sm sm:text-md drop-shadow-md hover:text-pink-300 transition-colors"
-              >
-                @{post.profiles?.username}
-              </UserLink>
-              <span className="text-xs text-white/70 flex items-center gap-1">
-                  <Clock className="w-3 h-3" />
-                  {new Date(post.created_at).toLocaleDateString('pt-BR')}
-              </span>
-            </div>
-          </div>
-          <p className="text-white/95 text-xs sm:text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
-              {post.content}
-          </p>
-        </div>
-      </div>
-    );
-  };
-
-  /* --- Renderização do Conteúdo Mobile --- */
-  const renderMobileContent = () => {
+  /* --- Renderização do Conteúdo --- */
+  const renderContent = () => {
     if (postsLoading) {
       return (
         <div className="flex flex-col items-center justify-center h-full text-white p-4 sm:p-8 bg-gray-950">
@@ -2237,107 +1806,6 @@ export default function WorldFlow() {
     setIsModalOpen(showCreateModal || !!openingCommentsFor);
   }, [showCreateModal, openingCommentsFor]);
 
-  // Se for desktop, usar o layout desktop
-  if (!isMobile) {
-    return (
-      <div className="h-screen bg-white overflow-hidden">
-        {/* Tutorial Overlay - CORRIGIDO */}
-        <TutorialOverlay 
-          isVisible={showTutorial}
-          currentStep={tutorialStep}
-          onClose={skipTutorial}
-          onNext={handleNextTutorialStep}
-          currentFeedItem={currentFeedItem}
-        />
-
-        {/* Layout Desktop */}
-        <DesktopFeedLayout
-          posts={rawPosts || []}
-          user={user}
-          handleLike={handleLike}
-          setOpeningCommentsFor={setOpeningCommentsFor}
-          isLoading={postsLoading}
-          setShowCreateModal={setShowCreateModal}
-        />
-
-        {/* Modal de criação de post */}
-        <CreatePostModal 
-          open={showCreateModal} 
-          onOpenChange={setShowCreateModal}
-          user={user}
-          onSuccess={() => refetchFeed()}
-        />
-        
-        {/* Modal de comentários */}
-        <Dialog open={!!openingCommentsFor} onOpenChange={(open) => !open && setOpeningCommentsFor(null)}>
-          <DialogContent className="bg-white border-gray-200 text-gray-900 w-[95vw] sm:max-w-md max-h-[80vh] flex flex-col p-0">
-            <div className="sticky top-0 z-10 bg-white border-b border-gray-200 p-3 sm:p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-bold text-sm sm:text-base">Comentários</h2>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="h-7 w-7 sm:h-8 sm:w-8 text-gray-500"
-                  onClick={() => setOpeningCommentsFor(null)}
-                >
-                  <X className="h-3 w-3 sm:h-4 sm:w-4" />
-                </Button>
-              </div>
-            </div>
-            
-            <ScrollArea className="flex-1 p-3 sm:p-4">
-              {loadingComments ? (
-                <div className="flex justify-center py-6 sm:py-8">
-                  <Loader2 className="animate-spin text-blue-500 h-5 w-5 sm:h-6 sm:w-6" />
-                </div>
-              ) : comments?.length ? (
-                comments.map((c:any) => (
-                  <div key={c.id} className="flex gap-2 sm:gap-3 mb-3 sm:mb-4">
-                    <Avatar className="h-7 w-7 sm:h-8 sm:w-8">
-                      <AvatarImage src={c.profiles?.avatar_url}/>
-                      <AvatarFallback className="text-xs bg-gray-200 text-gray-700">U</AvatarFallback>
-                    </Avatar>
-                    <div className="bg-gray-100 p-2 sm:p-3 rounded-lg flex-1">
-                      <span className="font-bold text-xs text-gray-600 block mb-1">
-                        {c.profiles?.username}
-                      </span>
-                      <p className="text-xs sm:text-sm text-gray-800">{c.content}</p>
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <div className="text-center py-6 sm:py-10 opacity-50">
-                  <MessageCircle className="h-8 w-8 sm:h-10 sm:w-10 mx-auto mb-2 text-gray-400"/>
-                  <p className="text-xs sm:text-sm text-gray-600">Nenhum comentário ainda.</p>
-                </div>
-              )}
-            </ScrollArea>
-            
-            <div className="p-2 sm:p-3 bg-white border-t border-gray-200">
-              <div className="flex gap-2">
-                <Input 
-                  value={newCommentText} 
-                  onChange={e => setNewCommentText(e.target.value)} 
-                  placeholder="Escreva um comentário..." 
-                  className="bg-gray-100 border-gray-300 text-gray-900 rounded-full text-sm h-9 sm:h-10"
-                />
-                <Button 
-                  size="icon" 
-                  onClick={() => addComment.mutate()} 
-                  disabled={addComment.isPending || !newCommentText.trim()} 
-                  className="rounded-full bg-blue-600 hover:bg-blue-500 h-9 w-9 sm:h-10 sm:w-10"
-                >
-                  <Send className="h-3 w-3 sm:h-4 sm:w-4 text-white"/>
-                </Button>
-              </div>
-            </div>
-          </DialogContent>
-        </Dialog>
-      </div>
-    );
-  }
-
-  // Se for mobile, usar o layout mobile original
   return (
     <div 
       className="fixed inset-0 overflow-hidden bg-black touch-none font-sans"
@@ -2355,9 +1823,7 @@ export default function WorldFlow() {
       />
 
       {/* Header responsivo */}
-      <div className={cn(
-        "absolute top-0 left-0 right-0 z-40 p-3 sm:p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-16 sm:h-20"
-      )}>
+      <div className="absolute top-0 left-0 right-0 z-40 p-3 sm:p-4 grid grid-cols-3 items-center bg-gradient-to-b from-black/90 via-black/40 to-transparent h-16 sm:h-20">
         <div className="justify-self-start">
           <Sheet open={showMenu} onOpenChange={setShowMenu}>
             <SheetTrigger asChild>
@@ -2422,7 +1888,7 @@ export default function WorldFlow() {
 
       {/* Conteúdo principal */}
       <div className="w-full h-full pt-16 sm:pt-20 bg-black">
-        {renderMobileContent()}
+        {renderContent()}
       </div>
 
       {/* Modal de criação de post */}
