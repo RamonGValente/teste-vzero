@@ -524,31 +524,12 @@ export default function Messages() {
     },
   });
 
-  // CORREÇÃO AQUI: Filtrar conversas apenas do usuário atual
   const { data: rawConversations, refetch: refetchConversations, isLoading: isLoadingConversations } = useQuery({
-    queryKey: ["conversations", user?.id],
-    enabled: !!user,
+    queryKey: ["conversations"],
     queryFn: async () => {
-      // Primeiro, obter IDs das conversas onde o usuário atual é participante
-      const { data: participantData, error: participantError } = await supabase
-        .from("conversation_participants")
-        .select("conversation_id")
-        .eq("user_id", user!.id);
-
-      if (participantError) throw participantError;
-      
-      if (!participantData || participantData.length === 0) {
-        return [];
-      }
-
-      const conversationIds = participantData.map(p => p.conversation_id);
-
-      // Buscar conversas apenas onde o usuário é participante
       const { data, error } = await supabase.from("conversations")
         .select(`*, conversation_participants!inner(user_id, profiles(username, avatar_url)), messages(id, content, created_at, media_urls, user_id, deleted_at)`)
-        .in("id", conversationIds)
         .order("created_at", { ascending: false });
-      
       if (error) throw error;
       return data;
     },

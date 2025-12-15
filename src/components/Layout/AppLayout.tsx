@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Bomb, Check, Copy, Crown, Home, LogOut, Menu, Lock, Search, User, Users, X, Zap, Globe, Swords } from "lucide-react";
+import { Bomb, Check, Copy, Crown, Home, LogOut, Menu, Lock, Search, User, Users, X, Zap, Globe, Swords, Newspaper } from "lucide-react";
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
@@ -155,6 +155,7 @@ export default function AppLayout() {
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
     { name: "Arena", href: "/arena", icon: Swords },
     { name: "Rankings", href: "/rankings", icon: Zap },
+    { name: "News", href: "/news", icon: Newspaper },
     { name: "Perfil", href: "/profile", icon: User },
   ];
 

@@ -14,6 +14,7 @@ import Explore from "./pages/Explore";
 import Messages from "./pages/Messages";
 import Communities from "./pages/Communities";
 import Profile from "./pages/Profile";
+import News from "./pages/News";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import { Tutorial } from "./components/Tutorial";
@@ -104,6 +105,7 @@ const App = () => (
               <Route path="/profile" element={<Profile />} />
               <Route path="/profile/:userId" element={<Profile />} />
               <Route path="/rankings" element={<Rankings />} />
+              <Route path="/news" element={<News />} />
             </Route>
 
             {/* 404 */}
