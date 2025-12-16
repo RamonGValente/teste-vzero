@@ -27,6 +27,9 @@ export const pwaOptions: Partial<VitePWAOptions> = {
     ]
   },
   workbox: {
+    // Importa handlers extras (push/notificationclick) para dentro do SW gerado pelo Workbox.
+    // Arquivo fica em /public/sw-push.js
+    importScripts: ['sw-push.js'],
     globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2}'],
     runtimeCaching: [
       {
