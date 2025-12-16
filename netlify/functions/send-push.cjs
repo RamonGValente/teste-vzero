@@ -1,118 +1,114 @@
-// netlify/functions/send-push.js (ESM)
-import webpush from 'web-push';
-import { createClient } from '@supabase/supabase-js';
+// netlify/functions/send-push.cjs  (CommonJS - mais compatível no Netlify)
+const webpushPkg = require("web-push");
+const { createClient } = require("@supabase/supabase-js");
 
-const jsonResponse = (statusCode, body, extraHeaders = {}) => ({
+// web-push pode vir como default dependendo do bundler
+const webpush = webpushPkg.default ?? webpushPkg;
+
+const jsonResponse = (statusCode, body) => ({
   statusCode,
   headers: {
-    'Content-Type': 'application/json; charset=utf-8',
-    ...extraHeaders,
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
   },
   body: JSON.stringify(body),
 });
 
-export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } };
+exports.handler = async (event) => {
+  if (event.httpMethod === "OPTIONS") {
+    return { statusCode: 204, headers: { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Content-Type, Authorization" } };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, { error: 'Método não permitido' });
+  if (event.httpMethod !== "POST") {
+    return jsonResponse(405, { error: "Método não permitido" });
   }
 
   try {
-    const { userId, title, body, icon, badge, url, tag, data, actions } = JSON.parse(event.body || '{}');
+    const payloadIn = JSON.parse(event.body || "{}");
+    const { userId, title, body, icon, badge, url, tag, data, actions } = payloadIn || {};
 
-    if (!userId) {
-      return jsonResponse(400, { error: 'userId é obrigatório' });
-    }
+    if (!userId) return jsonResponse(400, { error: "userId é obrigatório" });
 
-    // VAPID (preferimos variáveis do backend; mas aceitamos fallback se você reutiliza nomes do Vite)
-    const vapidPublicKey = process.env.VAPID_PUBLIC_KEY || process.env.VITE_VAPID_PUBLIC_KEY;
-    const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY || process.env.VITE_VAPID_PRIVATE_KEY;
-    const vapidSubject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
+    // ===== VAPID (Netlify env vars) =====
+    const vapidPublicKey = (process.env.VAPID_PUBLIC_KEY || "").trim();
+    const vapidPrivateKey = (process.env.VAPID_PRIVATE_KEY || "").trim();
+    const vapidSubject = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
 
     if (!vapidPublicKey || !vapidPrivateKey) {
       return jsonResponse(500, {
-        error: 'Chaves VAPID não configuradas',
-        details: 'Configure VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY nas variáveis de ambiente do Netlify.',
+        error: "Chaves VAPID não configuradas",
+        details: "Configure VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY nas Environment Variables do Netlify e faça redeploy.",
       });
     }
 
     webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
 
-    // Supabase (precisa ser service-role para poder ler subscriptions de qualquer usuário)
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY_V1;
+    // ===== Supabase (service role) =====
+    const supabaseUrl = (process.env.SUPABASE_URL || "").trim();
+    const supabaseKey = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
     if (!supabaseUrl || !supabaseKey) {
       return jsonResponse(500, {
-        error: 'Supabase não configurado',
-        details: 'Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify.',
+        error: "Supabase não configurado",
+        details: "Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify e faça redeploy.",
       });
     }
 
     const supabase = createClient(supabaseUrl, supabaseKey);
 
-    const { data: subscriptions, error } = await supabase
-      .from('push_subscriptions')
-      .select('id, endpoint, keys_p256dh, keys_auth')
-      .eq('user_id', userId);
+    const { data: subs, error: subErr } = await supabase
+      .from("push_subscriptions")
+      .select("id, endpoint, keys_p256dh, keys_auth")
+      .eq("user_id", userId);
 
-    if (error) {
-      return jsonResponse(500, { error: 'Erro ao buscar subscriptions', details: error.message });
+    if (subErr) {
+      return jsonResponse(500, { error: "Erro ao buscar subscriptions", details: subErr.message });
     }
 
-    if (!subscriptions || subscriptions.length === 0) {
-      return jsonResponse(404, { error: 'Nenhuma subscription encontrada para este usuário' });
+    if (!subs || subs.length === 0) {
+      return jsonResponse(404, { error: "Nenhuma subscription encontrada para este usuário" });
     }
 
-    const payload = {
-      title: title || 'UDG',
-      body: body || 'Nova notificação',
-      icon: icon || '/icon-192.png',
-      badge: badge || '/icon-192.png',
-      tag: tag || 'udg-general',
-      url: url || '/news',
+    const pushPayload = {
+      title: title || "UDG",
+      body: body || "Nova notificação",
+      icon: icon || "/icon-192.png",
+      badge: badge || "/icon-192.png",
+      tag: tag || "udg-general",
+      url: url || "/news",
       data: data || {},
-      actions: actions,
+      actions,
       timestamp: Date.now(),
     };
 
     const results = await Promise.all(
-      subscriptions.map(async (sub) => {
-        const pushSubscription = {
-          endpoint: sub.endpoint,
-          keys: {
-            p256dh: sub.keys_p256dh,
-            auth: sub.keys_auth,
-          },
+      subs.map(async (s) => {
+        const subscription = {
+          endpoint: s.endpoint,
+          keys: { p256dh: s.keys_p256dh, auth: s.keys_auth },
         };
 
         try {
-          await webpush.sendNotification(pushSubscription, JSON.stringify(payload));
-          return { success: true, endpoint: sub.endpoint };
-        } catch (pushError) {
-          // Se subscription expirou/foi removida, limpamos.
-          const statusCode = pushError?.statusCode;
-          if (statusCode === 410 || statusCode === 404) {
-            await supabase.from('push_subscriptions').delete().eq('id', sub.id);
+          await webpush.sendNotification(subscription, JSON.stringify(pushPayload));
+          return { success: true, endpoint: s.endpoint };
+        } catch (e) {
+          const statusCode = e?.statusCode;
+          // 404/410 = subscription morta -> apaga
+          if (statusCode === 404 || statusCode === 410) {
+            await supabase.from("push_subscriptions").delete().eq("id", s.id);
           }
-          return {
-            success: false,
-            endpoint: sub.endpoint,
-            statusCode,
-            error: pushError?.message || String(pushError),
-          };
+          return { success: false, endpoint: s.endpoint, statusCode, error: e?.message || String(e) };
         }
       })
     );
 
     const sent = results.filter((r) => r.success).length;
-    const failed = results.length - sent;
-
-    return jsonResponse(200, { success: true, sent, failed, results });
+    return jsonResponse(200, { success: true, sent, failed: results.length - sent, results });
   } catch (err) {
-    return jsonResponse(500, { error: 'Erro interno do servidor', details: err?.message || String(err) });
+    return jsonResponse(500, {
+      error: "Erro interno do servidor",
+      details: err?.message || String(err),
+    });
   }
 };
