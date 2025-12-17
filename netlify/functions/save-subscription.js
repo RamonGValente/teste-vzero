@@ -1,78 +1,102 @@
-// netlify/functions/save-subscription.js (ESM)
-// OBS: Use este endpoint se você quiser salvar subscriptions via backend.
-// Em geral, é melhor salvar direto no Supabase com RLS permitindo user_id = auth.uid().
+// netlify/functions/save-subscription.js
+// ✅ ESM (projeto usa "type": "module")
+// Salva/atualiza uma PushSubscription no Supabase.
 
-import { createClient } from '@supabase/supabase-js';
+import { createClient } from "@supabase/supabase-js";
 
-const jsonResponse = (statusCode, body, extraHeaders = {}) => ({
+const json = (statusCode, body) => ({
   statusCode,
-  headers: { 'Content-Type': 'application/json; charset=utf-8', ...extraHeaders },
+  headers: {
+    "Content-Type": "application/json; charset=utf-8",
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+  },
   body: JSON.stringify(body),
 });
 
 export const handler = async (event) => {
-  if (event.httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Headers': 'Content-Type, Authorization' } };
+  if (event.httpMethod === "OPTIONS") {
+    return {
+      statusCode: 204,
+      headers: {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Headers": "Content-Type, Authorization",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+      },
+      body: "",
+    };
   }
 
-  if (event.httpMethod !== 'POST') {
-    return jsonResponse(405, { error: 'Método não permitido' });
+  if (event.httpMethod !== "POST") {
+    return json(405, { error: "Método não permitido" });
   }
 
   try {
-    const payload = JSON.parse(event.body || '{}');
-    const userId = payload.userId;
-    const sub = payload.subscription;
-
-    if (!userId || !sub?.endpoint) {
-      return jsonResponse(400, { error: 'Campos obrigatórios: userId e subscription.endpoint' });
+    let input = {};
+    try {
+      input = JSON.parse(event.body || "{}");
+    } catch {
+      return json(400, { error: "Body inválido (JSON)" });
     }
 
-    const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL;
-    const supabaseKey = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_SERVICE_ROLE_KEY_V1;
+    const userId = input.userId || input.user_id;
+    const sub = input.subscription || input;
 
-    if (!supabaseUrl || !supabaseKey) {
-      return jsonResponse(500, {
-        error: 'Supabase não configurado',
-        details: 'Configure SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify.',
+    if (!userId) return json(400, { error: "userId é obrigatório" });
+    if (!sub?.endpoint) return json(400, { error: "subscription.endpoint é obrigatório" });
+
+    const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
+      return json(500, {
+        error: "Supabase não configurado",
+        details: "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify e faça redeploy.",
       });
     }
 
-    const supabase = createClient(supabaseUrl, supabaseKey);
+    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
-    // Atualiza por endpoint se existir; senão insere.
+    const payload = {
+      user_id: userId,
+      endpoint: sub.endpoint,
+      expiration_time: sub.expirationTime ? new Date(sub.expirationTime).toISOString() : null,
+      keys_p256dh: sub.keys?.p256dh || null,
+      keys_auth: sub.keys?.auth || null,
+    };
+
+    // Procura uma linha existente para (user_id, endpoint)
     const { data: existing, error: findErr } = await supabase
-      .from('push_subscriptions')
-      .select('id')
-      .eq('endpoint', sub.endpoint)
+      .from("push_subscriptions")
+      .select("id")
+      .eq("user_id", userId)
+      .eq("endpoint", sub.endpoint)
       .maybeSingle();
 
     if (findErr) {
-      return jsonResponse(500, { error: 'Erro ao consultar subscription existente', details: findErr.message });
+      return json(500, { error: "Erro ao consultar subscription", details: findErr.message });
     }
-
-    const row = {
-      user_id: userId,
-      endpoint: sub.endpoint,
-      expiration_time: sub.expirationTime ?? null,
-      keys_p256dh: sub.keys?.p256dh ?? null,
-      keys_auth: sub.keys?.auth ?? null,
-    };
 
     if (existing?.id) {
       const { error: updErr } = await supabase
-        .from('push_subscriptions')
-        .update(row)
-        .eq('id', existing.id);
+        .from("push_subscriptions")
+        .update(payload)
+        .eq("id", existing.id);
 
-      if (updErr) return jsonResponse(500, { error: 'Erro ao atualizar subscription', details: updErr.message });
-    } else {
-      const { error: insErr } = await supabase.from('push_subscriptions').insert(row);
-      if (insErr) return jsonResponse(500, { error: 'Erro ao inserir subscription', details: insErr.message });
+      if (updErr) {
+        return json(500, { error: "Erro ao atualizar subscription", details: updErr.message });
+      }
+
+      return json(200, { success: true, action: "updated" });
     }
 
-    return jsonResponse(200, { success: true });
+    const { error: insErr } = await supabase.from("push_subscriptions").insert(payload);
+    if (insErr) {
+      return json(500, { error: "Erro ao inserir subscription", details: insErr.message });
+    }
+
+    return json(200, { success: true, action: "inserted" });
   } catch (err) {
-    return jsonResponse(500, { error: 'Erro interno do servidor', details: err?.message || String(err) });
+    return json(500, { error: "Erro interno do servidor", details: err?.message || String(err) });
   }
 };

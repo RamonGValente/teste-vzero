@@ -1,10 +1,12 @@
-// netlify/functions/send-push.cjs
-// Envia push para as subscriptions do usuário salvas na tabela public.push_subscriptions.
-// CommonJS (.cjs) para evitar problemas com "type":"module" no package.json.
+// netlify/functions/send-push.js
+// ✅ ESM (este projeto usa "type": "module" no package.json)
+// Envia push para todas as subscriptions do usuário registradas em public.push_subscriptions.
 
-const webpushPkg = require("web-push");
-const { createClient } = require("@supabase/supabase-js");
-const webpush = webpushPkg.default ?? webpushPkg;
+import webpushImport from "web-push";
+import { createClient } from "@supabase/supabase-js";
+
+// web-push é CommonJS; em ESM geralmente chega como default
+const webpush = webpushImport?.default ?? webpushImport;
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -17,7 +19,7 @@ const json = (statusCode, body) => ({
   body: JSON.stringify(body),
 });
 
-exports.handler = async (event) => {
+export const handler = async (event) => {
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
@@ -30,7 +32,9 @@ exports.handler = async (event) => {
     };
   }
 
-  if (event.httpMethod !== "POST") return json(405, { error: "Método não permitido" });
+  if (event.httpMethod !== "POST") {
+    return json(405, { error: "Método não permitido" });
+  }
 
   try {
     let input = {};
@@ -43,24 +47,27 @@ exports.handler = async (event) => {
     const { userId } = input;
     if (!userId) return json(400, { error: "userId é obrigatório" });
 
+    // ===== ENV (Netlify) =====
     const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || "").trim();
     const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || "").trim();
     const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
 
+    const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
+    const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
+
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
       return json(500, {
         error: "Chaves VAPID não configuradas",
-        details: "Defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY no Netlify e faça 'Clear cache and deploy'.",
+        details:
+          "Defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY nas Environment Variables do Netlify e faça 'Clear cache and deploy'.",
       });
     }
-
-    const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
-    const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, {
         error: "Supabase não configurado",
-        details: "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify e faça 'Clear cache and deploy'.",
+        details:
+          "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nas Environment Variables do Netlify e faça 'Clear cache and deploy'.",
       });
     }
 
@@ -73,14 +80,19 @@ exports.handler = async (event) => {
       .select("id, endpoint, keys_p256dh, keys_auth")
       .eq("user_id", userId);
 
-    if (subErr) return json(500, { error: "Erro ao buscar subscriptions", details: subErr.message });
-    if (!subs || subs.length === 0) return json(404, { error: "Nenhuma subscription encontrada para este usuário" });
+    if (subErr) {
+      return json(500, { error: "Erro ao buscar subscriptions", details: subErr.message });
+    }
+
+    if (!subs || subs.length === 0) {
+      return json(404, { error: "Nenhuma subscription encontrada para este usuário" });
+    }
 
     const payload = {
       title: input.title || "UDG",
       body: input.body || "Nova notificação",
       icon: input.icon || "/icon-192.png",
-      badge: input.badge || "/icon-192.png",
+      badge: input.badge || "/badge-72.png",
       tag: input.tag || "udg-general",
       url: input.url || "/news",
       data: input.data || {},
@@ -96,17 +108,24 @@ exports.handler = async (event) => {
       subs.map(async (s) => {
         const subscription = {
           endpoint: s.endpoint,
-          keys: { p256dh: s.keys_p256dh, auth: s.keys_auth },
+          keys: {
+            p256dh: s.keys_p256dh,
+            auth: s.keys_auth,
+          },
         };
+
         try {
           await webpush.sendNotification(subscription, JSON.stringify(payload));
           return { success: true, endpoint: s.endpoint };
         } catch (e) {
           const statusCode = e?.statusCode;
           const message = e?.message || String(e);
+
+          // 404/410 = subscription morta -> remove
           if (statusCode === 404 || statusCode === 410) {
             await supabase.from("push_subscriptions").delete().eq("id", s.id);
           }
+
           return { success: false, endpoint: s.endpoint, statusCode, error: message };
         }
       })

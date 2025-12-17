@@ -1,82 +1,71 @@
-// ============================================
-// PUSH HANDLERS (importado pelo SW do Workbox)
-// ============================================
-// Este arquivo é carregado via workbox.importScripts pelo vite-plugin-pwa.
-// Ele NÃO cria um novo Service Worker; apenas adiciona handlers de push/click.
+// public/sw-push.js
+// Handlers de Push/NotificationClick para o Service Worker gerado pelo vite-plugin-pwa (Workbox).
 
-function parsePushPayload(event) {
+function parsePayload(event) {
   const fallback = {
-    title: 'UDG',
-    body: 'Nova notificação',
-    icon: '/icon-192.png',
-    badge: '/icon-192.png',
-    tag: 'udg-general',
-    url: '/news',
+    title: "UDG",
+    body: "Nova notificação",
+    icon: "/icon-192.png",
+    badge: "/icon-192.png",
+    tag: "udg-general",
+    url: "/news",
     data: {},
     actions: [
-      { action: 'open', title: 'Abrir' },
-      { action: 'dismiss', title: 'Fechar' }
-    ]
+      { action: "open", title: "Abrir" },
+      { action: "dismiss", title: "Fechar" },
+    ],
   };
 
   if (!event.data) return fallback;
 
   try {
     const json = event.data.json();
-    const merged = { ...fallback, ...json };
-    merged.body = json.body ?? json.message ?? fallback.body;
-    merged.url = json.url ?? json?.data?.url ?? fallback.url;
-    merged.data = { ...fallback.data, ...(json.data || {}), url: merged.url };
-    return merged;
-  } catch (e) {
+    const title = json.title ?? fallback.title;
+    const body = json.body ?? json.message ?? fallback.body;
+    const url = json.url ?? json?.data?.url ?? fallback.url;
+    return {
+      ...fallback,
+      ...json,
+      title,
+      body,
+      url,
+      data: { ...(json.data || {}), url },
+    };
+  } catch {
     const text = event.data.text();
     return { ...fallback, body: text || fallback.body };
   }
 }
 
-self.addEventListener('push', (event) => {
-  const payload = parsePushPayload(event);
+self.addEventListener("push", (event) => {
+  const payload = parsePayload(event);
 
-  const title = payload.title || 'UDG';
   const options = {
-    body: payload.body || 'Nova notificação',
-    icon: payload.icon || '/icon-192.png',
-    badge: payload.badge || '/icon-192.png',
-    tag: payload.tag || 'udg-general',
-    data: payload.data || { url: payload.url || '/news' },
+    body: payload.body,
+    icon: payload.icon,
+    badge: payload.badge,
+    tag: payload.tag,
+    data: payload.data,
+    actions: payload.actions,
     requireInteraction: Boolean(payload.requireInteraction),
     silent: Boolean(payload.silent),
     renotify: Boolean(payload.renotify),
     timestamp: payload.timestamp || Date.now(),
     vibrate: payload.vibrate || [200, 100, 200],
-    actions: payload.actions || [
-      { action: 'open', title: 'Abrir' },
-      { action: 'dismiss', title: 'Fechar' }
-    ]
   };
 
-  event.waitUntil(self.registration.showNotification(title, options));
+  event.waitUntil(self.registration.showNotification(payload.title, options));
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener("notificationclick", (event) => {
   event.notification.close();
+  if (event.action === "dismiss") return;
 
-  if (event.action === 'dismiss') return;
-
-  const urlToOpen = event.notification.data?.url || '/news';
-
+  const urlToOpen = event.notification?.data?.url || "/news";
   event.waitUntil(
-    clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
-      const target = new URL(urlToOpen, self.location.origin);
+    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        try {
-          const clientUrl = new URL(client.url);
-          if (clientUrl.pathname === target.pathname && 'focus' in client) {
-            return client.focus();
-          }
-        } catch (_) {
-          // ignore
-        }
+        if (client.url.includes(urlToOpen) && "focus" in client) return client.focus();
       }
       if (clients.openWindow) return clients.openWindow(urlToOpen);
     })
