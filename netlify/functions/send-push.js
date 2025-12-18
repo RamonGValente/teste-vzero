@@ -20,6 +20,7 @@ const json = (statusCode, body) => ({
 });
 
 export const handler = async (event) => {
+  // Trata pre-flight requests (CORS)
   if (event.httpMethod === "OPTIONS") {
     return {
       statusCode: 204,
@@ -50,29 +51,40 @@ export const handler = async (event) => {
     // ===== ENV (Netlify) =====
     const VAPID_PUBLIC_KEY = (process.env.VAPID_PUBLIC_KEY || "").trim();
     const VAPID_PRIVATE_KEY = (process.env.VAPID_PRIVATE_KEY || "").trim();
-    const VAPID_SUBJECT = (process.env.VAPID_SUBJECT || "mailto:admin@example.com").trim();
+    let VAPID_SUBJECT = (process.env.VAPID_SUBJECT || "").trim();
 
     const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
     const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
 
+    // 🛑 CORREÇÃO DO ERRO 500 (VAPID SUBJECT)
+    // Se o subject for um email e não começar com "mailto:", adicionamos automaticamente
+    if (!VAPID_SUBJECT) {
+        VAPID_SUBJECT = "mailto:admin@example.com";
+    } else if (VAPID_SUBJECT.includes("@") && !VAPID_SUBJECT.startsWith("mailto:") && !VAPID_SUBJECT.startsWith("http")) {
+        VAPID_SUBJECT = `mailto:${VAPID_SUBJECT}`;
+    }
+
     if (!VAPID_PUBLIC_KEY || !VAPID_PRIVATE_KEY) {
       return json(500, {
         error: "Chaves VAPID não configuradas",
-        details:
-          "Defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY nas Environment Variables do Netlify e faça 'Clear cache and deploy'.",
+        details: "Defina VAPID_PUBLIC_KEY e VAPID_PRIVATE_KEY nas Environment Variables do Netlify.",
       });
     }
 
     if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
       return json(500, {
         error: "Supabase não configurado",
-        details:
-          "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nas Environment Variables do Netlify e faça 'Clear cache and deploy'.",
+        details: "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY nas Environment Variables do Netlify.",
       });
     }
 
-    webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    try {
+        webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC_KEY, VAPID_PRIVATE_KEY);
+    } catch (configErr) {
+        return json(500, { error: "Erro na configuração VAPID", details: configErr.message });
+    }
 
+    // Usa Service Role para ignorar RLS na leitura e deleção de subs
     const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
 
     const { data: subs, error: subErr } = await supabase
@@ -85,7 +97,7 @@ export const handler = async (event) => {
     }
 
     if (!subs || subs.length === 0) {
-      return json(404, { error: "Nenhuma subscription encontrada para este usuário" });
+      return json(200, { success: false, message: "Nenhuma subscription encontrada para este usuário", sent: 0 });
     }
 
     const payload = {
@@ -104,6 +116,8 @@ export const handler = async (event) => {
       timestamp: Date.now(),
     };
 
+    const payloadString = JSON.stringify(payload);
+
     const results = await Promise.all(
       subs.map(async (s) => {
         const subscription = {
@@ -115,13 +129,13 @@ export const handler = async (event) => {
         };
 
         try {
-          await webpush.sendNotification(subscription, JSON.stringify(payload));
+          await webpush.sendNotification(subscription, payloadString);
           return { success: true, endpoint: s.endpoint };
         } catch (e) {
           const statusCode = e?.statusCode;
           const message = e?.message || String(e);
 
-          // 404/410 = subscription morta -> remove
+          // 404/410 = subscription morta/revogada -> remove do banco
           if (statusCode === 404 || statusCode === 410) {
             await supabase.from("push_subscriptions").delete().eq("id", s.id);
           }
