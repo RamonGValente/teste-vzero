@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { sendPushEvent } from "@/utils/pushClient";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -116,14 +117,16 @@ export default function AddFriend({ userCode }: { userCode?: string }) {
         return;
       }
 
-      // Create friend request
-      const { error: requestError } = await supabase
+      // Create friend request (return id for push)
+      const { data: fr, error: requestError } = await supabase
         .from("friend_requests")
         .insert({ 
           sender_id: user.id, 
           receiver_id: friendProfile.id,
           status: 'pending'
-        });
+        })
+        .select('id')
+        .single();
 
       if (requestError) {
         console.error("Error creating friend request:", requestError);
@@ -140,6 +143,15 @@ export default function AddFriend({ userCode }: { userCode?: string }) {
         title: "Solicitação enviada!",
         description: `Solicitação enviada para ${friendProfile.username}`,
       });
+
+      // Fire push notification to receiver (best-effort)
+      try {
+        if (fr?.id) {
+          await sendPushEvent({ eventType: 'friend_request', requestId: fr.id });
+        }
+      } catch (e) {
+        console.log('push friend_request falhou', e);
+      }
 
       setFriendCode("");
     } catch (error: any) {

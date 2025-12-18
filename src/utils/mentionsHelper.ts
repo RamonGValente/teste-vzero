@@ -1,3 +1,4 @@
+import { sendPushEvent } from "@/utils/pushClient";
 import { supabase } from "@/integrations/supabase/client";
 
 export const extractMentions = (text: string): string[] => {

@@ -1,73 +1,55 @@
-// public/sw-push.js
-// Handlers de Push/NotificationClick para o Service Worker gerado pelo vite-plugin-pwa (Workbox).
+/* Push handler imported by Workbox service worker */
 
-function parsePayload(event) {
-  const fallback = {
-    title: "UDG",
-    body: "Nova notificação",
-    icon: "/icon-192.png",
-    badge: "/icon-192.png",
-    tag: "udg-general",
-    url: "/news",
-    data: {},
-    actions: [
-      { action: "open", title: "Abrir" },
-      { action: "dismiss", title: "Fechar" },
-    ],
-  };
-
-  if (!event.data) return fallback;
-
-  try {
-    const json = event.data.json();
-    const title = json.title ?? fallback.title;
-    const body = json.body ?? json.message ?? fallback.body;
-    const url = json.url ?? json?.data?.url ?? fallback.url;
-    return {
-      ...fallback,
-      ...json,
-      title,
-      body,
-      url,
-      data: { ...(json.data || {}), url },
-    };
-  } catch {
-    const text = event.data.text();
-    return { ...fallback, body: text || fallback.body };
+const parsePushData = (event) => {
+  if (!event?.data) return {};
+  try { return event.data.json(); } catch {
+    try { return { title: 'Notificação', body: event.data.text() }; } catch { return {}; }
   }
-}
+};
 
-self.addEventListener("push", (event) => {
-  const payload = parsePayload(event);
+self.addEventListener('push', (event) => {
+  const payload = parsePushData(event);
+  const title = payload.title || 'UDG';
+  const body = payload.body || '';
+  const icon = payload.icon || '/icon-192.png';
+  const badge = payload.badge || '/icon-192.png';
+  const image = payload.image;
+  const data = payload.data || {};
+  const tag = payload.tag || 'udg';
 
-  const options = {
-    body: payload.body,
-    icon: payload.icon,
-    badge: payload.badge,
-    tag: payload.tag,
-    data: payload.data,
-    actions: payload.actions,
-    requireInteraction: Boolean(payload.requireInteraction),
-    silent: Boolean(payload.silent),
-    renotify: Boolean(payload.renotify),
-    timestamp: payload.timestamp || Date.now(),
-    vibrate: payload.vibrate || [200, 100, 200],
-  };
+  event.waitUntil((async () => {
+    // when app is open, also notify pages (sound/toast)
+    try {
+      const clientsArr = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+      for (const c of clientsArr) {
+        c.postMessage({ type: 'PUSH_RECEIVED', payload: { title, body, icon, image, data, tag } });
+      }
+    } catch {}
 
-  event.waitUntil(self.registration.showNotification(payload.title, options));
+    await self.registration.showNotification(title, {
+      body,
+      icon,
+      badge,
+      image,
+      data,
+      tag,
+      renotify: true,
+      requireInteraction: false,
+    });
+  })());
 });
 
-self.addEventListener("notificationclick", (event) => {
+self.addEventListener('notificationclick', (event) => {
   event.notification.close();
-  if (event.action === "dismiss") return;
-
-  const urlToOpen = event.notification?.data?.url || "/news";
-  event.waitUntil(
-    clients.matchAll({ type: "window", includeUncontrolled: true }).then((clientList) => {
-      for (const client of clientList) {
-        if (client.url.includes(urlToOpen) && "focus" in client) return client.focus();
+  const url = (event.notification?.data && event.notification.data.url) ? event.notification.data.url : '/';
+  event.waitUntil((async () => {
+    const allClients = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    for (const client of allClients) {
+      if (client.url.includes(url)) {
+        await client.focus();
+        return;
       }
-      if (clients.openWindow) return clients.openWindow(urlToOpen);
-    })
-  );
+    }
+    await self.clients.openWindow(url);
+  })());
 });

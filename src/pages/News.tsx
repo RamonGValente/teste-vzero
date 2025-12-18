@@ -4,6 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
+import { subscribeToPush as subscribeToPushClient, unsubscribeFromPush as unsubscribeFromPushClient, sendTestPush, isPushSupported as isPushSupportedClient, getServiceWorkerRegistration } from "@/utils/pushClient";
 import {
   Bell,
   BellOff,
@@ -266,46 +267,23 @@ export default function News() {
 
   // Solicitar permissão para notificações push
   const requestPushPermission = async () => {
-    if (!('Notification' in window)) {
-      toast({
-        title: "Navegador não suportado",
-        description: "Seu navegador não suporta notificações push.",
-        variant: "destructive",
-      });
+    if (!isPushSupportedClient()) {
+      toast({ title: 'Navegador não suportado', description: 'Seu navegador não suporta notificações push.', variant: 'destructive' });
       return;
     }
-
     try {
-      let registration = serviceWorker;
-      if (!registration) {
-        registration = await registerServiceWorker();
-        if (!registration) return;
+      const registration = await getServiceWorkerRegistration();
+      setServiceWorker(registration);
+      const sub = await subscribeToPushClient();
+      setPushPermission(Notification.permission);
+      setIsSubscribed(!!sub);
+      toast({ title: '✅ Push ativado!', description: 'Você agora receberá push de mensagens, chamar atenção, menções e pedidos de amizade.' });
+    } catch (error: any) {
+      if (Notification.permission === 'denied') {
+        toast({ title: 'Permissão negada', description: 'Ative nas configurações do navegador para receber push.', variant: 'destructive' });
+        return;
       }
-
-      const permission = await Notification.requestPermission();
-      setPushPermission(permission);
-
-      if (permission === 'granted') {
-        toast({ 
-          title: "🎉 Permissão concedida!",
-          description: "Você agora receberá notificações push."
-        });
-        
-        await subscribeToPush(registration);
-      } else if (permission === 'denied') {
-        toast({
-          title: "Permissão negada",
-          description: "Você não receberá notificações push. Você pode alterar isso nas configurações do navegador.",
-          variant: "destructive",
-        });
-      }
-    } catch (error) {
-      console.error('Erro ao solicitar permissão:', error);
-      toast({
-        title: "Erro ao solicitar permissão",
-        description: "Não foi possível solicitar permissão para notificações push.",
-        variant: "destructive",
-      });
+      toast({ title: 'Erro ao ativar push', description: error?.message || 'Não foi possível ativar notificações push.', variant: 'destructive' });
     }
   };
 
@@ -425,29 +403,13 @@ export default function News() {
 
   // Cancelar inscrição
   const unsubscribeFromPush = async () => {
-    if (!serviceWorker) return;
-
     try {
-      const subscription = await serviceWorker.pushManager.getSubscription();
-      if (subscription) {
-        const success = await subscription.unsubscribe();
-        if (success) {
-          setIsSubscribed(false);
-          toast({ title: "✅ Inscrição cancelada!" });
-          
-          // Remover do servidor
-          await removeSubscriptionFromServer(subscription);
-          
-          // Remover do localStorage
-          localStorage.removeItem('pushSubscription');
-        }
-      }
-    } catch (error) {
-      console.error('Erro ao cancelar inscrição:', error);
-      toast({
-        title: "Erro ao cancelar inscrição",
-        variant: "destructive",
-      });
+      await unsubscribeFromPushClient();
+      setIsSubscribed(false);
+      setPushPermission(Notification.permission);
+      toast({ title: '✅ Notificações push desativadas!' });
+    } catch {
+      toast({ title: 'Erro ao cancelar inscrição', variant: 'destructive' });
     }
   };
 
@@ -506,40 +468,12 @@ export default function News() {
         notificationSound.current.play().catch(console.error);
       }
 
-      // Tentar enviar push notification
+      // Enviar push (servidor) para validar PC/Tablet/Celular
       try {
-        const { data: subscription } = await supabase
-          .from('push_subscriptions')
-          .select('*')
-          .eq('user_id', user.id)
-          .limit(1)
-          .single();
-
-        if (subscription) {
-          // Usar uma Edge Function ou endpoint para enviar push
-          const response = await fetch('/.netlify/functions/send-push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              userId: user.id,
-              title: '🔔 Teste World Flow',
-              body: 'Esta é uma notificação push de teste!',
-              icon: '/icon-192.png',
-              badge: '/badge-72.png',
-              url: '/news',
-              tag: 'test-notification'
-            })
-          });
-
-          if (response.ok) {
-            toast({
-              title: "📱 Notificação enviada!",
-              description: "Verifique se chegou no seu dispositivo.",
-            });
-          }
-        }
+        await sendTestPush();
+        toast({ title: '📱 Push enviado!', description: 'Se o app estiver fechado, deve chegar como notificação do sistema.' });
       } catch (pushError) {
-        console.log('Push notification opcional falhou, continuando...');
+        console.log('Push test falhou:', pushError);
       }
 
       toast({

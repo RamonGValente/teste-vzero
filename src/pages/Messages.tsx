@@ -46,6 +46,8 @@ import { MessageInput } from "@/components/MessageInput";
 import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
+import { useSearchParams } from "react-router-dom";
+import { sendPushEvent } from "@/utils/pushClient";
 
 // --- Interfaces ---
 interface MessageTimer {
@@ -325,6 +327,14 @@ export default function Messages() {
   
   const [selectedConversation, setSelectedConversation] = useState<string | null>(null);
   const [sidebarTab, setSidebarTab] = useState<"chats" | "contacts">("chats");
+  const [searchParams] = useSearchParams();
+  useEffect(() => {
+    const conv = searchParams.get('conversation');
+    const tab = searchParams.get('tab') as any;
+    if (tab === 'contacts' || tab === 'chats') setSidebarTab(tab);
+    if (conv) setSelectedConversation(conv);
+  }, [searchParams]);
+
   const [searchQuery, setSearchQuery] = useState("");
   
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -826,6 +836,7 @@ export default function Messages() {
     if (msg) {
       const { saveMentions } = await import("@/utils/mentionsHelper");
       await saveMentions(msg.id, "message", text, user.id);
+      try { await sendPushEvent({ eventType: 'message', messageId: msg.id }); } catch (e) { console.log('push message falhou', e); }
       await refetchMessages();
       setTimeout(() => scrollToBottom(true), 100);
     }
@@ -844,7 +855,8 @@ export default function Messages() {
         return publicUrl;
       });
       const urls = await Promise.all(uploadPromises);
-      await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: urls });
+      const { data: mediaMsg } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: urls }).select().single();
+      try { if (mediaMsg?.id) await sendPushEvent({ eventType: 'message', messageId: mediaMsg.id }); } catch (e) { console.log('push media falhou', e); }
       await refetchMessages();
       scrollToBottom(true);
     } catch (e) {
@@ -860,7 +872,8 @@ export default function Messages() {
       const { error } = await supabase.storage.from("media").upload(filePath, blob);
       if (error) throw error;
       const { data: { publicUrl } } = supabase.storage.from("media").getPublicUrl(filePath);
-      await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: [publicUrl] });
+      const { data: audioMsg } = await supabase.from("messages").insert({ conversation_id: selectedConversation, user_id: user.id, media_urls: [publicUrl] }).select().single();
+      try { if (audioMsg?.id) await sendPushEvent({ eventType: 'message', messageId: audioMsg.id }); } catch (e) { console.log('push audio falhou', e); }
       await refetchMessages();
       scrollToBottom(true);
     } catch (e) {
