@@ -1,0 +1,14 @@
+# Prevent aggressive caching for PWA critical files (helps Android/Xiaomi installability)
+/sw.js
+  Cache-Control: no-cache, no-store, must-revalidate
+  Service-Worker-Allowed: /
+
+/sw-push.js
+  Cache-Control: no-cache, no-store, must-revalidate
+
+/manifest.webmanifest
+  Cache-Control: no-cache, no-store, must-revalidate
+  Content-Type: application/manifest+json; charset=utf-8
+
+/workbox-*.js
+  Cache-Control: no-cache, no-store, must-revalidate

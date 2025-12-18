@@ -14,6 +14,25 @@ export function PWAInstallPrompt() {
   const isAndroid = /Android/i.test(ua);
   const isChrome = /Chrome\//i.test(ua) && !/EdgA\//i.test(ua) && !/OPR\//i.test(ua) && !/SamsungBrowser\//i.test(ua);
   const isXiaomi = /Xiaomi|MiuiBrowser|Mi Browser|MIUI/i.test(ua);
+  // Many users open links inside apps (WhatsApp/Instagram/Facebook/etc.).
+  // Those "in-app browsers" often don't show the install / add-to-home options.
+  const isInAppBrowser = /(wv|FBAN|FBAV|Instagram|Line|WhatsApp|Telegram|TikTok|Snapchat)/i.test(ua);
+
+  const openInChrome = () => {
+    try {
+      const url = window.location.href;
+      // Android intent scheme: opens in Chrome from in-app browsers.
+      const intentUrl = `intent://${window.location.host}${window.location.pathname}${window.location.search}#Intent;scheme=${window.location.protocol.replace(':', '')};package=com.android.chrome;end`;
+      // Try intent first (works best from in-app browsers)
+      window.location.href = intentUrl;
+      // Fallback: open normally
+      setTimeout(() => {
+        window.open(url, '_blank');
+      }, 500);
+    } catch {
+      window.open(window.location.href, '_blank');
+    }
+  };
 
   useEffect(() => {
     try {
@@ -208,6 +227,23 @@ export function PWAInstallPrompt() {
                     <li><strong>Android (Chrome):</strong> ⋮ Menu → <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong></li>
                     <li><strong>Desktop:</strong> Ícone de instalação na barra de endereços</li>
                   </ul>
+
+                  {isAndroid && isInAppBrowser && (
+                    <div className="mt-3 rounded-md border p-2">
+                      <p className="font-medium">Você está em um navegador interno</p>
+                      <p>
+                        Em navegadores internos (WhatsApp/Instagram/Facebook etc.) o menu geralmente não mostra “Instalar app”
+                        nem “Adicionar à tela inicial”. Abra no Chrome para instalar.
+                      </p>
+                      <Button
+                        onClick={openInChrome}
+                        variant="secondary"
+                        className="w-full mt-2"
+                      >
+                        Abrir no Google Chrome
+                      </Button>
+                    </div>
+                  )}
 
                   {isAndroid && isChrome && !swControlled && (
                     <div className="mt-3 rounded-md border p-2">
