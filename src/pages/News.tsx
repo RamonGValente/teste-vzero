@@ -465,7 +465,12 @@ export default function News() {
       // Tocar som
       if (notificationSound.current) {
         notificationSound.current.currentTime = 0;
-        notificationSound.current.play().catch(console.error);
+        notificationSound.current.play().catch((e: any) => {
+          // Ignore unsupported/blocked play errors (some browsers require user gesture)
+          const name = e?.name || '';
+          if (name === 'NotAllowedError' || name === 'NotSupportedError' || name === 'AbortError') return;
+          console.error(e);
+        });
       }
 
       // Enviar push (servidor) para validar PC/Tablet/Celular
@@ -838,7 +843,11 @@ export default function News() {
     // Tocar som
     if (notificationSettings.sound_enabled && notificationSound.current) {
       notificationSound.current.currentTime = 0;
-      notificationSound.current.play().catch(console.error);
+      notificationSound.current.play().catch((e: any) => {
+        const name = e?.name || '';
+        if (name === 'NotAllowedError' || name === 'NotSupportedError' || name === 'AbortError') return;
+        console.error(e);
+      });
     }
 
     // Navegar
@@ -906,8 +915,9 @@ export default function News() {
   return (
     <div className="min-h-screen bg-gradient-to-b from-background to-muted/20">
       {/* Sons */}
-      <audio ref={audioRef} src="/notification.mp3" preload="auto" />
-      <audio ref={notificationSound} src="/notification-sound.mp3" preload="auto" />
+      {/* Use existing sound asset (kept under /public/sounds) */}
+      <audio ref={audioRef} src="/sounds/alertasom.mp3" preload="auto" />
+      <audio ref={notificationSound} src="/sounds/alertasom.mp3" preload="auto" />
 
       <div className="max-w-4xl mx-auto p-4 md:p-6">
         {/* Header */}
