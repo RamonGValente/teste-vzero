@@ -1,102 +1,54 @@
-// netlify/functions/save-subscription.js
-// ✅ ESM (projeto usa "type": "module")
-// Salva/atualiza uma PushSubscription no Supabase.
-
+// netlify/functions/save-subscription.js (ESM - compatível com "type":"module")
 import { createClient } from "@supabase/supabase-js";
 
-const json = (statusCode, body) => ({
-  statusCode,
-  headers: {
-    "Content-Type": "application/json; charset=utf-8",
-    "Access-Control-Allow-Origin": "*",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-  },
-  body: JSON.stringify(body),
-});
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "Content-Type, Authorization",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+function safeJsonParse(str) {
+  try { return str ? JSON.parse(str) : {}; } catch { return {}; }
+}
 
 export const handler = async (event) => {
-  if (event.httpMethod === "OPTIONS") {
-    return {
-      statusCode: 204,
-      headers: {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Headers": "Content-Type, Authorization",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-      },
-      body: "",
-    };
-  }
-
+  if (event.httpMethod === "OPTIONS") return { statusCode: 200, headers: corsHeaders, body: "" };
   if (event.httpMethod !== "POST") {
-    return json(405, { error: "Método não permitido" });
+    return { statusCode: 405, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ error: "Método não permitido" }) };
   }
 
   try {
-    let input = {};
-    try {
-      input = JSON.parse(event.body || "{}");
-    } catch {
-      return json(400, { error: "Body inválido (JSON)" });
+    const supabaseUrl = process.env.SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+    if (!supabaseUrl || !serviceKey) {
+      return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ error: "SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY ausentes" }) };
     }
 
-    const userId = input.userId || input.user_id;
-    const sub = input.subscription || input;
+    const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false, autoRefreshToken: false } });
 
-    if (!userId) return json(400, { error: "userId é obrigatório" });
-    if (!sub?.endpoint) return json(400, { error: "subscription.endpoint é obrigatório" });
+    const { userId, endpoint, expiration_time, keys_p256dh, keys_auth } = safeJsonParse(event.body);
 
-    const SUPABASE_URL = (process.env.SUPABASE_URL || "").trim();
-    const SUPABASE_SERVICE_ROLE_KEY = (process.env.SUPABASE_SERVICE_ROLE_KEY || "").trim();
-    if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
-      return json(500, {
-        error: "Supabase não configurado",
-        details: "Defina SUPABASE_URL e SUPABASE_SERVICE_ROLE_KEY no Netlify e faça redeploy.",
-      });
+    if (!userId || !endpoint || !keys_p256dh || !keys_auth) {
+      return { statusCode: 400, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ error: "Campos obrigatórios ausentes", required: ["userId","endpoint","keys_p256dh","keys_auth"] }) };
     }
 
-    const supabase = createClient(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY);
+    // remove duplicados pelo endpoint+userId e reinsere (evita depender de UNIQUE no banco)
+    await supabase.from("push_subscriptions").delete().eq("user_id", userId).eq("endpoint", endpoint);
 
-    const payload = {
+    const { error } = await supabase.from("push_subscriptions").insert({
       user_id: userId,
-      endpoint: sub.endpoint,
-      expiration_time: sub.expirationTime ? new Date(sub.expirationTime).toISOString() : null,
-      keys_p256dh: sub.keys?.p256dh || null,
-      keys_auth: sub.keys?.auth || null,
-    };
+      endpoint,
+      expiration_time: expiration_time ?? null,
+      keys_p256dh,
+      keys_auth,
+    });
 
-    // Procura uma linha existente para (user_id, endpoint)
-    const { data: existing, error: findErr } = await supabase
-      .from("push_subscriptions")
-      .select("id")
-      .eq("user_id", userId)
-      .eq("endpoint", sub.endpoint)
-      .maybeSingle();
-
-    if (findErr) {
-      return json(500, { error: "Erro ao consultar subscription", details: findErr.message });
+    if (error) {
+      return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ error: "Erro ao salvar subscription", details: error.message }) };
     }
 
-    if (existing?.id) {
-      const { error: updErr } = await supabase
-        .from("push_subscriptions")
-        .update(payload)
-        .eq("id", existing.id);
-
-      if (updErr) {
-        return json(500, { error: "Erro ao atualizar subscription", details: updErr.message });
-      }
-
-      return json(200, { success: true, action: "updated" });
-    }
-
-    const { error: insErr } = await supabase.from("push_subscriptions").insert(payload);
-    if (insErr) {
-      return json(500, { error: "Erro ao inserir subscription", details: insErr.message });
-    }
-
-    return json(200, { success: true, action: "inserted" });
-  } catch (err) {
-    return json(500, { error: "Erro interno do servidor", details: err?.message || String(err) });
+    return { statusCode: 200, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ success: true }) };
+  } catch (e) {
+    return { statusCode: 500, headers: { ...corsHeaders, "Content-Type": "application/json" }, body: JSON.stringify({ error: "Erro interno", details: e?.message || String(e) }) };
   }
 };

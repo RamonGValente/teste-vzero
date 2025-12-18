@@ -1,5 +1,5 @@
 
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/integrations/supabase/client";
 
 export type AttentionCallError =
   | "not_authenticated"
@@ -14,6 +14,7 @@ export async function sendAttentionCall(receiverId: string, message?: string) {
     p_receiver_id: receiverId,
     p_message: message ?? null,
   });
+
   if (error) {
     const code =
       (error.message as AttentionCallError) ||
@@ -21,6 +22,22 @@ export async function sendAttentionCall(receiverId: string, message?: string) {
       "unknown";
     throw new Error(code);
   }
+
+  // Push opcional (não quebra o fluxo se falhar)
+  try {
+    void fetch("/.netlify/functions/send-push", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: receiverId,
+        title: "⚠️ Chamar Atenção",
+        body: message || "Você recebeu um alerta.",
+        url: "/messages",
+        tag: "attention_call",
+      }),
+    });
+  } catch {}
+
   return data as string;
 }
 

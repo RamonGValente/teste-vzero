@@ -1,4 +1,5 @@
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
+import { ServiceWorkerSoundBridge } from "@/components/pwa/ServiceWorkerSoundBridge";
 import "@/styles/attention.css";
 import React, { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
@@ -45,6 +46,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return (
     <MovementStatusProvider>
       <RealtimeAttentionListener />
+                <ServiceWorkerSoundBridge />
       {children}
     </MovementStatusProvider>
   );
