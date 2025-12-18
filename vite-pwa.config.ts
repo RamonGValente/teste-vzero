@@ -1,13 +1,10 @@
 import { VitePWAOptions } from 'vite-plugin-pwa';
 
 export const pwaOptions: Partial<VitePWAOptions> = {
-  strategies: 'injectManifest',
-  srcDir: 'src',
-  filename: 'sw.js',
-injectRegister: 'script',
-  devOptions: { enabled: true, type: 'module' },
+  injectRegister: 'script',
+  devOptions: { enabled: true },
   registerType: 'autoUpdate',
-  includeAssets: ['favicon.ico','icon-192.png','icon-512.png','icons/icon-72.png','sounds/alertasom.mp3','sounds/push.mp3'],
+  includeAssets: ['favicon.ico'],
   manifest: {
     name: 'UDG',
     short_name: 'UDG',

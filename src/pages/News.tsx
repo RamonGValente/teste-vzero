@@ -384,16 +384,11 @@ export default function News() {
       };
 
       // Salvar no Supabase
-      // Remover duplicados do mesmo endpoint e inserir (evita depender de UNIQUE/ON CONFLICT no banco)
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('user_id', user.id)
-        .eq('endpoint', subscription.endpoint);
-
       const { error } = await supabase
         .from('push_subscriptions')
-        .insert(subscriptionData);
+        .upsert(subscriptionData, {
+          onConflict: 'endpoint'
+        });
 
       if (error) {
         console.error('Erro ao salvar no Supabase:', error);
@@ -530,20 +525,11 @@ export default function News() {
               title: '🔔 Teste World Flow',
               body: 'Esta é uma notificação push de teste!',
               icon: '/icon-192.png',
-              badge: '/icons/icon-72.png',
+              badge: '/badge-72.png',
               url: '/news',
               tag: 'test-notification'
             })
           });
-
-          const responseJson = await response.json().catch(() => null);
-          console.log('send-push status:', response.status);
-          console.log('send-push response:', responseJson);
-
-          if (!response.ok) {
-            const msg = responseJson?.error || responseJson?.details?.hint || responseJson?.details || 'Erro interno do servidor';
-            throw new Error(typeof msg === 'string' ? msg : 'Erro interno do servidor');
-          }
 
           if (response.ok) {
             toast({
@@ -644,25 +630,10 @@ export default function News() {
         // Buscar menções
         const { data: mentions } = await supabase
           .from('mentions')
-          .select('id, created_at, user_id, mentioned_user_id, content_type, content_id, is_read')
+          .select('*, profiles!mentions_user_id_fkey(username, avatar_url)')
           .eq('mentioned_user_id', user.id)
           .gte('created_at', oneWeekAgo.toISOString())
           .order('created_at', { ascending: false });
-
-        // Buscar perfis dos usuários que mencionaram (evita JOIN por FK inexistente em PostgREST)
-        const mentionUserIds = Array.from(new Set((mentions ?? []).map((m: any) => m.user_id).filter(Boolean)));
-        const mentionProfilesMap = new Map<string, { username?: string; avatar_url?: string }>();
-
-        if (mentionUserIds.length > 0) {
-          const { data: mentionProfiles } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url')
-            .in('id', mentionUserIds);
-
-          mentionProfiles?.forEach((p: any) => {
-            mentionProfilesMap.set(p.id, { username: p.username, avatar_url: p.avatar_url });
-          });
-        }
 
         mentions?.forEach(mention => {
           notifications.push({
@@ -673,13 +644,13 @@ export default function News() {
             target_id: mention.content_id,
             target_type: mention.content_type,
             title: '📌 Você foi mencionado',
-            message: `${mentionProfilesMap.get(mention.user_id)?.username || 'Alguém'} mencionou você`,
+            message: `${mention.profiles?.username || 'Alguém'} mencionou você`,
             is_read: mention.is_read || false,
             is_muted: false,
             created_at: mention.created_at,
             metadata: {
-              sender_username: mentionProfilesMap.get(mention.user_id)?.username,
-              sender_avatar: mentionProfilesMap.get(mention.user_id)?.avatar_url,
+              sender_username: mention.profiles?.username,
+              sender_avatar: mention.profiles?.avatar_url,
               url: `/${mention.content_type === 'post' ? 'post' : 'comment'}/${mention.content_id}`,
             },
           });
@@ -787,25 +758,10 @@ export default function News() {
         // Buscar pedidos de amizade
         const { data: friendRequests } = await supabase
           .from('friend_requests')
-          .select('id, sender_id, receiver_id, status, created_at, updated_at')
+          .select('*, profiles!friend_requests_sender_id_fkey(username, avatar_url)')
           .eq('receiver_id', user.id)
           .eq('status', 'pending')
           .gte('created_at', oneWeekAgo.toISOString());
-
-        // Buscar perfis dos remetentes (friend_requests não tem FK no schema => JOIN dá 400)
-        const frSenderIds = Array.from(new Set((friendRequests ?? []).map((r: any) => r.sender_id).filter(Boolean)));
-        const frProfilesMap = new Map<string, { username?: string; avatar_url?: string }>();
-
-        if (frSenderIds.length > 0) {
-          const { data: frProfiles } = await supabase
-            .from('profiles')
-            .select('id, username, avatar_url')
-            .in('id', frSenderIds);
-
-          frProfiles?.forEach((p: any) => {
-            frProfilesMap.set(p.id, { username: p.username, avatar_url: p.avatar_url });
-          });
-        }
 
         friendRequests?.forEach(request => {
           notifications.push({
@@ -816,13 +772,13 @@ export default function News() {
             target_id: request.id,
             target_type: 'friend_request',
             title: '🤝 Pedido de amizade',
-            message: `${frProfilesMap.get(request.sender_id)?.username || 'Alguém'} quer ser seu amigo`,
+            message: `${request.profiles?.username || 'Alguém'} quer ser seu amigo`,
             is_read: false,
             is_muted: false,
             created_at: request.created_at,
             metadata: {
-              sender_username: frProfilesMap.get(request.sender_id)?.username,
-              sender_avatar: frProfilesMap.get(request.sender_id)?.avatar_url,
+              sender_username: request.profiles?.username,
+              sender_avatar: request.profiles?.avatar_url,
               url: '/messages?tab=requests',
             },
           });
