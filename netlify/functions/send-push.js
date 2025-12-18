@@ -50,7 +50,21 @@ export const handler = async (event) => {
 
     // NÃO aceitar private key em VITE_ (isso vazaria para o client!)
     const vapidPrivateKey = process.env.VAPID_PRIVATE_KEY;
-    const vapidSubject = process.env.VAPID_SUBJECT || "mailto:admin@sistemaapp.netlify.app";
+
+    // web-push exige um "subject" que seja uma URL (https://...) OU um mailto:...
+    // É comum configurar só o e-mail (ex.: sistemasrtr@gmail.com), o que quebra com:
+    // "Vapid subject is not a valid URL".
+    // Aqui normalizamos para evitar erro 500.
+    const rawSubject = (process.env.VAPID_SUBJECT || "mailto:admin@sistemaapp.netlify.app").trim();
+    const vapidSubject = (() => {
+      const s = rawSubject;
+      // já está no formato correto
+      if (/^(mailto:|https?:\/\/)/i.test(s)) return s;
+      // parece ser e-mail puro
+      if (s.includes("@") && !s.includes(":")) return `mailto:${s}`;
+      // fallback seguro
+      return "mailto:admin@sistemaapp.netlify.app";
+    })();
 
     if (!vapidPublicKey || !vapidPrivateKey) {
       return {

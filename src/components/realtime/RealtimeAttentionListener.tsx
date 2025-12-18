@@ -65,6 +65,8 @@ export function RealtimeAttentionListener() {
 
   const playBeepFallback = async () => {
     try {
+      // Evita criar AudioContext antes de um gesto do usuário (gera warnings no Chrome).
+      if (!unlockedRef.current) return;
       if (!audioCtxRef.current) {
         // @ts-ignore
         audioCtxRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();

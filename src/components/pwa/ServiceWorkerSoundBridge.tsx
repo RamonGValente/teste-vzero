@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 
 /**
  * Recebe mensagens do Service Worker para:
@@ -10,11 +11,41 @@ import { useNavigate } from "react-router-dom";
  */
 export function ServiceWorkerSoundBridge() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const unlockedRef = useRef(false);
+  const warnedRef = useRef(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     audioRef.current = new Audio("/sounds/push.mp3");
     audioRef.current.preload = "auto";
+
+    // Chrome/Edge bloqueiam áudio automático. Precisamos "desbloquear" após um gesto do usuário.
+    // Fazemos isso uma vez (pointerdown/keydown) com um play/pause silencioso.
+    const unlock = async () => {
+      try {
+        const a = audioRef.current;
+        if (!a) return;
+        const prevVol = a.volume;
+        a.volume = 0;
+        a.currentTime = 0;
+        await a.play();
+        a.pause();
+        a.volume = prevVol;
+        unlockedRef.current = true;
+      } catch {
+        // se falhar, continuamos tentando apenas quando houver novas interações
+      }
+    };
+
+    window.addEventListener("pointerdown", unlock, { once: true });
+    window.addEventListener("keydown", unlock, { once: true });
+    window.addEventListener("touchstart", unlock, { once: true });
+
+    return () => {
+      window.removeEventListener("pointerdown", unlock);
+      window.removeEventListener("keydown", unlock);
+      window.removeEventListener("touchstart", unlock);
+    };
   }, []);
 
   useEffect(() => {
@@ -28,7 +59,26 @@ export function ServiceWorkerSoundBridge() {
         if (!audioRef.current) audioRef.current = new Audio(soundUrl);
         audioRef.current.src = soundUrl;
         audioRef.current.currentTime = 0;
-        audioRef.current.play().catch(() => {});
+
+        // Se ainda não houve gesto do usuário, não tente tocar (gera warnings).
+        if (!unlockedRef.current) {
+          if (!warnedRef.current) {
+            warnedRef.current = true;
+            toast("Toque na tela para ativar o som das notificações");
+          }
+          return;
+        }
+
+        audioRef.current.play().catch((e) => {
+          // Se o mp3 não for servido corretamente (404/mime), o navegador pode disparar NotSupportedError.
+          // Tentamos um fallback.
+          try {
+            audioRef.current!.src = "/sounds/alertasom.mp3";
+            audioRef.current!.currentTime = 0;
+            audioRef.current!.play().catch(() => {});
+          } catch {}
+          console.warn("Falha ao tocar som do push:", e);
+        });
       }
 
       if (data?.type === "NAVIGATE" && typeof data.url === "string") {
