@@ -10,6 +10,11 @@ interface BeforeInstallPromptEvent extends Event {
 }
 
 export function PWAInstallPrompt() {
+  const ua = typeof navigator !== 'undefined' ? navigator.userAgent : '';
+  const isAndroid = /Android/i.test(ua);
+  const isChrome = /Chrome\//i.test(ua) && !/EdgA\//i.test(ua) && !/OPR\//i.test(ua) && !/SamsungBrowser\//i.test(ua);
+  const isXiaomi = /Xiaomi|MiuiBrowser|Mi Browser|MIUI/i.test(ua);
+
   useEffect(() => {
     try {
       if (isStandalone()) {
@@ -22,9 +27,16 @@ export function PWAInstallPrompt() {
   const [deferredPrompt, setDeferredPrompt] = useState<BeforeInstallPromptEvent | null>(null);
   const [showPrompt, setShowPrompt] = useState(false);
   const [isInstalled, setIsInstalled] = useState(false);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedAt, setDismissedAt] = useState<number | null>(null);
+  const [swControlled, setSwControlled] = useState(false);
 
   useEffect(() => {
+    // Helps on some Android devices (including some Xiaomi):
+    // PWA becomes installable only after the SW controls the page (often after 1 reload)
+    setSwControlled(!!navigator?.serviceWorker?.controller);
+    const onControllerChange = () => setSwControlled(!!navigator?.serviceWorker?.controller);
+    navigator?.serviceWorker?.addEventListener?.('controllerchange', onControllerChange);
+
     // Check if already installed
     const checkInstalled = () => {
       // Check if running as standalone (installed PWA)
@@ -51,10 +63,10 @@ export function PWAInstallPrompt() {
       
       // Show prompt after 3 seconds if not dismissed before
       setTimeout(() => {
-        const wasDismissed = localStorage.getItem('pwa-prompt-dismissed');
-        if (!wasDismissed && !installed) {
-          setShowPrompt(true);
-        }
+        const raw = localStorage.getItem('pwa-prompt-dismissed-at');
+        const last = raw ? Number(raw) : 0;
+        const day = 24 * 60 * 60 * 1000;
+        if (!installed && (!last || Date.now() - last > day)) setShowPrompt(true);
       }, 3000);
     };
 
@@ -71,16 +83,17 @@ export function PWAInstallPrompt() {
     // For Safari and other browsers, show manual install prompt
     if (!installed && !deferredPrompt) {
       setTimeout(() => {
-        const wasDismissed = localStorage.getItem('pwa-prompt-dismissed');
-        if (!wasDismissed) {
-          setShowPrompt(true);
-        }
+        const raw = localStorage.getItem('pwa-prompt-dismissed-at');
+        const last = raw ? Number(raw) : 0;
+        const day = 24 * 60 * 60 * 1000;
+        if (!last || Date.now() - last > day) setShowPrompt(true);
       }, 3000);
     }
 
     return () => {
       window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
       window.removeEventListener('appinstalled', handleAppInstalled);
+      navigator?.serviceWorker?.removeEventListener?.('controllerchange', onControllerChange);
     };
   }, []);
 
@@ -108,11 +121,12 @@ export function PWAInstallPrompt() {
 
   const handleDismiss = () => {
     setShowPrompt(false);
-    setDismissed(true); setTimeout(() => setShowPrompt(true), 20000);
-    localStorage.setItem('pwa-prompt-dismissed', 'true');
+    const now = Date.now();
+    setDismissedAt(now);
+    localStorage.setItem('pwa-prompt-dismissed-at', String(now));
   };
 
-  if (dismissed || (!showPrompt && !isInstalled)) {
+  if (dismissedAt || (!showPrompt && !isInstalled)) {
     return null;
   }
 
@@ -191,9 +205,36 @@ export function PWAInstallPrompt() {
                   <p className="font-medium">Como instalar:</p>
                   <ul className="list-disc list-inside space-y-1">
                     <li><strong>iPhone/iPad:</strong> Toque em Compartilhar → Adicionar à Tela Inicial</li>
-                    <li><strong>Android:</strong> Menu do navegador → Adicionar à tela inicial</li>
+                    <li><strong>Android (Chrome):</strong> ⋮ Menu → <strong>Instalar app</strong> ou <strong>Adicionar à tela inicial</strong></li>
                     <li><strong>Desktop:</strong> Ícone de instalação na barra de endereços</li>
                   </ul>
+
+                  {isAndroid && isChrome && !swControlled && (
+                    <div className="mt-3 rounded-md border p-2">
+                      <p className="font-medium">Dica (Android/Chrome):</p>
+                      <p>
+                        Em alguns aparelhos (incluindo alguns Xiaomi), a opção de instalar só aparece depois que o Service Worker
+                        passa a controlar a página. Clique abaixo para recarregar e habilitar a instalação.
+                      </p>
+                      <Button
+                        onClick={() => window.location.reload()}
+                        variant="secondary"
+                        className="w-full mt-2"
+                      >
+                        Recarregar para habilitar instalação
+                      </Button>
+                    </div>
+                  )}
+
+                  {isXiaomi && isAndroid && isChrome && (
+                    <div className="mt-3 rounded-md border p-2">
+                      <p className="font-medium">Xiaomi/MIUI:</p>
+                      <p>
+                        Se você não vir “Instalar app” no menu, procure por “Adicionar à tela inicial”.
+                        A instalação via banner pode não aparecer em todos os modelos.
+                      </p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
