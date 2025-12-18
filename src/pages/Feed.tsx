@@ -568,9 +568,19 @@ const UdgVideoPlayer = ({
   }, [post.id]);
 
   useEffect(() => {
-    if (videoRef.current) {
-      if (isPlaying) videoRef.current.play().catch(e => console.log("Interação necessária para play com som", e));
-      else videoRef.current.pause();
+    const v = videoRef.current;
+    if (!v) return;
+
+    if (isPlaying) {
+      // Avoid noisy AbortError logs when the element is unmounted/replaced during navigation/rerenders
+      if (!(v as any).isConnected) return;
+      v.play().catch((e: any) => {
+        const name = e?.name;
+        if (name === 'AbortError' || name === 'NotAllowedError') return;
+        console.log('Interação necessária para play com som', e);
+      });
+    } else {
+      v.pause();
     }
   }, [isPlaying]);
 

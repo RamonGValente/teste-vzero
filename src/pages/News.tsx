@@ -1295,8 +1295,12 @@ export default function News() {
                         ...prev,
                         push_enabled: checked
                       }));
-                      if (checked && pushPermission !== 'granted') {
+                      // Always ensure we actually create/remove the PushSubscription.
+                      // Permission can be granted while subscription is still inactive.
+                      if (checked) {
                         requestPushPermission();
+                      } else {
+                        unsubscribeFromPush();
                       }
                     }}
                   />
@@ -1439,7 +1443,7 @@ export default function News() {
                 </div>
               </div>
               
-              {pushPermission !== 'granted' && (
+              {!isSubscribed && (
                 <Button
                   onClick={requestPushPermission}
                   className="w-full gap-2 mt-2"
@@ -1450,7 +1454,7 @@ export default function News() {
                   ) : (
                     <Bell className="h-4 w-4" />
                   )}
-                  {isRegistering ? 'Registrando...' : 'Ativar Notificações Push'}
+                  {isRegistering ? 'Registrando...' : (pushPermission === 'granted' ? 'Inscrever Push' : 'Ativar Notificações Push')}
                 </Button>
               )}
               
