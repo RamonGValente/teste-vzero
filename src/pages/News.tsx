@@ -561,15 +561,37 @@ export default function News() {
         const now = new Date();
         const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
 
+        // Helper: carregar perfis (username/avatar) para IDs (quando não existe FK no PostgREST)
+        const loadProfilesMap = async (ids: string[]) => {
+          const uniqueIds = Array.from(new Set(ids)).filter(Boolean);
+          if (uniqueIds.length === 0) return new Map<string, { username?: string; avatar_url?: string }>();
+          const { data } = await supabase
+            .from('profiles')
+            .select('id, username, avatar_url')
+            .in('id', uniqueIds);
+          const map = new Map<string, { username?: string; avatar_url?: string }>();
+          (data || []).forEach((p: any) => {
+            map.set(p.id, { username: p.username, avatar_url: p.avatar_url });
+          });
+          return map;
+        };
+
         // Buscar menções
+        // OBS: na sua base, mentions.user_id / mentioned_user_id referenciam auth.users,
+        // então o embed "profiles!mentions_user_id_fkey" NÃO existe e causa 400 (Bad Request).
+        // Fazemos a hidratação manual com a tabela profiles.
         const { data: mentions } = await supabase
           .from('mentions')
-          .select('*, profiles!mentions_user_id_fkey(username, avatar_url)')
+          .select('*')
           .eq('mentioned_user_id', user.id)
           .gte('created_at', oneWeekAgo.toISOString())
           .order('created_at', { ascending: false });
 
-        mentions?.forEach(mention => {
+        const mentionSenderIds = (mentions || []).map((m: any) => m.user_id);
+        const mentionProfiles = await loadProfilesMap(mentionSenderIds);
+
+        mentions?.forEach((mention: any) => {
+          const p = mentionProfiles.get(mention.user_id) || {};
           notifications.push({
             id: `mention_${mention.id}`,
             type: 'mention',
@@ -578,13 +600,13 @@ export default function News() {
             target_id: mention.content_id,
             target_type: mention.content_type,
             title: '📌 Você foi mencionado',
-            message: `${mention.profiles?.username || 'Alguém'} mencionou você`,
+            message: `${p.username || 'Alguém'} mencionou você`,
             is_read: mention.is_read || false,
             is_muted: false,
             created_at: mention.created_at,
             metadata: {
-              sender_username: mention.profiles?.username,
-              sender_avatar: mention.profiles?.avatar_url,
+              sender_username: p.username,
+              sender_avatar: p.avatar_url,
               url: `/${mention.content_type === 'post' ? 'post' : 'comment'}/${mention.content_id}`,
             },
           });
@@ -690,14 +712,20 @@ export default function News() {
         });
 
         // Buscar pedidos de amizade
+        // OBS: na sua base, friend_requests não tinha FKs declaradas para profiles,
+        // então o embed "profiles!friend_requests_sender_id_fkey" NÃO existe e causa 400.
         const { data: friendRequests } = await supabase
           .from('friend_requests')
-          .select('*, profiles!friend_requests_sender_id_fkey(username, avatar_url)')
+          .select('*')
           .eq('receiver_id', user.id)
           .eq('status', 'pending')
           .gte('created_at', oneWeekAgo.toISOString());
 
-        friendRequests?.forEach(request => {
+        const frSenderIds = (friendRequests || []).map((r: any) => r.sender_id);
+        const frProfiles = await loadProfilesMap(frSenderIds);
+
+        friendRequests?.forEach((request: any) => {
+          const p = frProfiles.get(request.sender_id) || {};
           notifications.push({
             id: `friend_request_${request.id}`,
             type: 'friend_request',
@@ -706,13 +734,13 @@ export default function News() {
             target_id: request.id,
             target_type: 'friend_request',
             title: '🤝 Pedido de amizade',
-            message: `${request.profiles?.username || 'Alguém'} quer ser seu amigo`,
+            message: `${p.username || 'Alguém'} quer ser seu amigo`,
             is_read: false,
             is_muted: false,
             created_at: request.created_at,
             metadata: {
-              sender_username: request.profiles?.username,
-              sender_avatar: request.profiles?.avatar_url,
+              sender_username: p.username,
+              sender_avatar: p.avatar_url,
               url: '/messages?tab=requests',
             },
           });
