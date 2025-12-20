@@ -155,7 +155,7 @@ export default function AppLayout() {
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
     { name: "Arena", href: "/arena", icon: Swords },
     { name: "Rankings", href: "/rankings", icon: Zap },
-    { name: "Novidade", href: "/news", icon: Newspaper },
+    { name: "News", href: "/news", icon: Newspaper },
     { name: "Perfil", href: "/profile", icon: User },
   ];
 

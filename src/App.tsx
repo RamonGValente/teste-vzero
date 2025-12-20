@@ -47,10 +47,10 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   return (
     <MovementStatusProvider>
+      <PWAUpdatePrompt />
       <RealtimeAttentionListener />
       <RealtimeMessageListener />
       <PushNotificationsBootstrap />
-      <PWAUpdatePrompt />
       {children}
     </MovementStatusProvider>
   );
