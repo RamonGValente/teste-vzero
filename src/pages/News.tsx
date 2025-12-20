@@ -87,12 +87,14 @@ export type NotificationType =
   | 'like'
   | 'comment'
   | 'follow'
+  | 'friend_request'
   | 'follow_request'
   | 'friend_request_accepted'
   | 'post_approved'
   | 'post_rejected'
   | 'community_invite'
   | 'community_mention'
+  | 'community_post'
   | 'attention_call'
   | 'message'
   | 'trending'
@@ -190,6 +192,9 @@ export default function News() {
   const [serviceWorker, setServiceWorker] = useState<ServiceWorkerRegistration | null>(null);
   const [isRegistering, setIsRegistering] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
+
+  // Armazena o último "visto" do usuário nesta tela (para marcar como lido itens sem coluna is_read)
+  const [lastViewedAt, setLastViewedAt] = useState<string | null>(null);
   
   const audioRef = useRef<HTMLAudioElement>(null);
   const notificationSound = useRef<HTMLAudioElement>(null);
@@ -550,13 +555,65 @@ export default function News() {
     initPushNotifications();
   }, []);
 
+  // Carregar/atualizar last_viewed para a seção News
+  useEffect(() => {
+    if (!user?.id) return;
+
+    const load = async () => {
+      const { data } = await supabase
+        .from('last_viewed')
+        .select('viewed_at')
+        .eq('user_id', user.id)
+        .eq('section', 'news')
+        .order('viewed_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      setLastViewedAt(data?.viewed_at ?? null);
+    };
+
+    load();
+
+    // Atualiza o "visto" poucos segundos após abrir (evita marcar lido antes de renderizar)
+    const t = window.setTimeout(async () => {
+      try {
+        const nowIso = new Date().toISOString();
+
+        // last_viewed não tem unique constraint no schema fornecido; então fazemos update/insert.
+        const { data: existing } = await supabase
+          .from('last_viewed')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('section', 'news')
+          .order('viewed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase
+            .from('last_viewed')
+            .update({ viewed_at: nowIso })
+            .eq('id', existing.id);
+        } else {
+          await supabase
+            .from('last_viewed')
+            .insert({ user_id: user.id, section: 'news', viewed_at: nowIso });
+        }
+        setLastViewedAt(nowIso);
+      } catch (e) {
+        console.error('Falha ao atualizar last_viewed(news):', e);
+      }
+    }, 1200);
+
+    return () => window.clearTimeout(t);
+  }, [user?.id]);
+
   // ============================================
   // QUERIES E MUTATIONS
   // ============================================
 
   // Query para notificações
   const { data: notifications = [], isLoading, refetch } = useQuery({
-    queryKey: ['notifications', user?.id, activeTab],
+    queryKey: ['notifications', user?.id, activeTab, lastViewedAt],
     enabled: !!user,
     queryFn: async () => {
       if (!user) return [];
@@ -565,6 +622,12 @@ export default function News() {
         const notifications: Notification[] = [];
         const now = new Date();
         const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+        const lastSeen = lastViewedAt ? new Date(lastViewedAt).getTime() : null;
+        const isAutoRead = (createdAt: string) => {
+          if (!lastSeen) return false;
+          return new Date(createdAt).getTime() <= lastSeen;
+        };
 
         // Helper: carregar perfis (username/avatar) para IDs (quando não existe FK no PostgREST)
         const loadProfilesMap = async (ids: string[]) => {
@@ -606,7 +669,7 @@ export default function News() {
             target_type: mention.content_type,
             title: '📌 Você foi mencionado',
             message: `${p.username || 'Alguém'} mencionou você`,
-            is_read: mention.is_read || false,
+            is_read: (mention.is_read || false) || isAutoRead(mention.created_at),
             is_muted: false,
             created_at: mention.created_at,
             metadata: {
@@ -623,71 +686,76 @@ export default function News() {
           .select('id, content')
           .eq('user_id', user.id);
 
-        if (userPosts?.length) {
-          for (const post of userPosts) {
-            const { data: likes } = await supabase
-              .from('likes')
-              .select('*, profiles!likes_user_id_fkey(username, avatar_url)')
-              .eq('post_id', post.id)
-              .gte('created_at', oneWeekAgo.toISOString())
-              .neq('user_id', user.id);
+        const userPostMap = new Map<string, { content?: string | null }>();
+        (userPosts || []).forEach((p: any) => userPostMap.set(p.id, { content: p.content }));
 
-            likes?.forEach(like => {
-              notifications.push({
-                id: `like_${like.id}_${post.id}`,
-                type: 'like',
-                user_id: user.id,
-                target_user_id: like.user_id,
-                target_id: post.id,
-                target_type: 'post',
-                title: '❤️ Nova curtida',
-                message: `${like.profiles?.username || 'Alguém'} curtiu seu post`,
-                is_read: false,
-                is_muted: false,
-                created_at: like.created_at,
-                metadata: {
-                  sender_username: like.profiles?.username,
-                  sender_avatar: like.profiles?.avatar_url,
-                  post_content: post.content?.substring(0, 50) || '',
-                  url: `/post/${post.id}`,
-                },
-              });
+        const userPostIds = (userPosts || []).map((p: any) => p.id);
+
+        // Curtidas (batch)
+        if (userPostIds.length) {
+          const { data: likes } = await supabase
+            .from('likes')
+            .select('id, post_id, user_id, created_at, profiles!likes_user_id_fkey(username, avatar_url)')
+            .in('post_id', userPostIds)
+            .gte('created_at', oneWeekAgo.toISOString())
+            .neq('user_id', user.id);
+
+          (likes || []).forEach((like: any) => {
+            const post = userPostMap.get(like.post_id);
+            notifications.push({
+              id: `like_${like.id}_${like.post_id}`,
+              type: 'like',
+              user_id: user.id,
+              target_user_id: like.user_id,
+              target_id: like.post_id,
+              target_type: 'post',
+              title: '❤️ Nova curtida',
+              message: `${like.profiles?.username || 'Alguém'} curtiu seu post`,
+              is_read: isAutoRead(like.created_at),
+              is_muted: false,
+              created_at: like.created_at,
+              metadata: {
+                sender_username: like.profiles?.username,
+                sender_avatar: like.profiles?.avatar_url,
+                post_content: post?.content?.substring?.(0, 50) || '',
+                url: `/post/${like.post_id}`,
+              },
             });
-          }
+          });
         }
 
         // Buscar comentários
-        if (userPosts?.length) {
-          for (const post of userPosts) {
-            const { data: comments } = await supabase
-              .from('comments')
-              .select('*, profiles!comments_user_id_fkey(username, avatar_url)')
-              .eq('post_id', post.id)
-              .gte('created_at', oneWeekAgo.toISOString())
-              .neq('user_id', user.id);
+        // Comentários (batch)
+        if (userPostIds.length) {
+          const { data: comments } = await supabase
+            .from('comments')
+            .select('id, post_id, user_id, content, created_at, profiles!comments_user_id_fkey(username, avatar_url)')
+            .in('post_id', userPostIds)
+            .gte('created_at', oneWeekAgo.toISOString())
+            .neq('user_id', user.id);
 
-            comments?.forEach(comment => {
-              notifications.push({
-                id: `comment_${comment.id}_${post.id}`,
-                type: 'comment',
-                user_id: user.id,
-                target_user_id: comment.user_id,
-                target_id: comment.id,
-                target_type: 'comment',
-                title: '💬 Novo comentário',
-                message: `${comment.profiles?.username || 'Alguém'} comentou seu post`,
-                is_read: false,
-                is_muted: false,
-                created_at: comment.created_at,
-                metadata: {
-                  sender_username: comment.profiles?.username,
-                  sender_avatar: comment.profiles?.avatar_url,
-                  post_content: post.content?.substring(0, 50) || '',
-                  url: `/post/${post.id}#comment-${comment.id}`,
-                },
-              });
+          (comments || []).forEach((comment: any) => {
+            const post = userPostMap.get(comment.post_id);
+            notifications.push({
+              id: `comment_${comment.id}_${comment.post_id}`,
+              type: 'comment',
+              user_id: user.id,
+              target_user_id: comment.user_id,
+              target_id: comment.id,
+              target_type: 'comment',
+              title: '💬 Novo comentário',
+              message: `${comment.profiles?.username || 'Alguém'} comentou seu post`,
+              is_read: isAutoRead(comment.created_at),
+              is_muted: false,
+              created_at: comment.created_at,
+              metadata: {
+                sender_username: comment.profiles?.username,
+                sender_avatar: comment.profiles?.avatar_url,
+                post_content: post?.content?.substring?.(0, 50) || '',
+                url: `/post/${comment.post_id}#comment-${comment.id}`,
+              },
             });
-          }
+          });
         }
 
         // Buscar seguidores
@@ -705,7 +773,7 @@ export default function News() {
             target_user_id: follower.follower_id,
             title: '👤 Novo seguidor',
             message: `${follower.profiles?.username || 'Alguém'} começou a seguir você`,
-            is_read: false,
+            is_read: isAutoRead(follower.created_at),
             is_muted: false,
             created_at: follower.created_at,
             metadata: {
@@ -740,7 +808,7 @@ export default function News() {
             target_type: 'friend_request',
             title: '🤝 Pedido de amizade',
             message: `${p.username || 'Alguém'} quer ser seu amigo`,
-            is_read: false,
+            is_read: isAutoRead(request.created_at),
             is_muted: false,
             created_at: request.created_at,
             metadata: {
@@ -769,7 +837,7 @@ export default function News() {
             target_type: 'attention_call',
             title: '🚨 Chamada de atenção!',
             message: `${call.profiles?.username || 'Alguém'} está chamando sua atenção`,
-            is_read: false,
+            is_read: !!call.viewed_at || isAutoRead(call.created_at),
             is_muted: false,
             created_at: call.created_at,
             metadata: {
@@ -779,6 +847,59 @@ export default function News() {
             },
           });
         });
+
+        // Posts recentes em comunidades onde o usuário é membro ("notícias" reais)
+        const { data: myCommunities } = await supabase
+          .from('community_members')
+          .select('community_id')
+          .eq('user_id', user.id);
+
+        const communityIds = (myCommunities || []).map((r: any) => r.community_id);
+        if (communityIds.length) {
+          const { data: communityPosts } = await supabase
+            .from('community_posts')
+            .select('id, community_id, user_id, content, created_at')
+            .in('community_id', communityIds)
+            .gte('created_at', oneWeekAgo.toISOString())
+            .neq('user_id', user.id)
+            .order('created_at', { ascending: false })
+            .limit(40);
+
+          const posterIds = Array.from(new Set((communityPosts || []).map((p: any) => p.user_id)));
+          const posterProfiles = await loadProfilesMap(posterIds);
+
+          const { data: comms } = await supabase
+            .from('communities')
+            .select('id, name')
+            .in('id', communityIds);
+          const commNameMap = new Map<string, string>();
+          (comms || []).forEach((c: any) => commNameMap.set(c.id, c.name));
+
+          (communityPosts || []).forEach((p: any) => {
+            const prof = posterProfiles.get(p.user_id) || {};
+            const commName = commNameMap.get(p.community_id) || 'Comunidade';
+            const preview = (p.content || '').trim().slice(0, 80);
+
+            notifications.push({
+              id: `community_post_${p.id}`,
+              type: 'community_post',
+              user_id: user.id,
+              target_user_id: p.user_id,
+              target_id: p.id,
+              target_type: 'community_post',
+              title: `🏘️ Novo post em ${commName}`,
+              message: `${prof.username || 'Alguém'} publicou: ${preview || 'novo conteúdo'}`,
+              is_read: isAutoRead(p.created_at),
+              is_muted: false,
+              created_at: p.created_at,
+              metadata: {
+                sender_username: prof.username,
+                sender_avatar: prof.avatar_url,
+                url: `/communities?community=${p.community_id}&post=${p.id}`,
+              },
+            });
+          });
+        }
 
         // Ordenar por data
         return notifications.sort((a, b) => 
@@ -806,7 +927,53 @@ export default function News() {
   // Mutation para marcar como lida
   const markAsReadMutation = useMutation({
     mutationFn: async (notificationId: string) => {
-      // Implementar lógica real aqui
+      if (!user?.id) return notificationId;
+
+      try {
+        const nowIso = new Date().toISOString();
+
+        // mention_<uuid>
+        if (notificationId.startsWith('mention_')) {
+          const id = notificationId.replace('mention_', '');
+          await supabase
+            .from('mentions')
+            .update({ is_read: true })
+            .eq('id', id)
+            .eq('mentioned_user_id', user.id);
+          return notificationId;
+        }
+
+        // attention_<uuid>
+        if (notificationId.startsWith('attention_')) {
+          const id = notificationId.replace('attention_', '');
+          await supabase
+            .from('attention_calls')
+            .update({ viewed_at: nowIso })
+            .eq('id', id)
+            .eq('receiver_id', user.id);
+          return notificationId;
+        }
+
+        // Demais tipos: usamos last_viewed (news) como marcador global
+        const { data: existing } = await supabase
+          .from('last_viewed')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('section', 'news')
+          .order('viewed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase.from('last_viewed').update({ viewed_at: nowIso }).eq('id', existing.id);
+        } else {
+          await supabase.from('last_viewed').insert({ user_id: user.id, section: 'news', viewed_at: nowIso });
+        }
+        setLastViewedAt(nowIso);
+      } catch (e) {
+        console.error('Falha ao marcar como lida:', e);
+      }
+
       return notificationId;
     },
     onSuccess: () => {
@@ -818,12 +985,49 @@ export default function News() {
   const markAllAsReadMutation = useMutation({
     mutationFn: async () => {
       if (!user) return;
-      
-      // Aqui você implementaria a lógica real
-      toast({ 
-        title: "✅ Todas marcadas como lidas",
-        description: `${unreadCount} notificações atualizadas`
-      });
+
+      const nowIso = new Date().toISOString();
+
+      try {
+        // Mentions
+        await supabase
+          .from('mentions')
+          .update({ is_read: true })
+          .eq('mentioned_user_id', user.id)
+          .eq('is_read', false);
+
+        // Attention calls
+        await supabase
+          .from('attention_calls')
+          .update({ viewed_at: nowIso })
+          .eq('receiver_id', user.id)
+          .is('viewed_at', null);
+
+        // last_viewed: news
+        const { data: existing } = await supabase
+          .from('last_viewed')
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('section', 'news')
+          .order('viewed_at', { ascending: false })
+          .limit(1)
+          .maybeSingle();
+
+        if (existing?.id) {
+          await supabase.from('last_viewed').update({ viewed_at: nowIso }).eq('id', existing.id);
+        } else {
+          await supabase.from('last_viewed').insert({ user_id: user.id, section: 'news', viewed_at: nowIso });
+        }
+        setLastViewedAt(nowIso);
+
+        toast({
+          title: "✅ Todas marcadas como lidas",
+          description: `${unreadCount} notificações atualizadas`,
+        });
+      } catch (e) {
+        console.error('Falha ao marcar todas como lidas:', e);
+        toast({ title: "Erro", description: "Não foi possível marcar tudo como lido", variant: "destructive" });
+      }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notifications', user?.id] });
@@ -862,6 +1066,8 @@ export default function News() {
       case 'like': return <Heart className="h-4 w-4" />;
       case 'comment': return <MessageCircle className="h-4 w-4" />;
       case 'follow': return <UserPlus className="h-4 w-4" />;
+      case 'friend_request': return <Users className="h-4 w-4" />;
+      case 'community_post': return <Users className="h-4 w-4" />;
       case 'post_approved': return <TrendingUp className="h-4 w-4" />;
       case 'attention_call': return <AlertCircle className="h-4 w-4" />;
       case 'achievement': return <Crown className="h-4 w-4" />;
@@ -876,6 +1082,10 @@ export default function News() {
       case 'like': return "bg-pink-100 text-pink-600 border-pink-200";
       case 'comment': return "bg-green-100 text-green-600 border-green-200";
       case 'follow': return "bg-purple-100 text-purple-600 border-purple-200";
+      case 'friend_request': return "bg-indigo-100 text-indigo-600 border-indigo-200";
+      case 'community_post': return "bg-cyan-100 text-cyan-600 border-cyan-200";
+      case 'friend_request': return "bg-indigo-100 text-indigo-600 border-indigo-200";
+      case 'community_post': return "bg-sky-100 text-sky-700 border-sky-200";
       case 'attention_call': return "bg-red-100 text-red-600 border-red-200";
       case 'post_approved': return "bg-emerald-100 text-emerald-600 border-emerald-200";
       case 'achievement': return "bg-amber-100 text-amber-600 border-amber-200";
@@ -903,7 +1113,7 @@ export default function News() {
   const filteredNotifications = notifications.filter(notification => {
     if (activeTab === 'unread') return !notification.is_read;
     if (activeTab === 'mentions') return notification.type === 'mention';
-    if (activeTab === 'social') return ['like', 'comment', 'follow', 'friend_request'].includes(notification.type);
+    if (activeTab === 'social') return ['like', 'comment', 'follow', 'friend_request', 'community_post'].includes(notification.type);
     if (activeTab === 'system') return ['post_approved', 'system', 'achievement'].includes(notification.type);
     return true;
   });

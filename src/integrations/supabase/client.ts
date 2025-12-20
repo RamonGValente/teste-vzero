@@ -2,8 +2,10 @@
 import { createClient } from '@supabase/supabase-js';
 import type { Database } from './types';
 
-const SUPABASE_URL = "https://ipmldkprqdhybedhpgmt.supabase.co";
-const SUPABASE_PUBLISHABLE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlwbWxka3BycWRoeWJlZGhwZ210Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MDI1NDYsImV4cCI6MjA3NTk3ODU0Nn0.MrHASPnxxfxrYbmpVVxqNIR0gCizlurGSQfPnfcb7xg";
+// Prefer environment variables (safer for forks and multi-env deploys)
+// Fallback to embedded values (keeps current project working even without .env)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || "https://ipmldkprqdhybedhpgmt.supabase.co";
+const SUPABASE_PUBLISHABLE_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY || "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlwbWxka3BycWRoeWJlZGhwZ210Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NjA0MDI1NDYsImV4cCI6MjA3NTk3ODU0Nn0.MrHASPnxxfxrYbmpVVxqNIR0gCizlurGSQfPnfcb7xg";
 
 // Import the supabase client like this:
 // import { supabase } from "@/integrations/supabase/client";

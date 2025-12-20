@@ -1,4 +1,5 @@
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
+import { RealtimeMessageListener } from "@/components/realtime/RealtimeMessageListener";
 import { PushNotificationsBootstrap } from "@/components/realtime/PushNotificationsBootstrap";
 import "@/styles/attention.css";
 import React, { useEffect, useState } from "react";
@@ -46,6 +47,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return (
     <MovementStatusProvider>
       <RealtimeAttentionListener />
+      <RealtimeMessageListener />
       <PushNotificationsBootstrap />
       {children}
     </MovementStatusProvider>

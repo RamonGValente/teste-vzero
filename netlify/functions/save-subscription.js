@@ -35,6 +35,7 @@ export const handler = async (event) => {
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: str(e) }) };
+    const msg = (e && typeof e === 'object' && 'message' in e) ? e.message : String(e);
+    return { statusCode: 500, headers, body: JSON.stringify({ error: msg }) };
   }
 };
