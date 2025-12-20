@@ -149,13 +149,13 @@ export default function AppLayout() {
   };
 
   const navigation = [
-    { name: "World Flow", href: "/", icon: Globe, badge: unreadFeed },
+    { name: "Worl-dFlow", href: "/", icon: Globe, badge: unreadFeed },
     { name: "Explorar", href: "/explore", icon: Search },
     { name: "Chat-Privado", href: "/messages", icon: Lock, badge: unreadMessages },
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
     { name: "Arena", href: "/arena", icon: Swords },
     { name: "Rankings", href: "/rankings", icon: Zap },
-    { name: "Novidades", href: "/news", icon: Newspaper },
+    { name: "News", href: "/news", icon: Newspaper },
     { name: "Perfil", href: "/profile", icon: User },
   ];
 

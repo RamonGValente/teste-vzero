@@ -1,14 +1,32 @@
 import { corsHeaders, createAdminClient, requireUser } from './_shared.js';
 
+/**
+ * Saves a Web Push subscription for the authenticated user.
+ *
+ * NOTE:
+ * - Supabase upsert with `onConflict: 'endpoint'` requires a UNIQUE constraint on `push_subscriptions.endpoint`.
+ * - Many projects forget this constraint, which causes a 500 error when subscribing.
+ *
+ * To be resilient, we do a safe "update-then-insert" flow that works even without the UNIQUE constraint.
+ */
 export const handler = async (event) => {
   const headers = corsHeaders('POST, OPTIONS');
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
 
   let payload;
-  try { payload = JSON.parse(event.body || '{}'); } catch { payload = null; }
-  if (!payload?.subscription?.endpoint) return { statusCode: 400, headers, body: JSON.stringify({ error: 'subscription inválida' }) };
+  try {
+    payload = JSON.parse(event.body || '{}');
+  } catch {
+    payload = null;
+  }
+
+  if (!payload?.subscription?.endpoint) {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'subscription inválida' }) };
+  }
 
   try {
     const supabaseAdmin = createAdminClient();
@@ -27,11 +45,28 @@ export const handler = async (event) => {
       keys_auth: keys.auth || null,
     };
 
-    const { error } = await supabaseAdmin
+    // 1) Try UPDATE by endpoint (works even if endpoint isn't unique)
+    const { data: updated, error: updateErr } = await supabaseAdmin
       .from('push_subscriptions')
-      .upsert(row, { onConflict: 'endpoint' });
+      .update(row)
+      .eq('endpoint', row.endpoint)
+      .select('id');
 
-    if (error) return { statusCode: 500, headers, body: JSON.stringify({ error: error.message }) };
+    if (updateErr) {
+      // If update fails for any reason, bail out with details.
+      return { statusCode: 500, headers, body: JSON.stringify({ error: updateErr.message }) };
+    }
+
+    // 2) If nothing updated, INSERT
+    if (!updated || updated.length === 0) {
+      const { error: insertErr } = await supabaseAdmin
+        .from('push_subscriptions')
+        .insert(row);
+
+      if (insertErr) {
+        return { statusCode: 500, headers, body: JSON.stringify({ error: insertErr.message }) };
+      }
+    }
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };
   } catch (e) {

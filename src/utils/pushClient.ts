@@ -107,3 +107,26 @@ export const sendPushEvent = async (payload: any) => {
 export const sendTestPush = async () => {
   return await sendPushEvent({ eventType: 'test' });
 };
+
+// "OS" = notificação genérica que aparece no sistema operacional (Android/iOS/Windows/macOS/Linux)
+// quando o app está em segundo plano ou fechado, via Service Worker.
+export const sendOSPush = async (params: {
+  userId?: string;
+  title?: string;
+  body?: string;
+  url?: string;
+  data?: any;
+  tag?: string;
+  image?: string;
+}) => {
+  return await sendPushEvent({
+    eventType: 'os',
+    userId: params.userId,
+    title: params.title,
+    body: params.body,
+    url: params.url,
+    data: params.data,
+    tag: params.tag,
+    image: params.image,
+  });
+};

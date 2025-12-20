@@ -53,12 +53,3 @@ self.addEventListener('notificationclick', (event) => {
     await self.clients.openWindow(url);
   })());
 });
-
-// Allow the web app to activate an updated service worker immediately when the user clicks "Atualizar".
-self.addEventListener('message', (event) => {
-  if (event?.data && (event.data.type === 'SKIP_WAITING' || event.data === 'SKIP_WAITING')) {
-    // eslint-disable-next-line no-console
-    console.log('[SW] SKIP_WAITING received');
-    self.skipWaiting();
-  }
-});

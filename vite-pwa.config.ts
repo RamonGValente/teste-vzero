@@ -3,9 +3,7 @@ import { VitePWAOptions } from 'vite-plugin-pwa';
 export const pwaOptions: Partial<VitePWAOptions> = {
   injectRegister: 'script',
   devOptions: { enabled: true },
-  // Use prompt so we can reliably show an "Atualizar" button when a new SW is waiting.
-  // (With autoUpdate many browsers activate immediately, leaving no "waiting" state.)
-  registerType: 'prompt',
+  registerType: 'autoUpdate',
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'sounds/*'],
   manifest: {
     name: 'UDG',
@@ -27,8 +25,6 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   },
   workbox: {
     importScripts: ['sw-push.js'],
-    // Never precache build/version endpoints; we want a fresh network response.
-    globIgnores: ['**/build.json'],
     runtimeCaching: [
       {
         urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*$/,

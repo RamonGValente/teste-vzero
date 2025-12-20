@@ -21,7 +21,6 @@ import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import { Tutorial } from "./components/Tutorial";
 import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
-import { PWAUpdatePrompt } from "./components/PWAUpdatePrompt";
 import { useAuth } from "@/hooks/useAuth";
 import Rankings from "@/pages/Rankings";
 import { MovementStatusProvider } from "@/contexts/MovementStatusContext";
@@ -47,7 +46,6 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   return (
     <MovementStatusProvider>
-      <PWAUpdatePrompt />
       <RealtimeAttentionListener />
       <RealtimeMessageListener />
       <PushNotificationsBootstrap />

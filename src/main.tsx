@@ -8,28 +8,17 @@ import "./index.css";
 // where the install option appears only after the SW controls the page.
 import { registerSW } from 'virtual:pwa-register';
 
-// We keep a global handle so UI components can trigger an update reliably.
-// (Avoids duplicating registerSW calls across the app.)
-const updateSW = registerSW({
+registerSW({
   immediate: true,
-  onNeedRefresh() {
-    window.dispatchEvent(new Event('pwa:need-refresh'));
-  },
-  onOfflineReady() {
-    window.dispatchEvent(new Event('pwa:offline-ready'));
-  },
-  onRegisteredSW(_swUrl, registration) {
+  onRegisteredSW(_swUrl, _registration) {
     // eslint-disable-next-line no-console
     console.log('[PWA] Service worker registered');
-    (window as any).__swRegistration = registration;
   },
   onRegisterError(error) {
     // eslint-disable-next-line no-console
     console.log('[PWA] Service worker register error', error);
   },
 });
-
-(window as any).__updateSW = updateSW;
 
 createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

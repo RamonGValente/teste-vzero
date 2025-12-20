@@ -1,7 +1,5 @@
 [build]
-  # Expose the commit hash to the client bundle (Vite only exposes VITE_* vars)
-  # and also write dist/build.json in postbuild.
-  command = "VITE_BUILD_ID=$COMMIT_REF npm run build"
+  command = "npm run build"
   publish = "dist"
 
 [build.environment]
