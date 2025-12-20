@@ -15,6 +15,7 @@ const MentionTextarea = React.forwardRef<HTMLTextAreaElement, MentionTextareaPro
     const [showSuggestions, setShowSuggestions] = React.useState(false);
     const [mentionQuery, setMentionQuery] = React.useState("");
     const [cursorPosition, setCursorPosition] = React.useState(0);
+    const [activeIndex, setActiveIndex] = React.useState(0);
     const [suggestionPosition, setSuggestionPosition] = React.useState({ top: 0, left: 0 });
     const textareaRef = React.useRef<HTMLTextAreaElement | null>(null);
     const suggestionsRef = React.useRef<HTMLDivElement>(null);
@@ -43,19 +44,22 @@ const MentionTextarea = React.forwardRef<HTMLTextAreaElement, MentionTextareaPro
     
     // Check for @ mentions
     const textBeforeCursor = value.substring(0, cursorPos);
-    const mentionMatch = textBeforeCursor.match(/@(\w*)$/);
+    const mentionMatch = textBeforeCursor.match(/@([\p{L}\p{N}._-]*)$/u);
     
     if (mentionMatch) {
       setMentionQuery(mentionMatch[1]);
       setShowSuggestions(true);
       
-      // Calculate position for suggestions
+      setActiveIndex(0);
+
+      // Calculate position for suggestions (fixed overlay)
       const textarea = textareaRef.current;
       if (textarea) {
-        const coordinates = getCaretCoordinates(textarea, cursorPos);
+        const coords = getCaretCoordinates(textarea, cursorPos);
+        const rect = textarea.getBoundingClientRect();
         setSuggestionPosition({
-          top: coordinates.top + 20,
-          left: coordinates.left,
+          top: Math.round(rect.top + coords.top + 28),
+          left: Math.round(rect.left + coords.left),
         });
       }
     } else {
@@ -109,6 +113,27 @@ const MentionTextarea = React.forwardRef<HTMLTextAreaElement, MentionTextareaPro
         const newCursorPos = mentionStart + username.length + 2;
         textarea.setSelectionRange(newCursorPos, newCursorPos);
       }, 0);
+    };
+
+    const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+      props.onKeyDown?.(e);
+      if (!showSuggestions || !users || users.length === 0) return;
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        setActiveIndex((i) => Math.min(i + 1, users.length - 1));
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        setActiveIndex((i) => Math.max(i - 1, 0));
+      } else if (e.key === 'Enter' || e.key === 'Tab') {
+        // Insere o usuário selecionado
+        e.preventDefault();
+        const pick = users[activeIndex];
+        if (pick?.username) handleMentionClick(pick.username);
+      } else if (e.key === 'Escape') {
+        e.preventDefault();
+        setShowSuggestions(false);
+      }
     };
 
     // Helper function to get caret coordinates
@@ -176,6 +201,7 @@ const MentionTextarea = React.forwardRef<HTMLTextAreaElement, MentionTextareaPro
             }
           }}
           onChange={handleChange}
+          onKeyDown={handleKeyDown}
           {...props}
         />
         
@@ -184,16 +210,22 @@ const MentionTextarea = React.forwardRef<HTMLTextAreaElement, MentionTextareaPro
             ref={suggestionsRef}
             className="fixed z-[100] w-64 rounded-lg border-2 border-primary bg-card shadow-2xl"
             style={{
-              top: `${suggestionPosition.top + 100}px`,
+              top: `${suggestionPosition.top}px`,
               left: `${suggestionPosition.left}px`,
             }}
           >
             <div className="max-h-48 overflow-y-auto p-2">
-              {users.map((user) => (
+              {users.map((user, idx) => (
                 <button
                   key={user.id}
                   type="button"
-                  className="flex w-full items-center gap-3 rounded-md px-3 py-2.5 hover:bg-primary hover:text-primary-foreground cursor-pointer transition-all text-left border border-transparent hover:border-primary"
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-md px-3 py-2.5 cursor-pointer transition-all text-left border",
+                    "hover:bg-primary hover:text-primary-foreground hover:border-primary",
+                    activeIndex === idx
+                      ? "bg-primary text-primary-foreground border-primary"
+                      : "border-transparent"
+                  )}
                   onClick={() => handleMentionClick(user.username)}
                 >
                   <Avatar className="h-8 w-8 border-2 border-border">

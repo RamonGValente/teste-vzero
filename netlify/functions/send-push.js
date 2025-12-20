@@ -199,18 +199,7 @@ export const handler = async (event) => {
       msg = msg || (m.content || 'Você recebeu uma nova mensagem');
       url = url || `/messages?tab=chats&conversation=${m.conversation_id}`;
       data = { ...data, messageId: m.id, conversationId: m.conversation_id, senderId: m.user_id };
-    
-    } else if (eventType === 'os') {
-      // Generic "OS" (operating-system) push notification.
-      // Use: sendPushEvent({ eventType: 'os', userId, title, body, url, data })
-      receiverIds = [targetUserId || senderId];
-      title = title || '📣 Notificação';
-      msg = msg || 'Você recebeu uma nova notificação';
-      url = url || '/news';
-      tag = tag || 'os';
-      data = { ...data, kind: 'os' };
-
-} else if (targetUserId) {
+    } else if (targetUserId) {
       receiverIds = [targetUserId];
     }
 

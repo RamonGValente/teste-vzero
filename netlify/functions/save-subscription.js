@@ -1,32 +1,14 @@
 import { corsHeaders, createAdminClient, requireUser } from './_shared.js';
 
-/**
- * Saves a Web Push subscription for the authenticated user.
- *
- * NOTE:
- * - Supabase upsert with `onConflict: 'endpoint'` requires a UNIQUE constraint on `push_subscriptions.endpoint`.
- * - Many projects forget this constraint, which causes a 500 error when subscribing.
- *
- * To be resilient, we do a safe "update-then-insert" flow that works even without the UNIQUE constraint.
- */
 export const handler = async (event) => {
   const headers = corsHeaders('POST, OPTIONS');
 
   if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
-  if (event.httpMethod !== 'POST') {
-    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
-  }
+  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
   let payload;
-  try {
-    payload = JSON.parse(event.body || '{}');
-  } catch {
-    payload = null;
-  }
-
-  if (!payload?.subscription?.endpoint) {
-    return { statusCode: 400, headers, body: JSON.stringify({ error: 'subscription inválida' }) };
-  }
+  try { payload = JSON.parse(event.body || '{}'); } catch { payload = null; }
+  if (!payload?.subscription?.endpoint) return { statusCode: 400, headers, body: JSON.stringify({ error: 'subscription inválida' }) };
 
   try {
     const supabaseAdmin = createAdminClient();
@@ -45,27 +27,33 @@ export const handler = async (event) => {
       keys_auth: keys.auth || null,
     };
 
-    // 1) Try UPDATE by endpoint (works even if endpoint isn't unique)
-    const { data: updated, error: updateErr } = await supabaseAdmin
+    // Alguns bancos não possuem UNIQUE em endpoint. Nesse caso, upsert(onConflict:endpoint)
+    // falha com erro 500. Fazemos uma estratégia resiliente: tenta UPDATE, se não atualizar,
+    // faz INSERT.
+    const { data: updated, error: updateError } = await supabaseAdmin
       .from('push_subscriptions')
-      .update(row)
+      .update({
+        user_id: row.user_id,
+        expiration_time: row.expiration_time,
+        keys_p256dh: row.keys_p256dh,
+        keys_auth: row.keys_auth,
+      })
       .eq('endpoint', row.endpoint)
-      .select('id');
+      .select('id')
+      .maybeSingle();
 
-    if (updateErr) {
-      // If update fails for any reason, bail out with details.
-      return { statusCode: 500, headers, body: JSON.stringify({ error: updateErr.message }) };
-    }
-
-    // 2) If nothing updated, INSERT
-    if (!updated || updated.length === 0) {
-      const { error: insertErr } = await supabaseAdmin
+    if (updateError) {
+      // Se o UPDATE falhou por qualquer motivo, tentamos INSERT mesmo assim.
+      // (Ex.: RLS ou coluna diferente). Retornamos erro do insert se acontecer.
+      const { error: insertError } = await supabaseAdmin
         .from('push_subscriptions')
         .insert(row);
-
-      if (insertErr) {
-        return { statusCode: 500, headers, body: JSON.stringify({ error: insertErr.message }) };
-      }
+      if (insertError) return { statusCode: 500, headers, body: JSON.stringify({ error: insertError.message }) };
+    } else if (!updated?.id) {
+      const { error: insertError } = await supabaseAdmin
+        .from('push_subscriptions')
+        .insert(row);
+      if (insertError) return { statusCode: 500, headers, body: JSON.stringify({ error: insertError.message }) };
     }
 
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true }) };

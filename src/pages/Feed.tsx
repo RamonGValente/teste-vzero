@@ -24,6 +24,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet";
 import { useNavigate } from "react-router-dom";
+import { MentionTextarea } from "@/components/ui/mention-textarea";
+import { MentionText } from "@/components/MentionText";
 
 /* ---------- CONFIGURAÇÕES DE ESTILO IA ---------- */
 const AI_STYLES = [
@@ -681,7 +683,7 @@ const UdgVideoPlayer = ({
           </div>
         </div>
         <p className="text-white/95 text-xs sm:text-sm mb-2 line-clamp-3 font-medium drop-shadow-md leading-relaxed pr-4">
-            {post.content}
+          <MentionText text={post.content ?? ""} />
         </p>
       </div>
     </div>
@@ -924,6 +926,16 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
         console.error('Erro ao criar post:', error);
         throw error;
       }
+
+      // Salvar menções (@username) para este post
+      try {
+        if (newPostData?.id && user?.id) {
+          const { saveMentions } = await import("@/utils/mentionsHelper");
+          await saveMentions(newPostData.id, "post", newPost || "", user.id);
+        }
+      } catch (e) {
+        console.warn('Falha ao salvar menções do post', e);
+      }
       
       toast({ 
         title: "🎯 Post enviado para a Arena!",
@@ -1081,15 +1093,15 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
               </Button>
             </div>
             
-            <textarea 
-              value={newPost} 
-              onChange={(e) => setNewPost(e.target.value)} 
+            <MentionTextarea
+              value={newPost}
+              onChange={(e) => setNewPost(e.target.value)}
               placeholder={
-                postType === 'viral_clips' 
-                  ? "Descreva seu Clip Viral..." 
-                  : "No que você está pensando? Seu post será votado na Arena por 60 minutos..."
-              } 
-              className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-3 sm:p-4 min-h-[80px] sm:min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none text-sm sm:text-base" 
+                postType === 'viral_clips'
+                  ? "Descreva seu Clip Viral... (use @ para mencionar)"
+                  : "No que você está pensando? Use @ para mencionar alguém..."
+              }
+              className="w-full bg-gray-800/50 border border-gray-700 rounded-lg p-3 sm:p-4 min-h-[80px] sm:min-h-[100px] text-white placeholder:text-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500/50 transition-all resize-none text-sm sm:text-base"
             />
             
             <input 
@@ -1637,6 +1649,17 @@ export default function WorldFlow() {
           .insert({ post_id: openingCommentsFor.id, user_id: user!.id, content: newCommentText.trim() })
           .select().single();
         if (error) throw error;
+
+        // Salvar menções (@username) para este comentário
+        try {
+          if (data?.id && user?.id) {
+            const { saveMentions } = await import("@/utils/mentionsHelper");
+            await saveMentions(data.id, "comment", newCommentText.trim(), user.id);
+          }
+        } catch (e) {
+          console.warn('Falha ao salvar menções do comentário', e);
+        }
+
         return data;
       }
     },
@@ -1774,7 +1797,7 @@ export default function WorldFlow() {
           {post.content && (
             <ScrollArea className="max-h-[25vh] sm:max-h-[30vh] w-full mb-3 sm:mb-4 pr-2">
               <p className="text-white/95 text-sm sm:text-base md:text-lg leading-relaxed font-medium drop-shadow-sm whitespace-pre-wrap">
-                {post.content}
+                <MentionText text={post.content ?? ""} />
               </p>
             </ScrollArea>
           )}
@@ -1942,7 +1965,7 @@ export default function WorldFlow() {
                     <span className="font-bold text-xs text-gray-400 block mb-1">
                       {c.profiles?.username}
                     </span>
-                    <p className="text-xs sm:text-sm text-white/90">{c.content}</p>
+                    <p className="text-xs sm:text-sm text-white/90"><MentionText text={c.content ?? ""} /></p>
                   </div>
                 </div>
               ))
@@ -1956,11 +1979,12 @@ export default function WorldFlow() {
           
           <div className="p-2 sm:p-3 bg-gray-900 border-t border-gray-800">
             <div className="flex gap-2">
-              <Input 
-                value={newCommentText} 
-                onChange={e => setNewCommentText(e.target.value)} 
-                placeholder="Escreva um comentário..." 
-                className="bg-gray-800 border-gray-700 text-white rounded-full text-sm h-9 sm:h-10"
+              <MentionTextarea
+                value={newCommentText}
+                onChange={(e) => setNewCommentText(e.target.value)}
+                placeholder="Escreva um comentário... (use @ para mencionar)"
+                rows={1}
+                className="bg-gray-800 border-gray-700 text-white rounded-full text-sm min-h-[36px] h-9 sm:h-10 py-2 px-4 resize-none"
               />
               <Button 
                 size="icon" 

@@ -67,9 +67,8 @@ if (!self.define) {
     });
   };
 }
-define(['./workbox-3af34037'], (function (workbox) { 'use strict';
+define(['./workbox-7fb42abd'], (function (workbox) { 'use strict';
 
-  importScripts("sw-push.js");
   self.addEventListener('message', event => {
     if (event.data && event.data.type === 'SKIP_WAITING') {
       self.skipWaiting();
@@ -86,16 +85,16 @@ define(['./workbox-3af34037'], (function (workbox) { 'use strict';
     "revision": "3ca0b8505b4bec776b69afdba2768812"
   }, {
     "url": "index.html",
-    "revision": "0.aaosbsla9v"
+    "revision": "0.40ajck64qd"
   }], {});
   workbox.cleanupOutdatedCaches();
   workbox.registerRoute(new workbox.NavigationRoute(workbox.createHandlerBoundToURL("index.html"), {
     allowlist: [/^\/$/]
   }));
-  workbox.registerRoute(/^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*$/, new workbox.CacheFirst({
-    "cacheName": "supabase-storage",
+  workbox.registerRoute(/^https:\/\/ipmldkprqdhybedhpgmt\.supabase\.co\/.*/i, new workbox.NetworkFirst({
+    "cacheName": "supabase-cache",
     plugins: [new workbox.ExpirationPlugin({
-      maxEntries: 200,
+      maxEntries: 50,
       maxAgeSeconds: 604800
     })]
   }), 'GET');

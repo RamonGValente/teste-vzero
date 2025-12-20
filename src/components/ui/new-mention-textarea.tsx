@@ -47,7 +47,7 @@ export const NewMentionTextarea = React.forwardRef<HTMLTextAreaElement, NewMenti
       const pos = e.target.selectionStart ?? v.length;
       setCursorPos(pos);
       const before = v.substring(0, pos);
-      const m = before.match(/@(\\w*)$/);
+      const m = before.match(/@([\p{L}\p{N}._-]*)$/u);
       if (m) { setMentionQuery(m[1]); if (!showSuggestions) setShowSuggestions(true); requestAnimationFrame(() => { setSuggestionPos({ top: 36, left: 12 }); }); }
       else { if (showSuggestions) setShowSuggestions(false); if (mentionQuery) setMentionQuery(""); }
       autosize(e.currentTarget);

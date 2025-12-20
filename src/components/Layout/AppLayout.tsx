@@ -149,7 +149,7 @@ export default function AppLayout() {
   };
 
   const navigation = [
-    { name: "Worl-dFlow", href: "/", icon: Globe, badge: unreadFeed },
+    { name: "World Flow", href: "/", icon: Globe, badge: unreadFeed },
     { name: "Explorar", href: "/explore", icon: Search },
     { name: "Chat-Privado", href: "/messages", icon: Lock, badge: unreadMessages },
     { name: "Bubbles", href: "/communities", icon: Users, badge: unreadCommunities },
