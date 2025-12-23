@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
+import { sendPushEvent } from '@/utils/pushClient';
 
 export function useAttentionCalls() {
   const { user } = useAuth();
@@ -13,7 +14,16 @@ export function useAttentionCalls() {
       .select('id')
       .single();
     if (error) throw error;
-    return data?.id as string;
+    const id = data?.id as string;
+
+    // Push (best-effort)
+    try {
+      await sendPushEvent({ eventType: 'attention_call', attentionCallId: id });
+    } catch {
+      // ignore
+    }
+
+    return id;
   }, [user?.id]);
 
   const silenceNotifications = useCallback(async (senderId: string, until: Date) => {

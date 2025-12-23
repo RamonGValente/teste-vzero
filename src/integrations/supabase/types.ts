@@ -605,6 +605,330 @@ export type Database = {
         }
         Relationships: []
       }
+
+      attention_calls: {
+        Row: {
+          created_at: string
+          id: string
+          message: string | null
+          receiver_id: string
+          sender_id: string
+          viewed_at: string | null
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          receiver_id: string
+          sender_id: string
+          viewed_at?: string | null
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          message?: string | null
+          receiver_id?: string
+          sender_id?: string
+          viewed_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_calls_receiver_id_fkey"
+            columns: ["receiver_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_calls_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      attention_silence_settings: {
+        Row: {
+          created_at: string
+          id: string
+          sender_id: string
+          silenced_until: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          sender_id: string
+          silenced_until: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          sender_id?: string
+          silenced_until?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "attention_silence_settings_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "attention_silence_settings_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      notifications: {
+        Row: {
+          created_at: string | null
+          data: Json | null
+          expires_at: string | null
+          id: string
+          is_muted: boolean | null
+          is_read: boolean | null
+          message: string
+          metadata: Json | null
+          target_id: string | null
+          target_type: string | null
+          target_user_id: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string | null
+          data?: Json | null
+          expires_at?: string | null
+          id?: string
+          is_muted?: boolean | null
+          is_read?: boolean | null
+          message: string
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+          target_user_id?: string | null
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string | null
+          data?: Json | null
+          expires_at?: string | null
+          id?: string
+          is_muted?: boolean | null
+          is_read?: boolean | null
+          message?: string
+          metadata?: Json | null
+          target_id?: string | null
+          target_type?: string | null
+          target_user_id?: string | null
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_target_user_id_fkey"
+            columns: ["target_user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      push_subscriptions: {
+        Row: {
+          created_at: string
+          endpoint: string
+          expiration_time: string | null
+          id: string
+          keys_auth: string | null
+          keys_p256dh: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          endpoint: string
+          expiration_time?: string | null
+          id?: string
+          keys_auth?: string | null
+          keys_p256dh?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          endpoint?: string
+          expiration_time?: string | null
+          id?: string
+          keys_auth?: string | null
+          keys_p256dh?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      message_deletions_user: {
+        Row: {
+          conversation_id: string
+          deleted_at: string
+          deleted_by: string
+          id: string
+          message_id: string
+          original_content: string | null
+          original_language: string | null
+          user_id: string
+        }
+        Insert: {
+          conversation_id: string
+          deleted_at?: string
+          deleted_by?: string
+          id?: string
+          message_id: string
+          original_content?: string | null
+          original_language?: string | null
+          user_id: string
+        }
+        Update: {
+          conversation_id?: string
+          deleted_at?: string
+          deleted_by?: string
+          id?: string
+          message_id?: string
+          original_content?: string | null
+          original_language?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_deletions_user_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_deletions_user_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_deletions_user_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      profile_visits: {
+        Row: {
+          created_at: string
+          id: string
+          visited_id: string
+          visitor_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          visited_id: string
+          visitor_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          visited_id?: string
+          visitor_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "profile_visits_visited_id_fkey"
+            columns: ["visited_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "profile_visits_visitor_id_fkey"
+            columns: ["visitor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+
+      notification_preferences: {
+        Row: {
+          attention_calls: boolean
+          created_at: string
+          friend_requests: boolean
+          mentions: boolean
+          messages: boolean
+          push_enabled: boolean
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          attention_calls?: boolean
+          created_at?: string
+          friend_requests?: boolean
+          mentions?: boolean
+          messages?: boolean
+          push_enabled?: boolean
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          attention_calls?: boolean
+          created_at?: string
+          friend_requests?: boolean
+          mentions?: boolean
+          messages?: boolean
+          push_enabled?: boolean
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_preferences_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never

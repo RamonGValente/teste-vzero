@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { User, Session } from "@supabase/supabase-js";
+import { withOneSignal } from "@/integrations/onesignal/oneSignal";
 
 export function useAuth() {
   const [user, setUser] = useState<User | null>(null);
@@ -24,6 +25,23 @@ export function useAuth() {
 
     return () => subscription.unsubscribe();
   }, []);
+
+  // Vincula o usuário logado ao External ID do OneSignal (uuid do Supabase)
+  useEffect(() => {
+    if (loading) return;
+
+    withOneSignal(async (OneSignal) => {
+      try {
+        if (user?.id) {
+          await OneSignal.login(user.id);
+        } else {
+          await OneSignal.logout();
+        }
+      } catch (e) {
+        console.warn('[OneSignal] login/logout falhou', e);
+      }
+    });
+  }, [loading, user?.id]);
 
   const signOut = async () => {
     await supabase.auth.signOut();

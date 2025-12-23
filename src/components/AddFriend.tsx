@@ -147,7 +147,7 @@ export default function AddFriend({ userCode }: { userCode?: string }) {
       // Fire push notification to receiver (best-effort)
       try {
         if (fr?.id) {
-          await sendPushEvent({ eventType: 'friend_request', requestId: fr.id });
+          await sendPushEvent({ eventType: 'friend_request', friendRequestId: fr.id });
         }
       } catch (e) {
         console.log('push friend_request falhou', e);

@@ -4,7 +4,15 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
 import { useNavigate } from "react-router-dom";
-import { subscribeToPush as subscribeToPushClient, unsubscribeFromPush as unsubscribeFromPushClient, sendTestPush, isPushSupported as isPushSupportedClient, getServiceWorkerRegistration } from "@/utils/pushClient";
+import {
+  subscribeToPush as subscribeToPushClient,
+  unsubscribeFromPush as unsubscribeFromPushClient,
+  sendTestPush,
+  isPushSupported as isPushSupportedClient,
+  getServiceWorkerRegistration,
+  checkSubscriptionStatus,
+  getPushPermissionState,
+} from "@/utils/pushClient";
 import {
   Bell,
   BellOff,
@@ -288,6 +296,73 @@ export default function News() {
       low: true,
     },
   });
+
+  // Preferências de push (persistidas no Supabase para o backend respeitar)
+  const persistPushPreferences = async (settings: NotificationSettings) => {
+    if (!user?.id) return;
+
+    const payload = {
+      user_id: user.id,
+      push_enabled: settings.push_enabled,
+      messages: settings.types.message,
+      mentions: settings.types.mention,
+      attention_calls: settings.types.attention_call,
+      friend_requests: settings.types.friend_request,
+      updated_at: new Date().toISOString(),
+    };
+
+    const { error } = await supabase
+      .from('notification_preferences')
+      .upsert(payload, { onConflict: 'user_id' });
+
+    if (error) {
+      console.warn('Erro ao salvar notification_preferences', error);
+    }
+  };
+
+  useEffect(() => {
+    if (!user?.id) return;
+
+    let cancelled = false;
+
+    (async () => {
+      const { data, error } = await supabase
+        .from('notification_preferences')
+        .select('push_enabled,messages,mentions,attention_calls,friend_requests')
+        .eq('user_id', user.id)
+        .maybeSingle();
+
+      if (cancelled) return;
+
+      if (error) {
+        console.warn('Erro ao carregar notification_preferences', error);
+        return;
+      }
+
+      if (!data) {
+        // cria linha default (best-effort)
+        await persistPushPreferences(notificationSettings);
+        return;
+      }
+
+      setNotificationSettings((prev) => ({
+        ...prev,
+        push_enabled: data.push_enabled ?? prev.push_enabled,
+        types: {
+          ...prev.types,
+          message: data.messages ?? prev.types.message,
+          mention: data.mentions ?? prev.types.mention,
+          attention_call: data.attention_calls ?? prev.types.attention_call,
+          friend_request: data.friend_requests ?? prev.types.friend_request,
+        },
+      }));
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id]);
   
   const [pushPermission, setPushPermission] = useState<NotificationPermission>('default');
   const [isSubscribed, setIsSubscribed] = useState(false);
@@ -384,12 +459,12 @@ export default function News() {
     try {
       const registration = await getServiceWorkerRegistration();
       setServiceWorker(registration);
-      const sub = await subscribeToPushClient();
-      setPushPermission(Notification.permission);
-      setIsSubscribed(!!sub);
+      await subscribeToPushClient();
+      setPushPermission(await getPushPermissionState());
+      setIsSubscribed(await checkSubscriptionStatus());
       toast({ title: '✅ Push ativado!', description: 'Você agora receberá push de mensagens, chamar atenção, menções e pedidos de amizade.' });
     } catch (error: any) {
-      if (Notification.permission === 'denied') {
+      if ((await getPushPermissionState()) === 'denied') {
         toast({ title: 'Permissão negada', description: 'Ative nas configurações do navegador para receber push.', variant: 'destructive' });
         return;
       }
@@ -504,7 +579,7 @@ export default function News() {
     try {
       await unsubscribeFromPushClient();
       setIsSubscribed(false);
-      setPushPermission(Notification.permission);
+      setPushPermission(await getPushPermissionState());
       toast({ title: '✅ Notificações push desativadas!' });
     } catch {
       toast({ title: 'Erro ao cancelar inscrição', variant: 'destructive' });
@@ -592,23 +667,18 @@ export default function News() {
   // Inicializar Service Worker
   useEffect(() => {
     const initPushNotifications = async () => {
-      if (!('serviceWorker' in navigator) || !('PushManager' in window)) {
-        console.log('❌ Navegador não suporta Service Worker ou Push');
+      if (!isPushSupportedClient()) {
+        console.log('❌ Navegador não suporta Push');
         return;
       }
 
       try {
-        const registration = await navigator.serviceWorker.ready;
+        const registration = await getServiceWorkerRegistration();
         setServiceWorker(registration);
+        setPushPermission(await getPushPermissionState());
+        setIsSubscribed(await checkSubscriptionStatus());
 
-        if ('Notification' in window) {
-          setPushPermission(Notification.permission);
-        }
-
-        const subscription = await registration.pushManager.getSubscription();
-        setIsSubscribed(!!subscription);
-
-        registration.addEventListener('updatefound', () => {
+        registration?.addEventListener('updatefound', () => {
           const newWorker = registration.installing;
           if (newWorker) {
             newWorker.addEventListener('statechange', () => {
@@ -2186,10 +2256,12 @@ export default function News() {
                   id="push-enabled"
                   checked={notificationSettings.push_enabled}
                   onCheckedChange={(checked) => {
-                    setNotificationSettings(prev => ({
-                      ...prev,
-                      push_enabled: checked
-                    }));
+                    const next = {
+                      ...notificationSettings,
+                      push_enabled: checked,
+                    };
+                    setNotificationSettings(next);
+                    persistPushPreferences(next);
                     if (checked) {
                       requestPushPermission();
                     } else {
@@ -2247,10 +2319,20 @@ export default function News() {
                     <Switch
                       id={`type-${type}`}
                       checked={enabled}
-                      onCheckedChange={(checked) => setNotificationSettings(prev => ({
-                        ...prev,
-                        types: { ...prev.types, [type]: checked }
-                      }))}
+                      onCheckedChange={(checked) => {
+                        setNotificationSettings((prev) => {
+                          const next = {
+                            ...prev,
+                            types: { ...prev.types, [type]: checked },
+                          };
+
+                          if (type === 'message' || type === 'mention' || type === 'attention_call' || type === 'friend_request') {
+                            void persistPushPreferences(next);
+                          }
+
+                          return next;
+                        });
+                      }}
                     />
                     <Label htmlFor={`type-${type}`} className="capitalize text-sm">
                       {type === 'friend_request' ? 'Pedidos de amizade' :

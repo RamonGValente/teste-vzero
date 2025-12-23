@@ -14,6 +14,8 @@ export const handler = async () => {
   const has = (k) => Boolean((process.env[k] || "").trim());
 
   return json(200, {
+    ONESIGNAL_APP_ID: has("ONESIGNAL_APP_ID"),
+    ONESIGNAL_REST_API_KEY: has("ONESIGNAL_REST_API_KEY"),
     VAPID_PUBLIC_KEY: has("VAPID_PUBLIC_KEY"),
     VAPID_PRIVATE_KEY: has("VAPID_PRIVATE_KEY"),
     VAPID_SUBJECT: has("VAPID_SUBJECT"),

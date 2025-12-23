@@ -1,6 +1,7 @@
 
 import * as React from "react";
 import { sendAttentionCall, attentionErrorMessage } from "@/services/attentionCalls";
+import { sendPushEvent } from "@/utils/pushClient";
 
 type Props = {
   receiverId: string;
@@ -27,6 +28,14 @@ export default function AttentionButton({
     setLoading(true);
     try {
       const id = await sendAttentionCall(receiverId);
+
+      // Push (best-effort)
+      try {
+        await sendPushEvent({ eventType: "attention_call", attentionCallId: id });
+      } catch {
+        // ignora
+      }
+
       onSuccess?.(id);
     } catch (e) {
       onError?.(attentionErrorMessage(e));

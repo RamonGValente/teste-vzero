@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
+import { withOneSignal } from '@/integrations/onesignal/oneSignal';
 
 type PushPayload = {
   title?: string;
@@ -15,6 +16,53 @@ export function PushNotificationsBootstrap() {
   useEffect(() => {
     audioRef.current = new Audio('/sounds/alertasom.mp3');
     audioRef.current.preload = 'auto';
+  }, []);
+
+  // OneSignal: toast + som no primeiro plano + clique
+  useEffect(() => {
+    const extract = (e: any) => {
+      const n = e?.notification ?? e?.result?.notification ?? null;
+      const data = n?.additionalData ?? n?.data ?? {};
+      return {
+        title: n?.title ?? n?.headings?.pt ?? n?.headings?.en ?? 'UDG',
+        body: n?.body ?? n?.contents?.pt ?? n?.contents?.en ?? '',
+        icon: n?.icon,
+        image: n?.image,
+        url: data?.url ?? n?.url ?? n?.launchURL,
+      } as PushPayload & { url?: string };
+    };
+
+    const onForeground = (event: any) => {
+      const p = extract(event);
+      if (!p.title && !p.body) return;
+      play();
+      toast(`${p.title}${p.body ? ` — ${p.body}` : ''}`);
+    };
+
+    const onClick = (event: any) => {
+      const p = extract(event);
+      if (p?.url) window.location.href = p.url;
+    };
+
+    withOneSignal(async (OneSignal) => {
+      try {
+        OneSignal.Notifications.addEventListener('foregroundWillDisplay', onForeground);
+      } catch {}
+      try {
+        OneSignal.Notifications.addEventListener('click', onClick);
+      } catch {}
+    });
+
+    return () => {
+      withOneSignal(async (OneSignal) => {
+        try {
+          OneSignal.Notifications.removeEventListener('foregroundWillDisplay', onForeground);
+        } catch {}
+        try {
+          OneSignal.Notifications.removeEventListener('click', onClick);
+        } catch {}
+      });
+    };
   }, []);
 
   const play = async () => {

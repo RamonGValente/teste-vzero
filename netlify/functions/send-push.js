@@ -1,213 +1,257 @@
-import * as webpush from 'web-push';
 import { corsHeaders, createAdminClient, requireUser } from './_shared.js';
 
-const safeJson = (str) => {
-  try { return JSON.parse(str || '{}'); } catch { return null; }
-};
+function getBaseUrl(event) {
+  const origin =
+    event?.headers?.origin ||
+    (event?.headers?.referer ? new URL(event.headers.referer).origin : null);
 
-const getVapidDetails = () => {
-  const publicKey = process.env.VAPID_PUBLIC_KEY;
-  const privateKey = process.env.VAPID_PRIVATE_KEY;
-  const subject = process.env.VAPID_SUBJECT || 'mailto:admin@example.com';
-  if (!publicKey || !privateKey) throw new Error('VAPID_PUBLIC_KEY / VAPID_PRIVATE_KEY não configuradas');
-  return { publicKey, privateKey, subject };
-};
+  return (
+    process.env.URL ||
+    process.env.DEPLOY_PRIME_URL ||
+    process.env.SITE_URL ||
+    origin ||
+    'http://localhost:3000'
+  );
+}
 
-const buildPayload = ({ title, body, icon, badge, image, url, tag, data }) => {
-  return JSON.stringify({
-    title: title || 'UDG',
-    body: body || '',
-    icon: icon || '/icon-192.png',
-    badge: badge || '/icon-192.png',
-    image: image || undefined,
-    tag: tag || undefined,
-    data: { ...(data || {}), url: url || (data && data.url) || '/' },
+function safePreview(text, max = 80) {
+  if (!text) return '';
+  const t = String(text).trim().replace(/\s+/g, ' ');
+  return t.length <= max ? t : `${t.slice(0, max)}…`;
+}
+
+async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds, title, message, url, data }) {
+  if (!targetExternalIds?.length) return { ok: true, skipped: true };
+
+  const payload = {
+    app_id: appId,
+    headings: { pt: title, en: title },
+    contents: { pt: message, en: message },
+    url,
+    data,
+    include_aliases: { external_id: targetExternalIds },
+  };
+
+  const res = await fetch('https://api.onesignal.com/notifications', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Authorization: `Key ${restApiKey}`,
+    },
+    body: JSON.stringify(payload),
   });
-};
 
-const mapReceiversFromConversation = async (supabaseAdmin, conversationId, senderId) => {
-  const { data, error } = await supabaseAdmin
-    .from('conversation_participants')
-    .select('user_id')
-    .eq('conversation_id', conversationId);
-  if (error) throw error;
-  return (data || []).map(r => r.user_id).filter(uid => uid && uid !== senderId);
-};
-
-const sendToUsers = async (supabaseAdmin, userIds, payloadString) => {
-  if (!userIds?.length) return { sent: 0, failed: 0 };
-
-  const { data: subs, error } = await supabaseAdmin
-    .from('push_subscriptions')
-    .select('endpoint, keys_p256dh, keys_auth')
-    .in('user_id', userIds);
-  if (error) throw error;
-
-  let sent = 0;
-  let failed = 0;
-  const expired = [];
-
-  for (const s of (subs || [])) {
-    const subscription = {
-      endpoint: s.endpoint,
-      keys: { p256dh: s.keys_p256dh, auth: s.keys_auth },
-    };
-
-    try {
-      await webpush.sendNotification(subscription, payloadString);
-      sent += 1;
-    } catch (err) {
-      failed += 1;
-      const statusCode = err?.statusCode;
-      if (statusCode === 404 || statusCode === 410) expired.push(s.endpoint);
-    }
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    const err = new Error(`OneSignal error (${res.status}): ${JSON.stringify(json)}`);
+    err.details = json;
+    throw err;
   }
 
-  if (expired.length) {
-    await supabaseAdmin.from('push_subscriptions').delete().in('endpoint', expired);
-  }
+  return { ok: true, response: json };
+}
 
-  return { sent, failed };
-};
-
-export const handler = async (event) => {
+export async function handler(event) {
   const headers = corsHeaders('POST, OPTIONS');
-  if (event.httpMethod === 'OPTIONS') return { statusCode: 204, headers, body: '' };
-  if (event.httpMethod !== 'POST') return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
 
-  const body = safeJson(event.body);
-  if (!body) return { statusCode: 400, headers, body: JSON.stringify({ error: 'Body inválido' }) };
+  if (event.httpMethod === 'OPTIONS') {
+    return { statusCode: 204, headers, body: '' };
+  }
+
+  if (event.httpMethod !== 'POST') {
+    return { statusCode: 405, headers, body: JSON.stringify({ error: 'Method not allowed' }) };
+  }
+
+  const supabaseAdmin = createAdminClient();
+  const auth = await requireUser(event, supabaseAdmin);
+  if (!auth.ok) {
+    return { statusCode: auth.statusCode, headers, body: JSON.stringify(auth.body || { error: 'Unauthorized' }) };
+  }
+
+  const ONESIGNAL_APP_ID = process.env.ONESIGNAL_APP_ID;
+  const ONESIGNAL_REST_API_KEY = process.env.ONESIGNAL_REST_API_KEY;
+  if (!ONESIGNAL_APP_ID || !ONESIGNAL_REST_API_KEY) {
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({
+        error: 'Missing OneSignal env vars: ONESIGNAL_APP_ID and/or ONESIGNAL_REST_API_KEY',
+      }),
+    };
+  }
+
+  let payload = {};
+  try {
+    payload = event.body ? JSON.parse(event.body) : {};
+  } catch {
+    return { statusCode: 400, headers, body: JSON.stringify({ error: 'Invalid JSON' }) };
+  }
+
+  const { eventType } = payload;
+  const baseUrl = getBaseUrl(event);
 
   try {
-    const supabaseAdmin = createAdminClient();
-    const auth = await requireUser(event, supabaseAdmin);
-    if (!auth.ok) return { statusCode: auth.statusCode, headers, body: JSON.stringify(auth.body) };
-
-    const senderId = auth.user.id;
-
-    const { publicKey, privateKey, subject } = getVapidDetails();
-    webpush.setVapidDetails(subject, publicKey, privateKey);
-
-    const eventType = body.eventType || 'custom';
-    const targetUserId = body.userId || null;
-
     let receiverIds = [];
-    let title = body.title;
-    let msg = body.body;
-    let image = body.image || null;
-    let url = body.url || '/';
-    let tag = body.tag || eventType;
-    let data = body.data || {};
+    let title = 'Notificação';
+    let message = '';
+    let url = `${baseUrl}/news`;
+    let data = { eventType };
 
     if (eventType === 'test') {
-      receiverIds = [senderId];
-      title = title || '🔔 Teste';
-      msg = msg || 'Notificação de teste';
-      url = url || '/news';
-      tag = tag || 'test';
-    } else if (eventType === 'friend_request') {
-      if (!body.requestId) throw new Error('requestId ausente');
-      const { data: req, error } = await supabaseAdmin
-        .from('friend_requests')
-        .select('id, sender_id, receiver_id')
-        .eq('id', body.requestId)
-        .single();
-      if (error) throw error;
-      receiverIds = [req.receiver_id];
-
-      const { data: prof } = await supabaseAdmin
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', req.sender_id)
-        .single();
-      const senderName = prof?.username || 'Alguém';
-      image = image || prof?.avatar_url || null;
-
-      title = title || '🤝 Pedido de amizade';
-      msg = msg || `${senderName} enviou um pedido de amizade`;
-      url = url || '/messages?tab=contacts';
-      data = { ...data, requestId: req.id };
-    } else if (eventType === 'mention') {
-      if (!body.mentionId) throw new Error('mentionId ausente');
-      const { data: mention, error } = await supabaseAdmin
-        .from('mentions')
-        .select('id, user_id, mentioned_user_id, content_type, content_id, created_at')
-        .eq('id', body.mentionId)
-        .single();
-      if (error) throw error;
-
-      receiverIds = [mention.mentioned_user_id];
-
-      const { data: prof } = await supabaseAdmin
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', mention.user_id)
-        .single();
-      const senderName = prof?.username || 'Alguém';
-      image = image || prof?.avatar_url || null;
-
-      title = title || '🔔 Menção';
-      msg = msg || `${senderName} mencionou você`;
-      url = url || (mention.content_type === 'message'
-        ? `/messages?tab=chats&conversation=${mention.content_id}`
-        : '/news');
-
-      data = { ...data, mentionId: mention.id, contentType: mention.content_type, contentId: mention.content_id };
-    } else if (eventType === 'attention_call') {
-      if (!body.attentionCallId) throw new Error('attentionCallId ausente');
-      const { data: call, error } = await supabaseAdmin
-        .from('attention_calls')
-        .select('id, sender_id, receiver_id, message, created_at')
-        .eq('id', body.attentionCallId)
-        .single();
-      if (error) throw error;
-
-      receiverIds = [call.receiver_id];
-
-      const { data: prof } = await supabaseAdmin
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', call.sender_id)
-        .single();
-      const senderName = prof?.username || 'Alguém';
-      image = image || prof?.avatar_url || null;
-
-      title = title || '⚠️ Chamar atenção';
-      msg = msg || `${senderName} está chamando sua atenção`;
-      url = url || '/messages';
-      data = { ...data, attentionCallId: call.id, senderId: call.sender_id };
-    } else if (eventType === 'message') {
-      if (!body.messageId) throw new Error('messageId ausente');
-      const { data: m, error } = await supabaseAdmin
-        .from('messages')
-        .select('id, conversation_id, user_id, content, created_at')
-        .eq('id', body.messageId)
-        .single();
-      if (error) throw error;
-
-      receiverIds = await mapReceiversFromConversation(supabaseAdmin, m.conversation_id, m.user_id);
-
-      const { data: prof } = await supabaseAdmin
-        .from('profiles')
-        .select('username, avatar_url')
-        .eq('id', m.user_id)
-        .single();
-      const senderName = prof?.username || 'Alguém';
-      image = image || prof?.avatar_url || null;
-
-      title = title || `💬 Mensagem de ${senderName}`;
-      msg = msg || (m.content || 'Você recebeu uma nova mensagem');
-      url = url || `/messages?tab=chats&conversation=${m.conversation_id}`;
-      data = { ...data, messageId: m.id, conversationId: m.conversation_id, senderId: m.user_id };
-    } else if (targetUserId) {
-      receiverIds = [targetUserId];
+      receiverIds = [auth.user.id];
+      title = 'Teste de Push';
+      message = 'Se você recebeu isso, o OneSignal está funcionando ✅';
+      url = `${baseUrl}/news`;
+      data = { eventType: 'test' };
     }
 
-    const payloadString = buildPayload({ title, body: msg, image, url, tag, data });
-    const result = await sendToUsers(supabaseAdmin, receiverIds, payloadString);
+    if (eventType === 'message') {
+      const { messageId } = payload;
+      if (!messageId) throw new Error('Missing messageId');
 
-    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, ...result }) };
+      const { data: msg, error: msgErr } = await supabaseAdmin
+        .from('messages')
+        .select('id, conversation_id, user_id, content, created_at')
+        .eq('id', messageId)
+        .maybeSingle();
+      if (msgErr) throw msgErr;
+      if (!msg) throw new Error('Message not found');
+
+      const { data: participants, error: pErr } = await supabaseAdmin
+        .from('conversation_participants')
+        .select('user_id')
+        .eq('conversation_id', msg.conversation_id);
+      if (pErr) throw pErr;
+
+      receiverIds = (participants || []).map((p) => p.user_id).filter((id) => id && id !== msg.user_id);
+      title = 'Nova mensagem';
+      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
+      url = `${baseUrl}/messages?conversation=${encodeURIComponent(msg.conversation_id)}`;
+      data = {
+        eventType: 'message',
+        conversationId: msg.conversation_id,
+        messageId: msg.id,
+        senderId: msg.user_id,
+        url,
+      };
+    }
+
+    if (eventType === 'friend_request') {
+      const { friendRequestId } = payload;
+      if (!friendRequestId) throw new Error('Missing friendRequestId');
+
+      const { data: fr, error: frErr } = await supabaseAdmin
+        .from('friend_requests')
+        .select('id, sender_id, receiver_id, status, created_at')
+        .eq('id', friendRequestId)
+        .maybeSingle();
+      if (frErr) throw frErr;
+      if (!fr) throw new Error('Friend request not found');
+
+      receiverIds = fr.receiver_id ? [fr.receiver_id] : [];
+      title = 'Pedido de amizade';
+      message = 'Você recebeu um novo pedido de amizade.';
+      url = `${baseUrl}/news`;
+      data = { eventType: 'friend_request', friendRequestId: fr.id, senderId: fr.sender_id, url };
+    }
+
+    if (eventType === 'mention') {
+      const { mentionId } = payload;
+      if (!mentionId) throw new Error('Missing mentionId');
+
+      const { data: mention, error: mErr } = await supabaseAdmin
+        .from('mentions')
+        .select('id, user_id, mentioned_user_id, content_type, content_id, created_at')
+        .eq('id', mentionId)
+        .maybeSingle();
+      if (mErr) throw mErr;
+      if (!mention) throw new Error('Mention not found');
+
+      receiverIds = mention.mentioned_user_id ? [mention.mentioned_user_id] : [];
+      title = 'Você foi mencionado';
+      message = 'Alguém mencionou você em um conteúdo.';
+      url = `${baseUrl}/news`;
+      data = {
+        eventType: 'mention',
+        mentionId: mention.id,
+        contentType: mention.content_type,
+        contentId: mention.content_id,
+        url,
+      };
+    }
+
+    if (eventType === 'attention_call') {
+      const { attentionCallId } = payload;
+      if (!attentionCallId) throw new Error('Missing attentionCallId');
+
+      const { data: call, error: cErr } = await supabaseAdmin
+        .from('attention_calls')
+        .select('id, sender_id, receiver_id, message, created_at')
+        .eq('id', attentionCallId)
+        .maybeSingle();
+      if (cErr) throw cErr;
+      if (!call) throw new Error('Attention call not found');
+
+      receiverIds = call.receiver_id ? [call.receiver_id] : [];
+      title = 'Chamar atenção';
+      message = safePreview(call.message || 'Alguém está chamando sua atenção.');
+      url = `${baseUrl}/messages`;
+      data = { eventType: 'attention_call', attentionCallId: call.id, senderId: call.sender_id, url };
+    }
+
+    // Filter by user preferences (best-effort; default allow)
+    if (receiverIds.length) {
+      const { data: prefs, error: prefErr } = await supabaseAdmin
+        .from('notification_preferences')
+        .select('user_id, push_enabled, messages, mentions, attention_calls, friend_requests')
+        .in('user_id', receiverIds);
+
+      if (!prefErr && prefs?.length) {
+        const byId = new Map(prefs.map((p) => [p.user_id, p]));
+        receiverIds = receiverIds.filter((id) => {
+          const p = byId.get(id);
+          if (!p) return true;
+          if (p.push_enabled === false) return false;
+
+          switch (eventType) {
+            case 'message':
+              return p.messages !== false;
+            case 'mention':
+              return p.mentions !== false;
+            case 'attention_call':
+              return p.attention_calls !== false;
+            case 'friend_request':
+              return p.friend_requests !== false;
+            case 'test':
+              return true;
+            default:
+              return true;
+          }
+        });
+      }
+    }
+
+    const result = await sendOneSignalNotification({
+      appId: ONESIGNAL_APP_ID,
+      restApiKey: ONESIGNAL_REST_API_KEY,
+      targetExternalIds: receiverIds,
+      title,
+      message,
+      url,
+      data,
+    });
+
+    return {
+      statusCode: 200,
+      headers,
+      body: JSON.stringify({ ok: true, receiverIds, result }),
+    };
   } catch (e) {
-    return { statusCode: 500, headers, body: JSON.stringify({ error: String(e) }) };
+    console.error('send-push error', e);
+    return {
+      statusCode: 500,
+      headers,
+      body: JSON.stringify({ ok: false, error: e?.message || 'Unknown error', details: e?.details }),
+    };
   }
-};
+}
