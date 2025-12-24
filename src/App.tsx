@@ -25,6 +25,7 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
 import Rankings from "@/pages/Rankings";
 import { MovementStatusProvider } from "@/contexts/MovementStatusContext";
+import { PwaUpdateListener } from "@/components/pwa/PwaUpdateListener";
 
 const queryClient = new QueryClient();
 
@@ -88,6 +89,8 @@ const App = () => (
       <Toaster />
       <Sonner />
       <PWAInstallPrompt />
+      {/* Checagem de nova versão / update do PWA (prompt aparece após login) */}
+      <PwaUpdateListener />
       <BrowserRouter>
         <TutorialGuard>
           <Routes>

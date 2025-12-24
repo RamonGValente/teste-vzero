@@ -1,12 +1,17 @@
 import * as React from "react";
+import { toast } from "sonner";
 import { cn } from "@/lib/utils";
-import { Paperclip, Mic, Square, Send } from "lucide-react";
+import { Paperclip, Mic, Square, Send, BellRing } from "lucide-react";
 import AttentionButton from "@/components/chat/AttentionButton";
-import { sendAttentionCall, attentionErrorMessage } from "@/services/attentionCalls";
 
-type Props = { onSend: (text: string, files?: File[], audioBlob?: Blob) => void; disabled?: boolean; };
+type Props = {
+  onSend: (text: string, files?: File[], audioBlob?: Blob) => void;
+  disabled?: boolean;
+  /** Quando informado (chat privado), habilita o botão "Chamar atenção" no próprio chat */
+  receiverId?: string | null;
+};
 
-export default function ChatComposer({ onSend, disabled }: Props) {
+export default function ChatComposer({ onSend, disabled, receiverId }: Props) {
   const taRef = React.useRef<HTMLTextAreaElement | null>(null);
   const fileRef = React.useRef<HTMLInputElement | null>(null);
   const [text, setText] = React.useState("");
@@ -31,7 +36,6 @@ export default function ChatComposer({ onSend, disabled }: Props) {
   const doSend = (files?: File[]) => {
     const clean = text.trim();
     if (!clean && !(files && files.length > 0)) { return; }
-      return
     onSend(clean, files);
     setText("");
     requestAnimationFrame(() => taRef.current?.focus());
@@ -65,6 +69,17 @@ export default function ChatComposer({ onSend, disabled }: Props) {
 
   return (
     <div className="flex items-end gap-2">
+      {receiverId ? (
+        <AttentionButton
+          receiverId={receiverId}
+          className="h-11 w-11 shrink-0 rounded-xl border flex items-center justify-center hover:bg-accent"
+          label={<BellRing size={18} />}
+          title="Chamar atenção"
+          onSuccess={() => toast.success("Alerta enviado!")}
+          onError={(msg) => toast.error(msg)}
+        />
+      ) : null}
+
       <button type="button" onClick={pickFiles} className="h-11 w-11 shrink-0 rounded-xl border flex items-center justify-center hover:bg-accent" title="Anexar mídia" disabled={disabled}>
         <Paperclip size={18} />
       </button>

@@ -531,29 +531,8 @@ export default function News() {
         setPushPermission(await getPushPermissionState());
         setIsSubscribed(await checkSubscriptionStatus());
 
-        registration?.addEventListener('updatefound', () => {
-          const newWorker = registration.installing;
-          if (newWorker) {
-            newWorker.addEventListener('statechange', () => {
-              if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                toast({
-                  title: "🔄 Nova versão disponível!",
-                  description: "Recarregue para atualizar o aplicativo.",
-                  action: (
-                    <Button 
-                      variant="outline" 
-                      size="sm" 
-                      onClick={() => window.location.reload()}
-                      className="ml-2"
-                    >
-                      Atualizar
-                    </Button>
-                  ),
-                });
-              }
-            });
-          }
-        });
+        // A detecção de novo deploy/versão agora é global (após login)
+        // via <PwaUpdateListener />.
 
       } catch (error) {
         console.error('Erro na inicialização:', error);

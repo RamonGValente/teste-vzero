@@ -81,6 +81,14 @@ interface SpeechState {
   isSpeaking: boolean;
 }
 
+interface AttentionCallRow {
+  id: string;
+  sender_id: string;
+  receiver_id: string;
+  message: string | null;
+  created_at: string;
+}
+
 // Lista de idiomas disponíveis
 const AVAILABLE_LANGUAGES = [
   { code: 'pt', name: 'Português (BR)', flag: '🇧🇷', nativeName: 'Português', speechLang: 'pt-BR' },
@@ -632,6 +640,63 @@ export default function Messages() {
     },
   });
 
+  // Dados da conversa selecionada (para chats privados)
+  const selectedConvData = useMemo(() => {
+    if (!selectedConversation || !rawConversations) return null;
+    return rawConversations.find(c => c.id === selectedConversation) || null;
+  }, [rawConversations, selectedConversation]);
+
+  const privatePeer = useMemo(() => {
+    if (!selectedConvData || !user || selectedConvData.is_group) return null;
+    return selectedConvData.conversation_participants?.find((p: any) => p.user_id !== user.id) || null;
+  }, [selectedConvData, user]);
+
+  const privatePeerId = (privatePeer?.user_id as string | undefined) ?? null;
+  const privatePeerProfile = privatePeer?.profiles ?? null;
+  const isPrivateChat = !!privatePeerId && !selectedConvData?.is_group;
+
+  // Para renderizar "bolha" de Chamar Atenção dentro do chat
+  const { data: attentionCalls, refetch: refetchAttentionCalls } = useQuery({
+    queryKey: ["attention_calls_in_chat", selectedConversation, user?.id, privatePeerId],
+    enabled: !!selectedConversation && !!user?.id && !!privatePeerId && isPrivateChat,
+    queryFn: async () => {
+      const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString();
+      const { data, error } = await supabase
+        .from("attention_calls")
+        .select("id,sender_id,receiver_id,message,created_at")
+        .or(
+          `and(sender_id.eq.${user!.id},receiver_id.eq.${privatePeerId}),and(sender_id.eq.${privatePeerId},receiver_id.eq.${user!.id})`
+        )
+        .gte("created_at", since)
+        .order("created_at", { ascending: true });
+      if (error) throw error;
+      return (data || []) as AttentionCallRow[];
+    },
+  });
+
+  useEffect(() => {
+    if (!user || !privatePeerId || !selectedConversation) return;
+    if (!isPrivateChat) return;
+    const channel = supabase
+      .channel(`attention-calls-chat-${selectedConversation}`)
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "attention_calls" },
+        (payload) => {
+          const row = payload.new as any;
+          const matches =
+            (row.sender_id === user.id && row.receiver_id === privatePeerId) ||
+            (row.sender_id === privatePeerId && row.receiver_id === user.id);
+          if (!matches) return;
+          refetchAttentionCalls();
+        }
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, privatePeerId, selectedConversation, isPrivateChat, refetchAttentionCalls]);
+
   const getMessageType = useCallback((msg: any): 'text' | 'audio' | 'media' => {
     if (msg.content) return 'text';
     if (msg.media_urls && msg.media_urls.some((url: string) => 
@@ -825,6 +890,11 @@ export default function Messages() {
     }
   }, [messages, isAtBottom, scrollToBottom]);
 
+  useEffect(() => {
+    if (!attentionCalls || attentionCalls.length === 0) return;
+    if (isAtBottom) setTimeout(() => scrollToBottom(false), 100);
+  }, [attentionCalls, isAtBottom, scrollToBottom]);
+
   useEffect(() => { 
     if (selectedConversation) setTimeout(() => scrollToBottom(true), 200); 
   }, [selectedConversation, scrollToBottom]);
@@ -909,6 +979,22 @@ export default function Messages() {
     c.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
     c.conversation_participants.some((p: any) => p.profiles?.username?.toLowerCase().includes(searchQuery.toLowerCase()))
   );
+
+  type TimelineItem =
+    | { kind: 'message'; msg: any }
+    | { kind: 'attention'; call: AttentionCallRow };
+
+  const timeline: TimelineItem[] = useMemo(() => {
+    const msgItems: TimelineItem[] = (messages || []).map((m: any) => ({ kind: 'message', msg: m }));
+    const attItems: TimelineItem[] = (isPrivateChat ? (attentionCalls || []) : []).map((c) => ({ kind: 'attention', call: c }));
+    const all = [...msgItems, ...attItems];
+    all.sort((a, b) => {
+      const aTime = a.kind === 'message' ? a.msg.created_at : a.call.created_at;
+      const bTime = b.kind === 'message' ? b.msg.created_at : b.call.created_at;
+      return new Date(aTime).getTime() - new Date(bTime).getTime();
+    });
+    return all;
+  }, [messages, attentionCalls, isPrivateChat]);
 
   const showSidebar = !isMobile || (isMobile && !selectedConversation);
   const showChat = !isMobile || (isMobile && selectedConversation);
@@ -1097,9 +1183,57 @@ export default function Messages() {
             </div>
 
             <div ref={messagesContainerRef} className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar overflow-x-hidden">
-              {!isLoadingMessages && messages?.map((msg, idx) => {
-                const isOwn = msg.user_id === user?.id;
-                const showAvatar = !isOwn && (idx === 0 || messages[idx-1].user_id !== msg.user_id);
+              {!isLoadingMessages && (() => {
+                let lastNonOwnSenderId: string | null = null;
+
+                return timeline.map((item) => {
+                  if (item.kind === 'attention') {
+                    lastNonOwnSenderId = null;
+                    const call = item.call;
+                    const isOwnCall = call.sender_id === user?.id;
+                    const senderName = isOwnCall ? 'Você' : (privatePeerProfile?.username || 'Usuário');
+                    const receiverName = isOwnCall ? (privatePeerProfile?.username || 'usuário') : 'você';
+                    const title = isOwnCall
+                      ? `Você chamou a atenção de ${receiverName}`
+                      : `${senderName} chamou sua atenção`;
+
+                    return (
+                      <div key={`attention-${call.id}`} className="flex w-full justify-center">
+                        <div className="max-w-[95%] sm:max-w-[75%] rounded-xl border bg-muted/40 backdrop-blur px-3 py-2 flex items-center gap-3 shadow-sm">
+                          <img src="/icon-192.png" alt="UnDoInG" className="h-7 w-7 rounded-md border bg-background" />
+                          {!isOwnCall && privatePeerProfile?.avatar_url ? (
+                            <img
+                              src={privatePeerProfile.avatar_url}
+                              alt={senderName}
+                              className="h-7 w-7 rounded-full border bg-background object-cover"
+                            />
+                          ) : (
+                            <div className="h-7 w-7 rounded-full border bg-background flex items-center justify-center text-xs font-bold">
+                              {isOwnCall ? 'EU' : (senderName?.[0] || '?')}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-semibold text-destructive">🚨 Chamar Atenção</span>
+                              <span className="text-xs text-muted-foreground">
+                                {new Date(call.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              </span>
+                            </div>
+                            <div className="text-sm text-muted-foreground break-words">
+                              {title}{call.message ? ` — ${call.message}` : ''}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  const msg = item.msg;
+                  const isOwn = msg.user_id === user?.id;
+                  const showAvatar = !isOwn && lastNonOwnSenderId !== msg.user_id;
+
+                  if (!isOwn) lastNonOwnSenderId = msg.user_id;
+                  else lastNonOwnSenderId = null;
                 const timerState = getMessageState(msg.id);
                 const messageType = getMessageType(msg);
                 const translationState = getTranslationState(msg.id);
@@ -1237,7 +1371,8 @@ export default function Messages() {
                     </div>
                   </div>
                 );
-              })}
+                });
+              })()}
               <div ref={messagesEndRef} className="h-1" />
             </div>
 
@@ -1245,7 +1380,13 @@ export default function Messages() {
 
             <div className="p-4 bg-background border-t">
                <div className="max-w-4xl mx-auto w-full">
-                 <MessageInput onSendMessage={handleSendMessage} onAudioReady={handleAudioUpload} onMediaReady={handleMediaUpload} disabled={!selectedConversation} />
+                 <MessageInput
+                   onSendMessage={handleSendMessage}
+                   onAudioReady={handleAudioUpload}
+                   onMediaReady={handleMediaUpload}
+                   attentionReceiverId={isPrivateChat ? privatePeerId : null}
+                   disabled={!selectedConversation}
+                 />
                </div>
             </div>
           </>

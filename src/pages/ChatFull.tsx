@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -118,6 +118,26 @@ function ChatArea({ conversationId }: { conversationId: string | null }) {
     },
   });
 
+  // Para chats privados: identifica o outro participante (destinatário) para habilitar "Chamar atenção" dentro do chat
+  const { data: participants } = useQuery({
+    queryKey: ["chat_participants", conversationId],
+    enabled: !!conversationId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("conversation_participants")
+        .select("user_id")
+        .eq("conversation_id", conversationId);
+      if (error) throw error;
+      return (data || []) as { user_id: string }[];
+    },
+  });
+
+  const receiverId = useMemo(() => {
+    if (!user?.id || !participants?.length) return null;
+    const others = participants.map((p) => p.user_id).filter((id) => id && id !== user.id);
+    return others.length === 1 ? others[0] : null;
+  }, [participants, user?.id]);
+
   const hidden = new Set(deletions || []);
   const messages = (messagesRaw || []).filter((m) => !hidden.has(m.id));
 
@@ -226,7 +246,7 @@ function ChatArea({ conversationId }: { conversationId: string | null }) {
         <div ref={endRef} />
       </div>
       <div className="border-t p-2">
-        <ChatComposer onSend={onSend} />
+        <ChatComposer onSend={onSend} receiverId={receiverId} />
       </div>
     </div>
   );

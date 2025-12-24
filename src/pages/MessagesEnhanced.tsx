@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
@@ -73,6 +73,13 @@ export default function MessagesEnhanced() {
   const deletionsSet = new Set(deletions || []);
   const messages = (messagesRaw || []).filter(m => !deletionsSet.has(m.id));
 
+  const receiverId = useMemo(() => {
+    if (!selectedConversation || !user?.id) return null;
+    const conv: any = (conversations || []).find((c: any) => c.id === selectedConversation);
+    const other = (conv?.conversation_participants || []).find((p: any) => p.user_id !== user.id);
+    return other?.user_id || null;
+  }, [conversations, selectedConversation, user?.id]);
+
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages?.length]);
 
   const onSend = async (text: string) => {
@@ -119,7 +126,7 @@ export default function MessagesEnhanced() {
                 <div ref={endRef} />
               </div>
               <div className="border-t p-2">
-                <ChatComposer onSend={onSend} />
+                <ChatComposer onSend={onSend} receiverId={receiverId} />
               </div>
             </>
           )}
