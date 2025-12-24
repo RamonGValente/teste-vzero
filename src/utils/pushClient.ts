@@ -42,6 +42,13 @@ export async function subscribeToPush(): Promise<boolean> {
   if (!os?.User?.PushSubscription) return false;
 
   try {
+    // Recommended: request native permission prompt from a user gesture
+    try {
+      await os?.Notifications?.requestPermission();
+    } catch {
+      // ignore
+    }
+
     await os.User.PushSubscription.optIn();
   } catch (e) {
     console.warn('[Push] optIn falhou', e);

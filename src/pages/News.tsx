@@ -324,6 +324,9 @@ export default function News() {
     }
   };
 
+  // Evita spam de toast quando a tabela ainda não existe no Supabase
+  const prefsErrorToastShown = useRef(false);
+
   useEffect(() => {
     if (!user?.id) return;
 
@@ -340,6 +343,16 @@ export default function News() {
 
       if (error) {
         console.warn('Erro ao carregar notification_preferences', error);
+
+        const code = (error as any)?.code;
+        if (code === 'PGRST205' && !prefsErrorToastShown.current) {
+          prefsErrorToastShown.current = true;
+          toast({
+            title: 'Configuração do Supabase pendente',
+            description: 'A tabela notification_preferences ainda não existe. Rode a migration SQL do projeto e recarregue.',
+            variant: 'destructive',
+          });
+        }
         return;
       }
 
@@ -465,10 +478,23 @@ export default function News() {
     try {
       const registration = await getServiceWorkerRegistration();
       setServiceWorker(registration);
-      await subscribeToPushClient();
-      setPushPermission(await getPushPermissionState());
-      setIsSubscribed(await checkSubscriptionStatus());
-      toast({ title: '✅ Push ativado!', description: 'Você agora receberá push de mensagens, chamar atenção, menções e pedidos de amizade.' });
+      const ok = await subscribeToPushClient();
+      const perm = await getPushPermissionState();
+      const subscribed = await checkSubscriptionStatus();
+      setPushPermission(perm);
+      setIsSubscribed(subscribed);
+
+      if (!ok || !subscribed) {
+        // Usually happens when OneSignal hasn't finished initializing yet.
+        toast({
+          title: 'Ainda carregando o OneSignal',
+          description: 'Aguarde 2-3 segundos e clique novamente em “Inscrever Push”.',
+          variant: 'destructive',
+        });
+        return;
+      }
+
+      toast({ title: '✅ Push ativado!', description: 'Você agora receberá push conforme suas configurações.' });
     } catch (error: any) {
       if ((await getPushPermissionState()) === 'denied') {
         toast({ title: 'Permissão negada', description: 'Ative nas configurações do navegador para receber push.', variant: 'destructive' });

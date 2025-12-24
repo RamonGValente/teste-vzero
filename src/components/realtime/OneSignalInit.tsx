@@ -70,12 +70,36 @@ export function OneSignalInit() {
   const [optedIn, setOptedIn] = useState<boolean>(false);
   const [dismissed, setDismissed] = useState(false);
 
-  const appId = import.meta.env.VITE_ONESIGNAL_APP_ID as string | undefined;
+  // Prefer build-time Vite env, but fall back to runtime config from Netlify Functions
+  const [appId, setAppId] = useState<string | undefined>(
+    (import.meta.env.VITE_ONESIGNAL_APP_ID as string | undefined) || undefined
+  );
+
+  useEffect(() => {
+    if (appId) return;
+    let cancelled = false;
+
+    (async () => {
+      try {
+        const res = await fetch('/.netlify/functions/app-config', { cache: 'no-store' });
+        if (!res.ok) return;
+        const json = (await res.json()) as { onesignalAppId?: string };
+        if (!cancelled && json?.onesignalAppId) setAppId(json.onesignalAppId);
+      } catch {
+        // ignore
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [appId]);
 
   // 1) Init OneSignal (once)
   useEffect(() => {
     if (!appId) {
-      console.warn("[OneSignal] VITE_ONESIGNAL_APP_ID não configurado");
+      // Não trava a UI: o banner vai avisar que o push está indisponível.
+      console.warn("[OneSignal] App ID do OneSignal não configurado (VITE_ONESIGNAL_APP_ID ou ONESIGNAL_APP_ID)");
       return;
     }
 
@@ -193,19 +217,32 @@ await OneSignal.init({
   }, [ready]);
 
   const handleSubscribe = async () => {
-    if (!ready) return;
-
     if (!appId) {
       toast({
         variant: "destructive",
         title: "OneSignal não configurado",
-        description: "Configure VITE_ONESIGNAL_APP_ID no Netlify.",
+        description: "Configure ONESIGNAL_APP_ID (Functions) ou VITE_ONESIGNAL_APP_ID (build) no Netlify.",
+      });
+      return;
+    }
+
+    if (!ready) {
+      toast({
+        title: "Carregando push…",
+        description: "Aguarde 1-2 segundos e tente novamente.",
       });
       return;
     }
 
     await withOneSignal(async (OneSignal) => {
       try {
+        // Native browser prompt (recommended) + opt-in
+        try {
+          await OneSignal?.Notifications?.requestPermission();
+        } catch {
+          // ignore
+        }
+
         await OneSignal?.User?.PushSubscription?.optIn();
         setPermission(typeof window !== "undefined" ? Notification.permission : "default");
         setOptedIn(!!OneSignal?.User?.PushSubscription?.optedIn);
@@ -222,7 +259,8 @@ await OneSignal.init({
   };
 
   // Banner global (somente logado)
-  const shouldShowBanner = !!user?.id && ready && !dismissed && !optedIn;
+  // Mostra banner após login. Se o appId estiver faltando, mostra aviso (sem botão de ativar).
+  const shouldShowBanner = !!user?.id && !dismissed && !optedIn && (ready || !appId);
 
   if (!shouldShowBanner) return null;
 
@@ -234,6 +272,11 @@ await OneSignal.init({
           <div className="text-xs text-muted-foreground">
             Receba push de <b>mensagens</b>, <b>menções</b>, <b>comentários</b>, <b>pedidos de amizade</b>, <b>chamar atenção</b> e <b>posts de amigos</b>.
           </div>
+          {!appId && (
+            <div className="text-xs text-destructive">
+              Push indisponível: configure <b>ONESIGNAL_APP_ID</b> (Functions) ou <b>VITE_ONESIGNAL_APP_ID</b> (build).
+            </div>
+          )}
           {permission === "denied" && (
             <div className="text-xs text-destructive">
               Permissão bloqueada. Libere nas configurações do navegador/SO e recarregue a página.
@@ -245,7 +288,7 @@ await OneSignal.init({
           <Button size="sm" variant="outline" onClick={() => setDismissed(true)}>
             Agora não
           </Button>
-          <Button size="sm" onClick={handleSubscribe} disabled={permission === "denied"}>
+          <Button size="sm" onClick={handleSubscribe} disabled={permission === "denied" || !appId}>
             Ativar
           </Button>
         </div>

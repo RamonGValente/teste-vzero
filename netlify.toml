@@ -4,8 +4,11 @@
 
 [build.environment]
   NODE_VERSION = "20"
-  VITE_SUPABASE_URL = ""
-  VITE_SUPABASE_ANON_KEY = ""
+
+# OBS: Variáveis VITE_* (ex: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_ONESIGNAL_APP_ID)
+# devem ser configuradas no Netlify (Site settings -> Environment variables).
+# Como o Vite injeta essas vars em build-time, sempre faça "Clear cache and deploy"
+# após ajustar as variáveis.
 
 [[redirects]]
   from = "/sw.js"

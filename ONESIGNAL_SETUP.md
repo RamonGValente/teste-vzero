@@ -7,13 +7,17 @@
 
 ## 2) Variáveis de ambiente
 
-### Frontend (Vite / Netlify Build)
+### Runtime (recomendado - não depende de rebuild)
+O frontend busca o App ID via `/.netlify/functions/app-config`.
 Defina:
+- `ONESIGNAL_APP_ID`
+
+### Frontend (Vite / Netlify Build) (opcional)
+Se você preferir embutir no bundle no build, também pode definir:
 - `VITE_ONESIGNAL_APP_ID`
 
 ### Netlify Functions (Server-side)
 Defina:
-- `ONESIGNAL_APP_ID`
 - `ONESIGNAL_REST_API_KEY`
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`

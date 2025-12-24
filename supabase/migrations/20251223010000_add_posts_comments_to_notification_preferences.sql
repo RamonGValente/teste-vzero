@@ -1,7 +1,7 @@
--- Extend push preferences to cover comments and arena posts
+-- Add missing notification preference columns used by the app (comments + posts)
 
-alter table public.notification_preferences
+alter table if exists public.notification_preferences
   add column if not exists comments boolean not null default true;
 
-alter table public.notification_preferences
+alter table if exists public.notification_preferences
   add column if not exists posts boolean not null default true;
