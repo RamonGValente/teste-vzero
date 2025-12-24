@@ -1,9 +1,14 @@
 import { VitePWAOptions } from 'vite-plugin-pwa';
 
 export const pwaOptions: Partial<VitePWAOptions> = {
-  injectRegister: 'script',
+  // Registro manual (via virtual:pwa-register) para conseguirmos:
+  // 1) exibir o prompt de atualização APÓS login
+  // 2) ter botão "Atualizar" confiável em todos navegadores/PWA
+  injectRegister: null,
   devOptions: { enabled: true },
-  registerType: 'autoUpdate',
+  // "prompt" mantém o novo SW em waiting e dispara onNeedRefresh
+  // (o botão "Atualizar" chama updateServiceWorker(true)).
+  registerType: 'prompt',
   includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'masked-icon.svg', 'sounds/*'],
   manifest: {
     name: 'UDG',

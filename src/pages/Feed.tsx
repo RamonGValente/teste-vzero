@@ -1612,26 +1612,58 @@ export default function WorldFlow() {
   };
 
   useEffect(() => {
+    // Em alguns PWAs/navegadores (principalmente trackpad no macOS), o deltaY
+    // pode vir muito pequeno. Se usarmos um "limiar" alto, parece que o scroll
+    // não funciona. Aqui acumulamos deltaY e disparamos quando passar do limiar.
+    const wheelAccum = { value: 0 };
+    let lastTs = 0;
+
+    const normalizeDelta = (e: WheelEvent) => {
+      let d = e.deltaY;
+      // deltaMode: 0=pixels, 1=lines, 2=pages
+      if (e.deltaMode === 1) d *= 16;
+      if (e.deltaMode === 2) d *= window.innerHeight;
+      return d;
+    };
+
     const handleWheel = (e: WheelEvent) => {
       if (isModalOpen || showTutorial) return;
       if ((e.target as HTMLElement).closest('[role="dialog"]')) return;
+
+      // Evita scroll nativo da página; o World Flow navega por itens.
+      // (mantém a experiência estilo "TikTok")
       e.preventDefault();
-      if (Math.abs(e.deltaY) > 20) {
-        if (e.deltaY > 0) goDown(); else goUp();
+
+      const now = performance.now();
+      if (now - lastTs > 220) wheelAccum.value = 0; // reset se parou de rolar
+      lastTs = now;
+
+      wheelAccum.value += normalizeDelta(e);
+
+      const THRESHOLD = 80; // funciona bem para mouse e trackpad
+      if (wheelAccum.value > THRESHOLD) {
+        wheelAccum.value = 0;
+        goDown();
+      } else if (wheelAccum.value < -THRESHOLD) {
+        wheelAccum.value = 0;
+        goUp();
       }
     };
-    
-    // Apenas adiciona o evento wheel em desktop
-    if (!isMobile) {
+
+    // Em PWAs, largura pequena não significa "mobile" (pode ser desktop em janela).
+    // Então usamos capacidade de ponteiro (mouse/trackpad) para habilitar wheel.
+    const enableWheel = window.matchMedia?.('(pointer: fine)')?.matches ?? true;
+
+    if (enableWheel) {
       window.addEventListener('wheel', handleWheel, { passive: false });
     }
-    
+
     return () => {
-      if (!isMobile) {
+      if (enableWheel) {
         window.removeEventListener('wheel', handleWheel);
       }
     };
-  }, [goDown, goUp, isModalOpen, isMobile, showTutorial]);
+  }, [goDown, goUp, isModalOpen, showTutorial]);
 
   /* --- Função para curtir posts --- */
   const handleLike = async (postId: string) => {
