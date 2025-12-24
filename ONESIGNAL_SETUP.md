@@ -25,11 +25,12 @@ Os workers do OneSignal estão em:
 - `public/onesignal/OneSignalSDKWorker.js`
 - `public/onesignal/OneSignalSDKUpdaterWorker.js`
 
-E são registrados com scope `/onesignal/`.
+E são registrados no **escopo /onesignal/** para **não conflitar** com o Service Worker do PWA (`/sw.js`).
 
 ## 4) Migração no Supabase
-Execute a migração:
+Execute as migrações:
 - `supabase/migrations/20251223000000_onesignal_notification_preferences.sql`
+- `supabase/migrations/20251223010000_add_posts_comments_to_notification_preferences.sql`
 
 Isso cria a tabela:
 - `public.notification_preferences`
@@ -37,7 +38,7 @@ Isso cria a tabela:
 ## 5) Preferências de push
 Na tela **News → Configurações**, o usuário pode:
 - Habilitar/Desabilitar push
-- Ligar/Desligar tipos: mensagens, menções, chamar atenção, pedidos de amizade
+ - Ligar/Desligar tipos: mensagens, menções, chamar atenção, pedidos de amizade, comentários e posts de amigos
 
 Essas preferências são salvas em `notification_preferences` e respeitadas pelo backend ao enviar push.
 
@@ -46,6 +47,8 @@ Essas preferências são salvas em `notification_preferences` e respeitadas pelo
 - Menções: `src/utils/mentionsHelper.ts`
 - Chamar Atenção: `src/hooks/useAttentionCalls.ts` e `src/components/chat/AttentionButton.tsx`
 - Pedido de amizade: `src/components/AddFriend.tsx`
+ - Comentários: `src/pages/Feed.tsx` (quando comenta em um post)
+ - Posts de amigos (Arena): `src/pages/Feed.tsx` (quando publica um post)
 
 ## 7) Debug
 - Teste push: News → botão de teste

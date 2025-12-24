@@ -33,6 +33,27 @@
   status = 200
 
 [[redirects]]
+  from = "/OneSignalSDKWorker.js"
+  to = "/OneSignalSDKWorker.js"
+  status = 200
+
+[[redirects]]
+  from = "/OneSignalSDKUpdaterWorker.js"
+  to = "/OneSignalSDKUpdaterWorker.js"
+  status = 200
+
+
+[[redirects]]
+  from = "/onesignal/OneSignalSDKWorker.js"
+  to = "/onesignal/OneSignalSDKWorker.js"
+  status = 200
+
+[[redirects]]
+  from = "/onesignal/OneSignalSDKUpdaterWorker.js"
+  to = "/onesignal/OneSignalSDKUpdaterWorker.js"
+  status = 200
+
+[[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200

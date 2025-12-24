@@ -1,13 +1,15 @@
 import { supabase } from '@/integrations/supabase/client';
 import { getOneSignal } from '@/integrations/onesignal/oneSignal';
 
-export type PushEventType = 'message' | 'mention' | 'attention_call' | 'friend_request' | 'test';
+export type PushEventType = 'message' | 'mention' | 'attention_call' | 'friend_request' | 'comment' | 'post' | 'test';
 
 export type SendPushEventPayload =
   | { eventType: 'message'; messageId: string }
   | { eventType: 'mention'; mentionId: string }
   | { eventType: 'attention_call'; attentionCallId: string }
   | { eventType: 'friend_request'; friendRequestId: string }
+  | { eventType: 'comment'; commentId: string }
+  | { eventType: 'post'; postId: string }
   | { eventType: 'test' };
 
 export function isPushSupported(): boolean {

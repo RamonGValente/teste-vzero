@@ -891,31 +891,37 @@ export type Database = {
       notification_preferences: {
         Row: {
           attention_calls: boolean
+          comments: boolean
           created_at: string
           friend_requests: boolean
           mentions: boolean
           messages: boolean
           push_enabled: boolean
+          posts: boolean
           updated_at: string
           user_id: string
         }
         Insert: {
           attention_calls?: boolean
+          comments?: boolean
           created_at?: string
           friend_requests?: boolean
           mentions?: boolean
           messages?: boolean
           push_enabled?: boolean
+          posts?: boolean
           updated_at?: string
           user_id: string
         }
         Update: {
           attention_calls?: boolean
+          comments?: boolean
           created_at?: string
           friend_requests?: boolean
           mentions?: boolean
           messages?: boolean
           push_enabled?: boolean
+          posts?: boolean
           updated_at?: string
           user_id?: string
         }

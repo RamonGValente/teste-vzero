@@ -1,5 +1,6 @@
 import * as React from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { sendPushEvent } from "@/utils/pushClient";
 
 type Props = { onAdded?: (friendId: string) => void };
 
@@ -35,8 +36,21 @@ export default function AddContactByCode({ onAdded }: Props) {
         .or(`and(sender_id.eq.${user.id},receiver_id.eq.${target.id}),and(sender_id.eq.${target.id},receiver_id.eq.${user.id})`).limit(1);
       if (reqExists && reqExists.length > 0) { setOk("Já existe uma solicitação pendente entre vocês."); return; }
 
-      const { error: insErr } = await supabase.from("friend_requests").insert({ sender_id: user.id, receiver_id: target.id, status: "pending" });
+      const { data: fr, error: insErr } = await supabase
+        .from("friend_requests")
+        .insert({ sender_id: user.id, receiver_id: target.id, status: "pending" })
+        .select('id')
+        .single();
       if (insErr) throw insErr;
+
+      // Push: pedido de amizade
+      try {
+        if (fr?.id) {
+          void sendPushEvent({ eventType: 'friend_request', friendRequestId: fr.id });
+        }
+      } catch (e) {
+        console.warn('Falha ao disparar push de pedido de amizade', e);
+      }
 
       setOk(`Convite enviado para @${target.username}.`);
       onAdded?.(target.id);

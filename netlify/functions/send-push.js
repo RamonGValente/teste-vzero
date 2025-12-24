@@ -25,6 +25,7 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
 
   const payload = {
     app_id: appId,
+    target_channel: 'push',
     headings: { pt: title, en: title },
     contents: { pt: message, en: message },
     url,
@@ -32,7 +33,7 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
     include_aliases: { external_id: targetExternalIds },
   };
 
-  const res = await fetch('https://api.onesignal.com/notifications', {
+  const res = await fetch('https://api.onesignal.com/notifications?c=push', {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -199,11 +200,110 @@ export async function handler(event) {
       data = { eventType: 'attention_call', attentionCallId: call.id, senderId: call.sender_id, url };
     }
 
+    if (eventType === 'comment') {
+      const { commentId } = payload;
+      if (!commentId) throw new Error('Missing commentId');
+
+      const { data: comment, error: comErr } = await supabaseAdmin
+        .from('comments')
+        .select('id, post_id, user_id, content, created_at')
+        .eq('id', commentId)
+        .maybeSingle();
+      if (comErr) throw comErr;
+      if (!comment) throw new Error('Comment not found');
+
+      const { data: post, error: postErr } = await supabaseAdmin
+        .from('posts')
+        .select('id, user_id')
+        .eq('id', comment.post_id)
+        .maybeSingle();
+      if (postErr) throw postErr;
+      if (!post) throw new Error('Post not found for comment');
+
+      // dono do post recebe, exceto se ele mesmo comentou
+      receiverIds = post.user_id ? [post.user_id] : [];
+      receiverIds = receiverIds.filter((id) => id && id !== comment.user_id);
+
+      let commenterName = 'Alguém';
+      try {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('username, full_name')
+          .eq('id', comment.user_id)
+          .maybeSingle();
+        commenterName = prof?.username || prof?.full_name || commenterName;
+      } catch {}
+
+      title = 'Novo comentário';
+      message = `${commenterName} comentou: ${safePreview(comment.content || 'Novo comentário')}`;
+      url = `${baseUrl}/arena`;
+      data = {
+        eventType: 'comment',
+        commentId: comment.id,
+        postId: comment.post_id,
+        senderId: comment.user_id,
+        url,
+      };
+    }
+
+    if (eventType === 'post') {
+      const { postId } = payload;
+      if (!postId) throw new Error('Missing postId');
+
+      const { data: post, error: pErr } = await supabaseAdmin
+        .from('posts')
+        .select('id, user_id, content, created_at')
+        .eq('id', postId)
+        .maybeSingle();
+      if (pErr) throw pErr;
+      if (!post) throw new Error('Post not found');
+
+      // seguidores
+      const { data: followers, error: fErr } = await supabaseAdmin
+        .from('followers')
+        .select('follower_id')
+        .eq('following_id', post.user_id);
+      if (fErr) throw fErr;
+
+      // amigos (tenta ambos sentidos)
+      const { data: friendsA } = await supabaseAdmin
+        .from('friendships')
+        .select('friend_id')
+        .eq('user_id', post.user_id);
+      const { data: friendsB } = await supabaseAdmin
+        .from('friendships')
+        .select('user_id')
+        .eq('friend_id', post.user_id);
+
+      const ids = new Set();
+      (followers || []).forEach((r) => r?.follower_id && ids.add(r.follower_id));
+      (friendsA || []).forEach((r) => r?.friend_id && ids.add(r.friend_id));
+      (friendsB || []).forEach((r) => r?.user_id && ids.add(r.user_id));
+
+      ids.delete(post.user_id);
+      receiverIds = Array.from(ids);
+
+      let authorName = 'Seu amigo';
+      try {
+        const { data: prof } = await supabaseAdmin
+          .from('profiles')
+          .select('username, full_name')
+          .eq('id', post.user_id)
+          .maybeSingle();
+        authorName = prof?.username || prof?.full_name || authorName;
+      } catch {}
+
+      title = 'Novo post na Arena';
+      message = `${authorName} postou: ${safePreview(post.content || 'Novo post')}`;
+      url = `${baseUrl}/arena`;
+      data = { eventType: 'post', postId: post.id, authorId: post.user_id, url };
+    }
+
     // Filter by user preferences (best-effort; default allow)
     if (receiverIds.length) {
       const { data: prefs, error: prefErr } = await supabaseAdmin
         .from('notification_preferences')
-        .select('user_id, push_enabled, messages, mentions, attention_calls, friend_requests')
+        .select('user_id, push_enabled, messages, mentions, attention_calls, friend_requests, comments, posts')
         .in('user_id', receiverIds);
 
       if (!prefErr && prefs?.length) {
@@ -222,6 +322,10 @@ export async function handler(event) {
               return p.attention_calls !== false;
             case 'friend_request':
               return p.friend_requests !== false;
+            case 'comment':
+              return p.comments !== false;
+            case 'post':
+              return p.posts !== false;
             case 'test':
               return true;
             default:

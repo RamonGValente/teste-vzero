@@ -1,6 +1,7 @@
 import { RealtimeAttentionListener } from "@/components/realtime/RealtimeAttentionListener";
 import { RealtimeMessageListener } from "@/components/realtime/RealtimeMessageListener";
 import { PushNotificationsBootstrap } from "@/components/realtime/PushNotificationsBootstrap";
+import { OneSignalInit } from "@/components/realtime/OneSignalInit";
 import "@/styles/attention.css";
 import React, { useEffect, useState } from "react";
 import { Toaster } from "@/components/ui/toaster";
@@ -46,6 +47,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
   return (
     <MovementStatusProvider>
+      <OneSignalInit />
       <RealtimeAttentionListener />
       <RealtimeMessageListener />
       <PushNotificationsBootstrap />

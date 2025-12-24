@@ -219,6 +219,7 @@ interface NotificationSettings {
     mention: boolean;
     like: boolean;
     comment: boolean;
+    post: boolean;
     follow: boolean;
     friend_request: boolean;
     community_post: boolean;
@@ -275,6 +276,7 @@ export default function News() {
       mention: true,
       like: true,
       comment: true,
+      post: true,
       follow: true,
       friend_request: true,
       community_post: true,
@@ -308,6 +310,8 @@ export default function News() {
       mentions: settings.types.mention,
       attention_calls: settings.types.attention_call,
       friend_requests: settings.types.friend_request,
+      comments: settings.types.comment,
+      posts: settings.types.post,
       updated_at: new Date().toISOString(),
     };
 
@@ -328,7 +332,7 @@ export default function News() {
     (async () => {
       const { data, error } = await supabase
         .from('notification_preferences')
-        .select('push_enabled,messages,mentions,attention_calls,friend_requests')
+        .select('push_enabled,messages,mentions,attention_calls,friend_requests,comments,posts')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -354,6 +358,8 @@ export default function News() {
           mention: data.mentions ?? prev.types.mention,
           attention_call: data.attention_calls ?? prev.types.attention_call,
           friend_request: data.friend_requests ?? prev.types.friend_request,
+          comment: data.comments ?? prev.types.comment,
+          post: data.posts ?? prev.types.post,
         },
       }));
     })();
@@ -2326,7 +2332,7 @@ export default function News() {
                             types: { ...prev.types, [type]: checked },
                           };
 
-                          if (type === 'message' || type === 'mention' || type === 'attention_call' || type === 'friend_request') {
+                          if (type === 'message' || type === 'mention' || type === 'attention_call' || type === 'friend_request' || type === 'comment' || type === 'post') {
                             void persistPushPreferences(next);
                           }
 
@@ -2336,7 +2342,9 @@ export default function News() {
                     />
                     <Label htmlFor={`type-${type}`} className="capitalize text-sm">
                       {type === 'friend_request' ? 'Pedidos de amizade' :
+	                       type === 'comment' ? 'Comentários' :
                        type === 'community_post' ? 'Posts em comunidade' :
+                       type === 'post' ? 'Posts de amigos' :
                        type === 'attention_call' ? 'Chamadas de atenção' :
                        type === 'profile_visit' ? 'Visitas ao perfil' :
                        type === 'system' ? 'Sistema' :

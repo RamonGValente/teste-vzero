@@ -26,6 +26,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/co
 import { useNavigate } from "react-router-dom";
 import { MentionTextarea } from "@/components/ui/mention-textarea";
 import { MentionText } from "@/components/MentionText";
+import { sendPushEvent } from "@/utils/pushClient";
 
 /* ---------- CONFIGURAÇÕES DE ESTILO IA ---------- */
 const AI_STYLES = [
@@ -936,6 +937,15 @@ const CreatePostModal: React.FC<CreatePostModalProps> = ({ open, onOpenChange, u
       } catch (e) {
         console.warn('Falha ao salvar menções do post', e);
       }
+
+      // Push: avisar seguidores/amigos sobre um novo post na Arena (respeita preferências)
+      try {
+        if (newPostData?.id) {
+          void sendPushEvent({ eventType: 'post', postId: newPostData.id });
+        }
+      } catch (e) {
+        console.warn('Falha ao disparar push de post', e);
+      }
       
       toast({ 
         title: "🎯 Post enviado para a Arena!",
@@ -1658,6 +1668,15 @@ export default function WorldFlow() {
           }
         } catch (e) {
           console.warn('Falha ao salvar menções do comentário', e);
+        }
+
+        // Push: avisar o dono do post que recebeu um comentário (respeita preferências)
+        try {
+          if (data?.id) {
+            void sendPushEvent({ eventType: 'comment', commentId: data.id });
+          }
+        } catch (e) {
+          console.warn('Falha ao disparar push de comentário', e);
         }
 
         return data;

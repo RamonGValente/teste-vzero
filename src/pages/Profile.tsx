@@ -37,6 +37,7 @@ import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
+import { sendPushEvent } from "@/utils/pushClient";
 
 type MiniProfile = {
   id: string;
@@ -686,12 +687,25 @@ export default function Profile() {
         return { action: "already-pending" as const };
       }
 
-      const { error: reqErr } = await supabase.from("friend_requests").insert({
-        sender_id: user.id,
-        receiver_id: profileId,
-        status: "pending",
-      });
+      const { data: fr, error: reqErr } = await supabase
+        .from("friend_requests")
+        .insert({
+          sender_id: user.id,
+          receiver_id: profileId,
+          status: "pending",
+        })
+        .select('id')
+        .single();
       if (reqErr) throw reqErr;
+
+      // Push: pedido de amizade
+      try {
+        if (fr?.id) {
+          void sendPushEvent({ eventType: 'friend_request', friendRequestId: fr.id });
+        }
+      } catch (e) {
+        console.warn('Falha ao disparar push de pedido de amizade', e);
+      }
 
       return { action: "requested" as const };
     },
