@@ -1371,6 +1371,7 @@ export default function Messages() {
                     </div>
                   </div>
                 );
+                });
               })()}
               <div ref={messagesEndRef} className="h-1" />
             </div>
