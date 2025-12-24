@@ -3,6 +3,7 @@ import { toast } from "sonner";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import "@/styles/attention.css";
+import { runAttentionVibration, runShakeEffect, shouldRunAttentionEffect } from "@/lib/attentionEffects";
 
 type AttentionCall = {
   id: string;
@@ -128,15 +129,14 @@ export function RealtimeAttentionListener() {
 
     const sender = await fetchSenderProfile(row.sender_id);
 
-    // Sound + vibration
-    await playAlertSound();
-    if (navigator.vibrate) {
-      try { navigator.vibrate(100); } catch {}
-    }
+    const runEffect = shouldRunAttentionEffect();
 
-    // shake
-    document.body.classList.add("shake");
-    setTimeout(() => document.body.classList.remove("shake"), 600);
+    // Sound + vibration + shake (com dedupe entre Realtime e Push)
+    if (runEffect) {
+      await playAlertSound();
+      runAttentionVibration();
+      runShakeEffect(600);
+    }
 
     // toast with avatar + name
     toast.custom(

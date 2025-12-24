@@ -4,11 +4,14 @@ import { MentionTextarea } from "@/components/ui/mention-textarea";
 import { Button } from "@/components/ui/button";
 import AudioRecorder from "@/components/AudioRecorder";
 import MediaUploader from "@/components/MediaUploader";
+import AttentionButton from "@/components/realtime/AttentionButton";
 
 interface MessageInputProps {
   onSendMessage: (message: string) => void;
   onAudioReady: (audioBlob: Blob) => void;
   onMediaReady: (files: File[]) => void;
+  /** Se informado, exibe o botão "Chamar atenção" dentro do chat */
+  attentionReceiverId?: string | null;
   disabled?: boolean;
 }
 
@@ -16,6 +19,7 @@ export function MessageInput({
   onSendMessage, 
   onAudioReady, 
   onMediaReady,
+  attentionReceiverId = null,
   disabled = false 
 }: MessageInputProps) {
   const [message, setMessage] = useState("");
@@ -75,6 +79,13 @@ export function MessageInput({
               style={{ height: `${TWO_LINES_HEIGHT}px` }}
             />
           </div>
+
+          {attentionReceiverId ? (
+            <AttentionButton
+              contactId={attentionReceiverId}
+              className="h-[44px] w-[44px] flex-shrink-0 mb-[44px]"
+            />
+          ) : null}
           
           <Button
             onClick={handleSend}

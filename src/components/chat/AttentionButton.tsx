@@ -6,7 +6,8 @@ import { sendPushEvent } from "@/utils/pushClient";
 type Props = {
   receiverId: string;
   className?: string;
-  label?: string;
+  label?: React.ReactNode;
+  title?: string;
   onSuccess?: (id: string) => void;
   onError?: (message: string) => void;
 };
@@ -15,6 +16,7 @@ export default function AttentionButton({
   receiverId,
   className,
   label = "Chamar Atenção",
+  title,
   onSuccess,
   onError,
 }: Props) {
@@ -51,7 +53,7 @@ export default function AttentionButton({
       onClick={handleClick}
       disabled={loading}
       aria-busy={loading}
-      title={label}
+      title={typeof title === "string" ? title : "Chamar Atenção"}
     >
       {loading ? "Enviando..." : label}
     </button>

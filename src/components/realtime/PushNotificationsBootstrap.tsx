@@ -1,13 +1,17 @@
 import { useEffect, useRef } from 'react';
 import { toast } from 'sonner';
 import { withOneSignal } from '@/integrations/onesignal/oneSignal';
+import { runAttentionVibration, runShakeEffect, shouldRunAttentionEffect } from '@/lib/attentionEffects';
 
 type PushPayload = {
   title?: string;
   body?: string;
   icon?: string;
   image?: string;
-  data?: { url?: string };
+  url?: string;
+  eventType?: string;
+  attentionCallId?: string;
+  data?: { url?: string; eventType?: string; attentionCallId?: string };
 };
 
 export function PushNotificationsBootstrap() {
@@ -23,24 +27,42 @@ export function PushNotificationsBootstrap() {
     const extract = (e: any) => {
       const n = e?.notification ?? e?.result?.notification ?? null;
       const data = n?.additionalData ?? n?.data ?? {};
+      const url = data?.url ?? n?.url ?? n?.launchURL;
+      const eventType = data?.eventType ?? data?.event_type ?? data?.type;
+      const attentionCallId = data?.attentionCallId ?? data?.attention_call_id ?? data?.attentionCallID;
       return {
         title: n?.title ?? n?.headings?.pt ?? n?.headings?.en ?? 'UDG',
         body: n?.body ?? n?.contents?.pt ?? n?.contents?.en ?? '',
         icon: n?.icon,
         image: n?.image,
-        url: data?.url ?? n?.url ?? n?.launchURL,
+        url,
+        eventType,
+        attentionCallId,
+        data: { url, eventType, attentionCallId },
       } as PushPayload & { url?: string };
     };
 
     const onForeground = (event: any) => {
       const p = extract(event);
       if (!p.title && !p.body) return;
-      play();
+      // Para "chamar atenção": faz shake/vibração no app (não na notificação do SO)
+      if (p.eventType === 'attention_call' && shouldRunAttentionEffect()) {
+        play();
+        runAttentionVibration();
+        runShakeEffect(600);
+      } else {
+        play();
+      }
       toast(`${p.title}${p.body ? ` — ${p.body}` : ''}`);
     };
 
     const onClick = (event: any) => {
       const p = extract(event);
+      if (p.eventType === 'attention_call' && shouldRunAttentionEffect()) {
+        play();
+        runAttentionVibration();
+        runShakeEffect(700);
+      }
       if (p?.url) window.location.href = p.url;
     };
 
@@ -80,7 +102,15 @@ export function PushNotificationsBootstrap() {
     const handler = (event: MessageEvent) => {
       if (!event?.data || event.data.type !== 'PUSH_RECEIVED') return;
       const payload = (event.data.payload || {}) as PushPayload;
-      play();
+      if (payload.eventType === 'attention_call' || payload.data?.eventType === 'attention_call') {
+        if (shouldRunAttentionEffect()) {
+          play();
+          runAttentionVibration();
+          runShakeEffect(600);
+        }
+      } else {
+        play();
+      }
       toast.custom(
         () => (
           <div className='flex items-center gap-3 px-3 py-2'>
