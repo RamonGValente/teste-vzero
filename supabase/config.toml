@@ -1,0 +1,4 @@
+project_id = "ipmldkprqdhybedhpgmt"
+
+[functions.process-votes]
+verify_jwt = false

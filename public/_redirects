@@ -1,0 +1,10 @@
+/onesignal/OneSignalSDKUpdaterWorker.js /onesignal/OneSignalSDKUpdaterWorker.js 200
+/onesignal/OneSignalSDKWorker.js /onesignal/OneSignalSDKWorker.js 200
+/sw.js              /sw.js              200
+/sw-push.js         /sw-push.js         200
+/manifest.webmanifest  /manifest.webmanifest  200
+/workbox-*          /workbox-:splat      200
+/assets/*           /assets/:splat       200
+/OneSignalSDKWorker.js         /OneSignalSDKWorker.js         200
+/OneSignalSDKUpdaterWorker.js  /OneSignalSDKUpdaterWorker.js  200
+/*                 /index.html          200

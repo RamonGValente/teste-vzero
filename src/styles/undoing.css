@@ -1,0 +1,5 @@
+/* src/styles/undoing.css */
+.translated-text { color: #9ae6b4; }
+.countdown-pill { font-variant-numeric: tabular-nums; }
+@keyframes undoingPulse { 0%{opacity:.5;transform:scale(.98)} 50%{opacity:1;transform:scale(1.02)} 100%{opacity:.5;transform:scale(.98)} }
+.undoing { animation: undoingPulse 1.2s ease-in-out infinite; }

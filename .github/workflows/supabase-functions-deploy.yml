@@ -1,0 +1,21 @@
+name: Deploy Supabase Functions
+on:
+  push:
+    paths:
+      - "supabase/functions/**"
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+      - name: Link to project
+        run: supabase link --project-ref ipmldkprqdhybedhpgmt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      - name: Deploy translate
+        run: supabase functions deploy translate --no-verify-jwt
+        env:
+          SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}

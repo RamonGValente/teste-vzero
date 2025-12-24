@@ -1,0 +1,47 @@
+[build]
+  command = "npm run build"
+  publish = "dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# OBS: Variáveis do Netlify (Environment variables)
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_ROLE_KEY
+# - ONESIGNAL_APP_ID
+# - ONESIGNAL_REST_API_KEY
+# - SUPABASE_DB_WEBHOOK_SECRET (recomendado: validar requests do Supabase Database Webhooks)
+# Se você alterar ENV vars, faça "Clear cache and deploy".
+
+[[redirects]]
+  from = "/sw.js"
+  to = "/sw.js"
+  status = 200
+
+[[redirects]]
+  from = "/sw-push.js"
+  to = "/sw-push.js"
+  status = 200
+
+[[redirects]]
+  from = "/manifest.webmanifest"
+  to = "/manifest.webmanifest"
+  status = 200
+
+[[redirects]]
+  from = "/workbox-*"
+  to = "/workbox-:splat"
+  status = 200
+
+[[redirects]]
+  from = "/assets/*"
+  to = "/assets/:splat"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+[functions]
+  node_bundler = "esbuild"
