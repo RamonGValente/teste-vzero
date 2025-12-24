@@ -407,69 +407,6 @@ export default function News() {
   // FUNÇÕES DE PUSH NOTIFICATIONS
   // ============================================
 
-  const urlBase64ToUint8Array = (base64String: string): Uint8Array => {
-    const padding = '='.repeat((4 - base64String.length % 4) % 4);
-    const base64 = (base64String + padding)
-      .replace(/\-/g, '+')
-      .replace(/_/g, '/');
-
-    const rawData = window.atob(base64);
-    const outputArray = new Uint8Array(rawData.length);
-
-    for (let i = 0; i < rawData.length; ++i) {
-      outputArray[i] = rawData.charCodeAt(i);
-    }
-    return outputArray;
-  };
-
-  const registerServiceWorker = async (): Promise<ServiceWorkerRegistration | null> => {
-    if (!('serviceWorker' in navigator)) {
-      toast({
-        title: "Navegador não suportado",
-        description: "Seu navegador não suporta notificações push.",
-        variant: "destructive",
-      });
-      return null;
-    }
-
-    setIsRegistering(true);
-    try {
-      const registration = await navigator.serviceWorker.register('/sw.js', {
-        scope: '/',
-        updateViaCache: 'none'
-      });
-      
-      setServiceWorker(registration);
-      
-      if (registration.installing) {
-        await new Promise<void>((resolve) => {
-          registration.installing!.addEventListener('statechange', (e) => {
-            if ((e.target as ServiceWorker).state === 'activated') {
-              resolve();
-            }
-          });
-        });
-      }
-      
-      toast({ 
-        title: "Service Worker ativado!",
-        description: "Pronto para receber notificações push."
-      });
-      
-      return registration;
-    } catch (error) {
-      console.error('❌ Erro ao registrar Service Worker:', error);
-      toast({
-        title: "Erro ao registrar Service Worker",
-        description: "Verifique se a URL está em HTTPS para notificações push.",
-        variant: "destructive",
-      });
-      return null;
-    } finally {
-      setIsRegistering(false);
-    }
-  };
-
   const requestPushPermission = async () => {
     if (!isPushSupportedClient()) {
       toast({ title: 'Navegador não suportado', description: 'Seu navegador não suporta notificações push.', variant: 'destructive' });
@@ -487,8 +424,8 @@ export default function News() {
       if (!ok || !subscribed) {
         // Usually happens when OneSignal hasn't finished initializing yet.
         toast({
-          title: 'Ainda carregando o OneSignal',
-          description: 'Aguarde 2-3 segundos e clique novamente em “Inscrever Push”.',
+          title: 'OneSignal ainda não iniciou',
+          description: 'Se não ativar, limpe os dados do site/PWA e tente novamente (erro comum de armazenamento/IndexedDB).',
           variant: 'destructive',
         });
         return;
@@ -504,109 +441,6 @@ export default function News() {
     }
   };
 
-  const subscribeToPush = async (registration: ServiceWorkerRegistration) => {
-    try {
-      const vapidPublicKey = import.meta.env.VITE_VAPID_PUBLIC_KEY || 
-        'BEl62iUYgUivxIkv69yViEuiBIa-Ib9-SkvMeAtA3LFgDzkrxZJjSgSnfckjBJuBkr3qBUYIHBQFLXYp5Nksh8U';
-      
-      const subscription = await registration.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
-      });
-
-      const success = await sendSubscriptionToServer(subscription);
-      
-      if (success) {
-        setIsSubscribed(true);
-        toast({ 
-          title: "✅ Inscrito com sucesso!",
-          description: "Você agora receberá notificações push."
-        });
-        
-        localStorage.setItem('pushSubscription', JSON.stringify({
-          endpoint: subscription.endpoint,
-          expires: subscription.expirationTime,
-          user: user?.id
-        }));
-      } else {
-        throw new Error('Falha ao salvar subscription');
-      }
-    } catch (error: any) {
-      console.error('❌ Erro ao inscrever-se:', error);
-      
-      if (error.name === 'NotAllowedError') {
-        toast({
-          title: "Permissão necessária",
-          description: "Você precisa permitir notificações para usar este recurso.",
-          variant: "destructive",
-        });
-      } else if (error.message.includes('applicationServerKey is not valid')) {
-        toast({
-          title: "Chave VAPID inválida",
-          description: "Configure uma chave VAPID válida nas variáveis de ambiente.",
-          variant: "destructive",
-        });
-      } else {
-        toast({
-          title: "Erro ao inscrever-se",
-          description: "Não foi possível completar a inscrição para notificações push.",
-          variant: "destructive",
-        });
-      }
-    }
-  };
-
-  const sendSubscriptionToServer = async (subscription: PushSubscription): Promise<boolean> => {
-    try {
-      if (!user) return false;
-
-      const key = subscription.getKey('p256dh');
-      const auth = subscription.getKey('auth');
-      
-      const subscriptionData = {
-        user_id: user.id,
-        endpoint: subscription.endpoint,
-        expiration_time: subscription.expirationTime ? new Date(subscription.expirationTime).toISOString() : null,
-        keys_p256dh: key ? btoa(String.fromCharCode(...new Uint8Array(key))) : null,
-        keys_auth: auth ? btoa(String.fromCharCode(...new Uint8Array(auth))) : null,
-      };
-
-      const { error } = await supabase
-        .from('push_subscriptions')
-        .upsert(subscriptionData, {
-          onConflict: 'endpoint'
-        });
-
-      if (error) {
-        console.error('Erro ao salvar no Supabase:', error);
-        
-        const pending = JSON.parse(localStorage.getItem('pendingPushSubscriptions') || '[]');
-        pending.push(subscriptionData);
-        localStorage.setItem('pendingPushSubscriptions', JSON.stringify(pending));
-        
-        return true;
-      }
-
-      return true;
-    } catch (error) {
-      console.error('Erro ao enviar subscription:', error);
-      return false;
-    }
-  };
-
-  const checkExistingSubscription = useCallback(async () => {
-    if (!serviceWorker) return;
-
-    try {
-      const subscription = await serviceWorker.pushManager.getSubscription();
-      if (subscription) {
-        setIsSubscribed(true);
-      }
-    } catch (error) {
-      console.error('Erro ao verificar subscription:', error);
-    }
-  }, [serviceWorker]);
-
   const unsubscribeFromPush = async () => {
     try {
       await unsubscribeFromPushClient();
@@ -615,19 +449,6 @@ export default function News() {
       toast({ title: '✅ Notificações push desativadas!' });
     } catch {
       toast({ title: 'Erro ao cancelar inscrição', variant: 'destructive' });
-    }
-  };
-
-  const removeSubscriptionFromServer = async (subscription: PushSubscription) => {
-    try {
-      if (!user) return;
-      
-      await supabase
-        .from('push_subscriptions')
-        .delete()
-        .eq('endpoint', subscription.endpoint);
-    } catch (error) {
-      console.error('Erro ao remover subscription:', error);
     }
   };
 

@@ -1,31 +1,57 @@
-# Push + PWA (UDG)
+# Push + PWA (UDG) — OneSignal (Web SDK v16)
 
-## 1) Variáveis de ambiente
+Este projeto usa **OneSignal Web Push v16**.
+✅ **Não usa VAPID/Web Push manual.**
 
-### Front-end (Vite)
-Defina **apenas** a public key:
-- `VITE_VAPID_PUBLIC_KEY`
+---
 
-### Netlify (Functions)
-Defina no Netlify (Site settings → Environment variables):
-- `VAPID_PUBLIC_KEY`
-- `VAPID_PRIVATE_KEY`
+## 1) Variáveis no Netlify
+
+Em **Site settings → Environment variables**:
+
 - `SUPABASE_URL`
 - `SUPABASE_SERVICE_ROLE_KEY`
-- `SUPABASE_ANON_KEY` (opcional, se alguma função usar)
-- `PUBLIC_SITE_URL` (ex: `https://sistemaapp.netlify.app`)
+- `ONESIGNAL_APP_ID`
+- `ONESIGNAL_REST_API_KEY`
 
-> A **VAPID_PRIVATE_KEY NUNCA vai no front**.
+Depois, faça **Clear cache and deploy**.
 
-## 2) Como o push chega no Sistema Operacional
-- As notificações do SO são disparadas pelo `Service Worker` (`public/sw-push.js`) via `registration.showNotification()`.
-- Com esta versão, mesmo com o app aberto, também reforçamos via `new Notification(...)` no foreground.
+> O front lê o `ONESIGNAL_APP_ID` via `/.netlify/functions/app-config` (runtime), então você não fica dependente de `VITE_*` no build.
 
-## 3) iPhone (iOS)
-Push na web exige iOS relativamente recente e, na prática, é mais confiável quando o app está **instalado** (Adicionar à Tela Inicial) e o usuário habilita Notificações.
+---
 
-## 4) Android (incluindo Xiaomi)
-Se não aparecer “Instalar app”:
-- Garanta que está abrindo no **Chrome verdadeiro**, não dentro do WhatsApp/Instagram.
-- Recarregue a página 1 vez para o SW controlar (o prompt aparece depois disso em alguns modelos).
-- Use o banner interno do app (ele aparece quando o navegador dispara `beforeinstallprompt`).
+## 2) Service Worker
+
+- O Service Worker do PWA é **`/sw.js`** (gerado pelo `vite-plugin-pwa`).
+- Ele importa `public/sw-push.js` via `workbox.importScripts`.
+- O `public/sw-push.js` importa o SW do OneSignal:
+  `https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.sw.js`
+
+---
+
+## 3) OneSignal (Dashboard)
+
+No painel do OneSignal:
+
+1. Configure **Web Push** para o domínio do seu site (Netlify) e também para o domínio local, se for testar.
+2. Garanta que o site esteja servindo em HTTPS.
+3. O app usa **External User ID** = `supabase.auth.user().id`.
+
+---
+
+## 4) Preferências do usuário (Supabase)
+
+As funções usam a tabela `notification_preferences` para respeitar o que o usuário quer receber.
+
+Se você ainda não criou essa tabela, aplique as migrations em:
+`supabase/migrations/20251223000000_onesignal_notification_preferences.sql`
+`supabase/migrations/20251223010000_add_posts_comments_to_notification_preferences.sql`
+
+---
+
+## 5) Problemas comuns (sem “gambiarras”)
+
+Se aparecer erro de armazenamento (IndexedDB), normalmente é **PWA/dados corrompidos**:
+- Limpar dados do site
+- Remover o PWA e instalar de novo
+- Evitar navegador embutido do WhatsApp/Instagram

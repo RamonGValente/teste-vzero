@@ -5,10 +5,12 @@
 [build.environment]
   NODE_VERSION = "20"
 
-# OBS: Variáveis VITE_* (ex: VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY, VITE_ONESIGNAL_APP_ID)
-# devem ser configuradas no Netlify (Site settings -> Environment variables).
-# Como o Vite injeta essas vars em build-time, sempre faça "Clear cache and deploy"
-# após ajustar as variáveis.
+# OBS: Variáveis do Netlify (Environment variables)
+# - SUPABASE_URL
+# - SUPABASE_SERVICE_ROLE_KEY
+# - ONESIGNAL_APP_ID
+# - ONESIGNAL_REST_API_KEY
+# Se você alterar ENV vars, faça "Clear cache and deploy".
 
 [[redirects]]
   from = "/sw.js"
@@ -33,27 +35,6 @@
 [[redirects]]
   from = "/assets/*"
   to = "/assets/:splat"
-  status = 200
-
-[[redirects]]
-  from = "/OneSignalSDKWorker.js"
-  to = "/OneSignalSDKWorker.js"
-  status = 200
-
-[[redirects]]
-  from = "/OneSignalSDKUpdaterWorker.js"
-  to = "/OneSignalSDKUpdaterWorker.js"
-  status = 200
-
-
-[[redirects]]
-  from = "/onesignal/OneSignalSDKWorker.js"
-  to = "/onesignal/OneSignalSDKWorker.js"
-  status = 200
-
-[[redirects]]
-  from = "/onesignal/OneSignalSDKUpdaterWorker.js"
-  to = "/onesignal/OneSignalSDKUpdaterWorker.js"
   status = 200
 
 [[redirects]]

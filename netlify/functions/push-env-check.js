@@ -1,5 +1,5 @@
 // netlify/functions/push-env-check.js
-// Endpoint de diagnóstico: mostra se as ENV vars críticas estão disponíveis no Netlify.
+// Endpoint de diagnóstico: mostra se as ENV vars críticas do Push (OneSignal) estão disponíveis no Netlify.
 
 const json = (statusCode, body) => ({
   statusCode,
@@ -16,9 +16,6 @@ export const handler = async () => {
   return json(200, {
     ONESIGNAL_APP_ID: has("ONESIGNAL_APP_ID"),
     ONESIGNAL_REST_API_KEY: has("ONESIGNAL_REST_API_KEY"),
-    VAPID_PUBLIC_KEY: has("VAPID_PUBLIC_KEY"),
-    VAPID_PRIVATE_KEY: has("VAPID_PRIVATE_KEY"),
-    VAPID_SUBJECT: has("VAPID_SUBJECT"),
     SUPABASE_URL: has("SUPABASE_URL"),
     SUPABASE_SERVICE_ROLE_KEY: has("SUPABASE_SERVICE_ROLE_KEY"),
     NODE_VERSION: process.version,
