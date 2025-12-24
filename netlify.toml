@@ -10,6 +10,7 @@
 # - SUPABASE_SERVICE_ROLE_KEY
 # - ONESIGNAL_APP_ID
 # - ONESIGNAL_REST_API_KEY
+# - SUPABASE_DB_WEBHOOK_SECRET (recomendado: validar requests do Supabase Database Webhooks)
 # Se você alterar ENV vars, faça "Clear cache and deploy".
 
 [[redirects]]
