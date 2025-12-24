@@ -20,8 +20,40 @@ function safePreview(text, max = 80) {
   return t.length <= max ? t : `${t.slice(0, max)}…`;
 }
 
-async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds, title, message, url, data }) {
-  if (!targetExternalIds?.length) return { ok: true, skipped: true };
+function uniqStrings(values) {
+  const out = [];
+  const seen = new Set();
+  for (const v of Array.isArray(values) ? values : []) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
+function isHttpUrl(v) {
+  try {
+    const u = new URL(v);
+    return u.protocol === 'http:' || u.protocol === 'https:';
+  } catch {
+    return false;
+  }
+}
+
+async function sendOneSignalNotification({
+  appId,
+  restApiKey,
+  targetExternalIds,
+  title,
+  message,
+  url,
+  data,
+  appIconUrl,
+  imageUrl,
+}) {
+  const targets = uniqStrings(targetExternalIds);
+  if (!targets.length) return { ok: true, skipped: true };
 
   const payload = {
     app_id: appId,
@@ -30,8 +62,26 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
     contents: { pt: message, en: message },
     url,
     data,
-    include_aliases: { external_id: targetExternalIds },
+    include_aliases: { external_id: targets },
   };
+
+  // Melhor visual (logo do app + imagem do remetente quando possível)
+  if (appIconUrl && isHttpUrl(appIconUrl)) {
+    payload.chrome_web_icon = appIconUrl;   // ícone do app (web push)
+    payload.firefox_icon = appIconUrl;
+    payload.chrome_web_badge = appIconUrl;
+    payload.small_icon = appIconUrl;        // fallback (alguns ambientes)
+  }
+
+  if (imageUrl && isHttpUrl(imageUrl)) {
+    // Foto do remetente/autor (onde suportado)
+    payload.chrome_web_image = imageUrl;    // imagem grande no Chrome (web push)
+    payload.large_icon = imageUrl;          // Android (quando aplicável)
+    payload.ios_attachments = { id: imageUrl }; // iOS (quando aplicável)
+  } else if (appIconUrl && isHttpUrl(appIconUrl)) {
+    // Fallback: se não houver foto do remetente, usa o ícone do app
+    payload.large_icon = appIconUrl;
+  }
 
   const res = await fetch('https://api.onesignal.com/notifications?c=push', {
     method: 'POST',
@@ -45,6 +95,13 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(`OneSignal error (${res.status}): ${JSON.stringify(json)}`);
+    err.details = json;
+    throw err;
+  }
+
+  // OneSignal pode retornar 200 com `errors` (ex.: invalid_aliases). Nunca faça fallback.
+  if (json && json.errors) {
+    const err = new Error(`OneSignal API returned errors: ${JSON.stringify(json.errors)}`);
     err.details = json;
     throw err;
   }
@@ -90,6 +147,7 @@ export async function handler(event) {
 
   const { eventType } = payload;
   const baseUrl = getBaseUrl(event);
+  const appIconUrl = `${baseUrl}/icons/icon-192.png`;
 
   try {
     let receiverIds = [];
@@ -97,6 +155,7 @@ export async function handler(event) {
     let message = '';
     let url = `${baseUrl}/news`;
     let data = { eventType };
+	    let imageUrl = null;
 
     if (eventType === 'test') {
       receiverIds = [auth.user.id];
@@ -104,6 +163,7 @@ export async function handler(event) {
       message = 'Se você recebeu isso, o OneSignal está funcionando ✅';
       url = `${baseUrl}/news`;
       data = { eventType: 'test' };
+	      imageUrl = null;
     }
 
     if (eventType === 'message') {
@@ -118,15 +178,59 @@ export async function handler(event) {
       if (msgErr) throw msgErr;
       if (!msg) throw new Error('Message not found');
 
-      const { data: participants, error: pErr } = await supabaseAdmin
-        .from('conversation_participants')
-        .select('user_id')
-        .eq('conversation_id', msg.conversation_id);
+	      // Descobre se é conversa privada ou grupo
+	      const { data: conv } = await supabaseAdmin
+	        .from('conversations')
+	        .select('id, is_group, max_participants')
+	        .eq('id', msg.conversation_id)
+	        .maybeSingle();
+
+	      const { data: participants, error: pErr } = await supabaseAdmin
+	        .from('conversation_participants')
+	        .select('user_id, joined_at')
+	        .eq('conversation_id', msg.conversation_id)
+	        .order('joined_at', { ascending: true });
       if (pErr) throw pErr;
 
-      receiverIds = (participants || []).map((p) => p.user_id).filter((id) => id && id !== msg.user_id);
-      title = 'Nova mensagem';
-      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
+	      // Anti-vazamento: se for conversa privada (2 pessoas), notifica SOMENTE a outra pessoa.
+	      // Se houver participantes extras por inconsistência, usamos os 2 primeiros por joined_at.
+	      let participantIds = (participants || []).map((p) => p.user_id);
+	      if (conv && conv.is_group === false) {
+	        const firstTwo = [];
+	        const seen = new Set();
+	        for (const id of participantIds) {
+	          if (!id || seen.has(id)) continue;
+	          seen.add(id);
+	          firstTwo.push(id);
+	          if (firstTwo.length >= 2) break;
+	        }
+	        participantIds = firstTwo;
+	      }
+
+	      receiverIds = uniqStrings(participantIds).filter((id) => id && id !== msg.user_id);
+
+      // Segurança: em conversa privada deve existir exatamente 1 destinatário (evita push para "todo mundo")
+      if (conv && conv.is_group === false && receiverIds.length !== 1) {
+        throw new Error(
+          `Recipient mismatch for private conversation ${msg.conversation_id}: expected 1, got ${receiverIds.length}`
+        );
+      }
+
+
+	      // Nome + foto do remetente (melhora visual da notificação)
+	      let senderName = 'Nova mensagem';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', msg.user_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = senderName;
+	      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
       url = `${baseUrl}/messages?conversation=${encodeURIComponent(msg.conversation_id)}`;
       data = {
         eventType: 'message',
@@ -149,9 +253,19 @@ export async function handler(event) {
       if (frErr) throw frErr;
       if (!fr) throw new Error('Friend request not found');
 
-      receiverIds = fr.receiver_id ? [fr.receiver_id] : [];
-      title = 'Pedido de amizade';
-      message = 'Você recebeu um novo pedido de amizade.';
+	      receiverIds = fr.receiver_id ? [fr.receiver_id] : [];
+	      let senderName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', fr.sender_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+	      title = `${senderName} quer ser seu amigo`;
+	      message = 'Toque para abrir o UnDoInG.';
       url = `${baseUrl}/news`;
       data = { eventType: 'friend_request', friendRequestId: fr.id, senderId: fr.sender_id, url };
     }
@@ -168,10 +282,24 @@ export async function handler(event) {
       if (mErr) throw mErr;
       if (!mention) throw new Error('Mention not found');
 
-      receiverIds = mention.mentioned_user_id ? [mention.mentioned_user_id] : [];
-      title = 'Você foi mencionado';
-      message = 'Alguém mencionou você em um conteúdo.';
-      url = `${baseUrl}/news`;
+	      receiverIds = mention.mentioned_user_id ? [mention.mentioned_user_id] : [];
+	      let actorName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', mention.user_id)
+	          .maybeSingle();
+	        actorName = prof?.username || prof?.full_name || actorName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = `${actorName} mencionou você`;
+	      message = 'Toque para ver.';
+	      // tentativa de deep-link dependendo do tipo
+	      url = mention.content_type === 'message'
+	        ? `${baseUrl}/messages`
+	        : `${baseUrl}/arena`;
       data = {
         eventType: 'mention',
         mentionId: mention.id,
@@ -193,9 +321,19 @@ export async function handler(event) {
       if (cErr) throw cErr;
       if (!call) throw new Error('Attention call not found');
 
-      receiverIds = call.receiver_id ? [call.receiver_id] : [];
-      title = 'Chamar atenção';
-      message = safePreview(call.message || 'Alguém está chamando sua atenção.');
+	      receiverIds = call.receiver_id ? [call.receiver_id] : [];
+	      let senderName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', call.sender_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+	      title = `${senderName} chamou sua atenção`;
+	      message = safePreview(call.message || 'Toque para abrir o UnDoInG.');
       url = `${baseUrl}/messages`;
       data = { eventType: 'attention_call', attentionCallId: call.id, senderId: call.sender_id, url };
     }
@@ -224,18 +362,19 @@ export async function handler(event) {
       receiverIds = post.user_id ? [post.user_id] : [];
       receiverIds = receiverIds.filter((id) => id && id !== comment.user_id);
 
-      let commenterName = 'Alguém';
+	      let commenterName = 'Alguém';
       try {
         const { data: prof } = await supabaseAdmin
           .from('profiles')
-          .select('username, full_name')
+	          .select('username, full_name, avatar_url')
           .eq('id', comment.user_id)
           .maybeSingle();
         commenterName = prof?.username || prof?.full_name || commenterName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
       } catch {}
 
-      title = 'Novo comentário';
-      message = `${commenterName} comentou: ${safePreview(comment.content || 'Novo comentário')}`;
+	      title = `${commenterName} comentou`;
+	      message = safePreview(comment.content || 'Novo comentário');
       url = `${baseUrl}/arena`;
       data = {
         eventType: 'comment',
@@ -283,18 +422,19 @@ export async function handler(event) {
       ids.delete(post.user_id);
       receiverIds = Array.from(ids);
 
-      let authorName = 'Seu amigo';
+	      let authorName = 'Seu amigo';
       try {
         const { data: prof } = await supabaseAdmin
           .from('profiles')
-          .select('username, full_name')
+	          .select('username, full_name, avatar_url')
           .eq('id', post.user_id)
           .maybeSingle();
         authorName = prof?.username || prof?.full_name || authorName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
       } catch {}
 
-      title = 'Novo post na Arena';
-      message = `${authorName} postou: ${safePreview(post.content || 'Novo post')}`;
+	      title = `${authorName} postou na Arena`;
+	      message = safePreview(post.content || 'Novo post');
       url = `${baseUrl}/arena`;
       data = { eventType: 'post', postId: post.id, authorId: post.user_id, url };
     }
@@ -335,7 +475,13 @@ export async function handler(event) {
       }
     }
 
-    const result = await sendOneSignalNotification({
+	    // Dedup final (evita disparo duplicado)
+	    receiverIds = uniqStrings(receiverIds);
+	
+	    // Log útil no Netlify (para investigar "foi para todos")
+	    console.log('[push] event=', eventType, 'receivers=', receiverIds.length, receiverIds.slice(0, 5));
+
+	    const result = await sendOneSignalNotification({
       appId: ONESIGNAL_APP_ID,
       restApiKey: ONESIGNAL_REST_API_KEY,
       targetExternalIds: receiverIds,
@@ -343,6 +489,8 @@ export async function handler(event) {
       message,
       url,
       data,
+	      appIconUrl,
+	      imageUrl,
     });
 
     return {

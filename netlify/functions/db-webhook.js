@@ -20,6 +20,18 @@ function safePreview(text, max = 80) {
   return t.length <= max ? t : `${t.slice(0, max)}…`;
 }
 
+function uniqStrings(values) {
+  const out = [];
+  const seen = new Set();
+  for (const v of Array.isArray(values) ? values : []) {
+    const s = typeof v === 'string' ? v.trim() : '';
+    if (!s || seen.has(s)) continue;
+    seen.add(s);
+    out.push(s);
+  }
+  return out;
+}
+
 function getHeader(event, name) {
   const key = Object.keys(event.headers || {}).find((k) => k.toLowerCase() === name.toLowerCase());
   return key ? event.headers[key] : null;
@@ -42,8 +54,19 @@ function verifyWebhookSecret(event) {
   return { ok: true, reason: 'verified' };
 }
 
-async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds, title, message, url, data }) {
-  if (!targetExternalIds?.length) return { ok: true, skipped: true };
+async function sendOneSignalNotification({
+  appId,
+  restApiKey,
+  targetExternalIds,
+  title,
+  message,
+  url,
+  data,
+  appIconUrl,
+  imageUrl,
+}) {
+  const externalIds = uniqStrings(targetExternalIds);
+  if (!externalIds.length) return { ok: true, skipped: true };
 
   const payload = {
     app_id: appId,
@@ -52,7 +75,14 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
     contents: { pt: message, en: message },
     url,
     data,
-    include_aliases: { external_id: targetExternalIds },
+    include_aliases: { external_id: externalIds },
+    // Visual (logo do app + foto do autor quando possível)
+    chrome_web_icon: appIconUrl,
+    chrome_web_badge: appIconUrl,
+    firefox_icon: appIconUrl,
+    small_icon: appIconUrl,
+    large_icon: appIconUrl,
+    ...(imageUrl ? { chrome_web_image: imageUrl, large_icon: imageUrl, ios_attachments: { id: imageUrl } } : {}),
   };
 
   const res = await fetch('https://api.onesignal.com/notifications?c=push', {
@@ -67,6 +97,13 @@ async function sendOneSignalNotification({ appId, restApiKey, targetExternalIds,
   const json = await res.json().catch(() => ({}));
   if (!res.ok) {
     const err = new Error(`OneSignal error (${res.status}): ${JSON.stringify(json)}`);
+    err.details = json;
+    throw err;
+  }
+
+  // OneSignal pode retornar 200 com `errors` (ex.: invalid_aliases). Nunca faça fallback.
+  if (json && json.errors) {
+    const err = new Error(`OneSignal API returned errors: ${JSON.stringify(json.errors)}`);
     err.details = json;
     throw err;
   }
@@ -165,6 +202,7 @@ export async function handler(event) {
 
   const supabaseAdmin = createAdminClient();
   const baseUrl = getBaseUrl(event);
+	const appIconUrl = `${baseUrl}/icons/icon-192.png`;
 
   try {
     let receiverIds = [];
@@ -173,6 +211,7 @@ export async function handler(event) {
     let message = '';
     let url = `${baseUrl}/news`;
     let data = {};
+	    let imageUrl = null;
 
     if (table === 'messages') {
       eventType = 'message';
@@ -181,15 +220,59 @@ export async function handler(event) {
         throw new Error('Webhook payload missing message fields');
       }
 
-      const { data: participants, error: pErr } = await supabaseAdmin
-        .from('conversation_participants')
-        .select('user_id')
-        .eq('conversation_id', msg.conversation_id);
-      if (pErr) throw pErr;
+	      // Se for conversa direta, restringe para os 2 primeiros participantes (protege privacidade).
+	      let isGroup = true;
+	      try {
+	        const { data: conv } = await supabaseAdmin
+	          .from('conversations')
+	          .select('is_group, max_participants')
+	          .eq('id', msg.conversation_id)
+	          .maybeSingle();
+	        if (conv && conv.is_group === false && (conv.max_participants ?? 2) <= 2) isGroup = false;
+	      } catch {}
 
-      receiverIds = (participants || []).map((p) => p.user_id).filter((id) => id && id !== msg.user_id);
-      title = 'Nova mensagem';
-      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
+	      const { data: participants, error: pErr } = await supabaseAdmin
+	        .from('conversation_participants')
+	        .select('user_id, joined_at')
+	        .eq('conversation_id', msg.conversation_id)
+	        .order('joined_at', { ascending: true });
+	      if (pErr) throw pErr;
+
+	      if (!isGroup) {
+	        const firstTwo = [];
+	        const seen = new Set();
+	        for (const p of participants || []) {
+	          if (p?.user_id && !seen.has(p.user_id)) {
+	            seen.add(p.user_id);
+	            firstTwo.push(p.user_id);
+	            if (firstTwo.length >= 2) break;
+	          }
+	        }
+	        receiverIds = firstTwo.filter((id) => id && id !== msg.user_id);
+	      } else {
+	        receiverIds = (participants || []).map((p) => p.user_id).filter((id) => id && id !== msg.user_id);
+	      }
+
+	      // Segurança: em conversa privada deve existir exatamente 1 destinatário
+	      if (!isGroup && receiverIds.length !== 1) {
+	        throw new Error(
+	          `Recipient mismatch for private conversation ${msg.conversation_id}: expected 1, got ${receiverIds.length}`
+	        );
+	      }
+
+	      let senderName = 'Nova mensagem';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', msg.user_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = senderName;
+	      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
       url = `${baseUrl}/messages?conversation=${encodeURIComponent(msg.conversation_id)}`;
       data = {
         eventType,
@@ -204,9 +287,27 @@ export async function handler(event) {
       eventType = 'mention';
       const m = record;
       receiverIds = m?.mentioned_user_id ? [m.mentioned_user_id] : [];
-      title = 'Você foi mencionado';
-      message = 'Alguém mencionou você em um conteúdo.';
-      url = `${baseUrl}/news`;
+
+	      let actorName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', m.user_id)
+	          .maybeSingle();
+	        actorName = prof?.username || prof?.full_name || actorName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = `${actorName} mencionou você`;
+	      message = 'Toque para ver a menção.';
+	      if (m?.content_type === 'message') {
+	        url = `${baseUrl}/messages`;
+	      } else if (m?.content_type === 'post' || m?.content_type === 'comment') {
+	        url = `${baseUrl}/arena`;
+	      } else {
+	        url = `${baseUrl}/news`;
+	      }
       data = {
         eventType,
         mentionId: m?.id,
@@ -224,9 +325,21 @@ export async function handler(event) {
         return { statusCode: 200, headers, body: JSON.stringify({ ok: true, skipped: true, reason: 'non-pending-friend-request' }) };
       }
       receiverIds = fr?.receiver_id ? [fr.receiver_id] : [];
-      title = 'Pedido de amizade';
-      message = 'Você recebeu um novo pedido de amizade.';
-      url = `${baseUrl}/news`;
+
+	      let senderName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', fr.sender_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = `${senderName} quer ser seu amigo`;
+	      message = 'Toque para ver o pedido de amizade.';
+	      url = `${baseUrl}/news`;
       data = { eventType, friendRequestId: fr?.id, senderId: fr?.sender_id, url };
     }
 
@@ -257,8 +370,19 @@ export async function handler(event) {
         }
       }
 
-      title = 'Chamar atenção';
-      message = safePreview(call?.message || 'Alguém está chamando sua atenção.');
+	      let senderName = 'Alguém';
+	      try {
+	        const { data: prof } = await supabaseAdmin
+	          .from('profiles')
+	          .select('username, full_name, avatar_url')
+	          .eq('id', call.sender_id)
+	          .maybeSingle();
+	        senderName = prof?.username || prof?.full_name || senderName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
+	      } catch {}
+
+	      title = `${senderName} chamou sua atenção`;
+	      message = safePreview(call?.message || 'Toque para ver.');
       url = `${baseUrl}/messages`;
       data = { eventType, attentionCallId: call?.id, senderId: call?.sender_id, url };
     }
@@ -283,14 +407,15 @@ export async function handler(event) {
       try {
         const { data: prof } = await supabaseAdmin
           .from('profiles')
-          .select('username, full_name')
+	          .select('username, full_name, avatar_url')
           .eq('id', comment.user_id)
           .maybeSingle();
         commenterName = prof?.username || prof?.full_name || commenterName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
       } catch {}
 
-      title = 'Novo comentário';
-      message = `${commenterName} comentou: ${safePreview(comment.content || 'Novo comentário')}`;
+	      title = `${commenterName} comentou`;
+	      message = safePreview(comment.content || 'Novo comentário');
       url = `${baseUrl}/arena`;
       data = { eventType, commentId: comment.id, postId: comment.post_id, senderId: comment.user_id, url };
     }
@@ -326,14 +451,19 @@ export async function handler(event) {
       try {
         const { data: prof } = await supabaseAdmin
           .from('profiles')
-          .select('username, full_name')
+	          .select('username, full_name, avatar_url')
           .eq('id', post.user_id)
           .maybeSingle();
         authorName = prof?.username || prof?.full_name || authorName;
+	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
       } catch {}
+	      // Prefer first post media as big image when available
+	      try {
+	        if (Array.isArray(post.media_urls) && post.media_urls[0]) imageUrl = post.media_urls[0];
+	      } catch {}
 
-      title = 'Novo post na Arena';
-      message = `${authorName} postou: ${safePreview(post.content || 'Novo post')}`;
+	      title = `${authorName} postou na Arena`;
+	      message = safePreview(post.content || 'Novo post');
       url = `${baseUrl}/arena`;
       data = { eventType, postId: post.id, authorId: post.user_id, url };
     }
@@ -343,7 +473,9 @@ export async function handler(event) {
       return { statusCode: 200, headers, body: JSON.stringify({ ok: true, skipped: true, reason: 'table-not-handled', table }) };
     }
 
-    receiverIds = await filterByPreferences(supabaseAdmin, receiverIds, eventType);
+	    receiverIds = uniqStrings(receiverIds);
+	    receiverIds = await filterByPreferences(supabaseAdmin, receiverIds, eventType);
+	    receiverIds = uniqStrings(receiverIds);
 
     const result = await sendOneSignalNotification({
       appId: ONESIGNAL_APP_ID,
@@ -352,7 +484,9 @@ export async function handler(event) {
       title,
       message,
       url,
-      data,
+	      data,
+	      appIconUrl,
+	      imageUrl,
     });
 
     return {
