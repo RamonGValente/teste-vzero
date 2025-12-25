@@ -18,9 +18,10 @@ let _swRegistration: ServiceWorkerRegistration | null = null;
 
 async function fetchLatestDeployBuildId(): Promise<string | null> {
   try {
-    const res = await fetch("/.netlify/functions/build-info", {
+    // Cache-bust: alguns PWAs/navegadores podem insistir em cachear respostas.
+    const res = await fetch(`/.netlify/functions/build-info?ts=${Date.now()}`, {
       cache: "no-store",
-      headers: { "cache-control": "no-cache" },
+      headers: { "cache-control": "no-store, no-cache, must-revalidate" },
     });
     if (!res.ok) return null;
     const json = await res.json();
@@ -41,7 +42,7 @@ async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
   }
 }
 
-async function hardReload(): Promise<void> {
+async function hardReload(buildId?: string | null): Promise<void> {
   // Best-effort: unregister SW + clear caches (fallback when update helper fails)
   try {
     const regs = await navigator.serviceWorker.getRegistrations();
@@ -59,8 +60,11 @@ async function hardReload(): Promise<void> {
   } catch {
     // ignore
   }
-  const base = window.location.href.split("?")[0];
-  window.location.replace(`${base}?update=${Date.now()}`);
+  const url = new URL(window.location.href);
+  url.searchParams.set("update", String(Date.now()));
+  if (buildId) url.searchParams.set("build", String(buildId));
+  // Preserve hash/route; replace para não poluir histórico.
+  window.location.replace(url.toString());
 }
 
 export function PwaUpdateListener() {
@@ -107,24 +111,30 @@ export function PwaUpdateListener() {
                   }
                 }
 
-                // Helper do vite-plugin-pwa (se disponível)
+                // Sempre tentamos atualizar o registro antes do hard reload.
+                try {
+                  await reg?.update();
+                } catch {
+                  // ignore
+                }
+
+                // Helper do vite-plugin-pwa (se disponível). Em alguns PWAs ele pode falhar,
+                // então mesmo assim fazemos um hard reload como fallback.
                 if (_updateSW) {
-                  await _updateSW(true);
-                  // Se o helper não recarregar, forçamos.
-                  window.location.reload();
-                  return;
+                  try {
+                    await _updateSW(true);
+                  } catch {
+                    // ignore
+                  }
                 }
               } catch {
                 // ignore
               }
-              // Usa buildId do último deploy (se disponível) para quebrar cache.
-              const base = window.location.href.split("?")[0];
-              const buildId = latestBuildIdRef.current;
-              if (buildId) {
-                window.location.replace(`${base}?build=${encodeURIComponent(buildId)}`);
-                return;
-              }
-              await hardReload();
+
+              // Fallback mais confiável: remove SW/caches e recarrega forçando a nova versão.
+              const buildId = latestBuildIdRef.current ?? (await fetchLatestDeployBuildId());
+              if (buildId) latestBuildIdRef.current = buildId;
+              await hardReload(buildId);
             })();
           }}
           className="ml-2"
@@ -141,7 +151,8 @@ export function PwaUpdateListener() {
     const latest = await fetchLatestDeployBuildId();
     if (latest) latestBuildIdRef.current = latest;
 
-    const hasBuildMismatch = !!(latest && localBuildId && latest !== localBuildId);
+    const local = localBuildId && String(localBuildId).trim() ? String(localBuildId).trim() : "";
+    const hasBuildMismatch = !!(latest && local && latest !== local);
 
     // Se detectamos mismatch, já podemos avisar (mesmo sem waiting visível).
     if (hasBuildMismatch) {
@@ -154,7 +165,25 @@ export function PwaUpdateListener() {
     }
 
     // Se temos buildId e ele bate, não mostramos update (mesmo que waiting apareça por bug).
-    if (latest && localBuildId && latest === localBuildId) return;
+    // Se conseguimos comparar e está igual, não há update.
+    if (latest && local && latest === local) return;
+
+    // Se NÃO temos VITE_BUILD_ID (caso raro), evitamos falsos positivos do "waiting".
+    // Nesse caso, só avisamos se o build do servidor mudou vs o último visto.
+    if (latest && !local) {
+      const lastSeen = localStorage.getItem("udg:lastServerBuild") || "";
+      if (lastSeen && latest !== lastSeen) {
+        localStorage.setItem("udg:lastServerBuild", latest);
+        if (!userRef.current) {
+          pendingRef.current = true;
+          return;
+        }
+        showUpdateToast();
+      } else {
+        localStorage.setItem("udg:lastServerBuild", latest);
+      }
+      return;
+    }
 
     // Fallback: lógica clássica do SW waiting.
     if (!navigator.serviceWorker.controller) return;
