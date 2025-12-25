@@ -52,6 +52,8 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       <RealtimeAttentionListener />
       <RealtimeMessageListener />
       <PushNotificationsBootstrap />
+      {/* Checagem de nova versão / update do PWA (monta somente após login) */}
+      <PwaUpdateListener />
       {children}
     </MovementStatusProvider>
   );
@@ -89,8 +91,6 @@ const App = () => (
       <Toaster />
       <Sonner />
       <PWAInstallPrompt />
-      {/* Checagem de nova versão / update do PWA (prompt aparece após login) */}
-      <PwaUpdateListener />
       <BrowserRouter>
         <TutorialGuard>
           <Routes>
