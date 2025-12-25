@@ -1381,6 +1381,20 @@ export default function WorldFlow() {
   const [showTutorial, setShowTutorial] = useState(false);
   const [tutorialStep, setTutorialStep] = useState(0);
 
+
+// Novas postagens (Realtime) sem "pular" o feed enquanto o usuário está navegando
+const [pendingNewPosts, setPendingNewPosts] = useState<any[]>([]);
+const pendingNewCount = pendingNewPosts.length;
+
+const verticalIndexRef = useRef<number>(0);
+const modalOpenRef = useRef<boolean>(false);
+const tutorialOpenRef = useRef<boolean>(false);
+const knownPostIdsRef = useRef<Set<string>>(new Set());
+
+useEffect(() => { verticalIndexRef.current = verticalIndex; }, [verticalIndex]);
+useEffect(() => { modalOpenRef.current = isModalOpen; }, [isModalOpen]);
+useEffect(() => { tutorialOpenRef.current = showTutorial; }, [showTutorial]);
+
   // Handler para erros de extensão
   useEffect(() => {
     const handleExtensionError = (e: ErrorEvent) => {
@@ -1480,6 +1494,15 @@ export default function WorldFlow() {
     enabled: !!user,
   });
 
+
+// Mantém um cache de IDs já conhecidos (evita duplicatas no realtime)
+useEffect(() => {
+  const ids = new Set<string>();
+  (rawPosts ?? []).forEach((p: any) => { if (p?.id) ids.add(p.id); });
+  pendingNewPosts.forEach((p: any) => { if (p?.id) ids.add(p.id); });
+  knownPostIdsRef.current = ids;
+}, [rawPosts, pendingNewPosts]);
+
   /* Query para verificar posts na arena */
   const { data: arenaPosts } = useQuery({
     queryKey: ["arena-posts", user?.id],
@@ -1520,6 +1543,110 @@ export default function WorldFlow() {
   }, [rawPosts]);
 
   const currentFeedItem = feedStructure[verticalIndex];
+
+
+// Aplica posts pendentes no topo e leva o usuário para ver as novidades
+const applyPendingNewPosts = useCallback(() => {
+  if (!user?.id) return;
+  if (pendingNewPosts.length === 0) return;
+
+  const pending = [...pendingNewPosts];
+  setPendingNewPosts([]);
+
+  queryClient.setQueryData<any[]>(["posts", user.id], (old) => {
+    const prev = Array.isArray(old) ? old : [];
+    const prevIds = new Set(prev.map((p: any) => p?.id));
+    const toPrepend = pending.filter((p: any) => p?.id && !prevIds.has(p.id));
+    return [...toPrepend, ...prev];
+  });
+
+  setHorizontalClipIndex(0);
+  setVerticalIndex(0);
+}, [user?.id, pendingNewPosts, queryClient]);
+
+// Se o usuário voltar ao topo, aplicamos automaticamente as novidades
+useEffect(() => {
+  if (!user?.id) return;
+  if (pendingNewPosts.length === 0) return;
+  if (verticalIndex !== 0) return;
+  if (isModalOpen || showTutorial) return;
+
+  const pending = [...pendingNewPosts];
+  setPendingNewPosts([]);
+
+  queryClient.setQueryData<any[]>(["posts", user.id], (old) => {
+    const prev = Array.isArray(old) ? old : [];
+    const prevIds = new Set(prev.map((p: any) => p?.id));
+    const toPrepend = pending.filter((p: any) => p?.id && !prevIds.has(p.id));
+    return [...toPrepend, ...prev];
+  });
+}, [verticalIndex, isModalOpen, showTutorial, pendingNewPosts, user?.id, queryClient]);
+
+// Realtime: escuta novos posts aprovados. Se o usuário estiver no topo, atualiza "naturalmente".
+// Se ele estiver navegando mais abaixo, acumula e exibe um botão para ver as novidades.
+useEffect(() => {
+  if (!user?.id) return;
+
+  const channel = supabase
+    .channel(`wf-posts-insert-${user.id}`)
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "posts", filter: "is_community_approved=eq.true" },
+      async (payload) => {
+        try {
+          const newId = (payload.new as any)?.id as string | undefined;
+          if (!newId) return;
+          if (knownPostIdsRef.current.has(newId)) return;
+
+          const { data, error } = await supabase
+            .from("posts")
+            .select(`
+              *, 
+              profiles:user_id (id, username, avatar_url, full_name), 
+              likes (id, user_id), 
+              comments (id)
+            `)
+            .eq("id", newId)
+            .single();
+
+          if (error || !data) return;
+
+          const normalized: any = {
+            ...data,
+            media_urls: Array.isArray((data as any).media_urls)
+              ? (data as any).media_urls
+                  .filter((url: any) => url && typeof url === "string")
+                  .map((url: any) => url.trim())
+              : [],
+          };
+
+          knownPostIdsRef.current.add(newId);
+
+          const shouldApplyNow =
+            verticalIndexRef.current === 0 && !modalOpenRef.current && !tutorialOpenRef.current;
+
+          if (shouldApplyNow) {
+            queryClient.setQueryData<any[]>(["posts", user.id], (old) => {
+              const prev = Array.isArray(old) ? old : [];
+              return [normalized, ...prev.filter((p: any) => p?.id !== newId)];
+            });
+          } else {
+            setPendingNewPosts((prev) => {
+              if (prev.some((p: any) => p?.id === newId)) return prev;
+              return [normalized, ...prev];
+            });
+          }
+        } catch (e) {
+          console.warn("[WorldFlow] falha ao processar novo post realtime", e);
+        }
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, [user?.id, queryClient]);
 
   /* --- Controles de Navegação --- */
   const goDown = useCallback(() => {
@@ -1975,6 +2102,18 @@ export default function WorldFlow() {
         {renderContent()}
       </div>
 
+
+
+{/* Botão flutuante: novas postagens (apenas quando houver novidades e o usuário não estiver no topo) */}
+{pendingNewCount > 0 && verticalIndex > 0 && (
+  <Button
+    onClick={applyPendingNewPosts}
+    className="fixed bottom-6 right-4 z-50 rounded-full shadow-xl bg-blue-600 hover:bg-blue-500 text-white"
+  >
+    <ArrowUp className="h-4 w-4 mr-2" />
+    {pendingNewCount} nova{pendingNewCount > 1 ? "s" : ""} postagem{pendingNewCount > 1 ? "ens" : ""} • ir ao topo
+  </Button>
+)}
       {/* Modal de criação de post */}
       <CreatePostModal 
         open={showCreateModal} 
