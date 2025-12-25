@@ -47,7 +47,7 @@ import { cn } from "@/lib/utils";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useSearchParams } from "react-router-dom";
-import { sendPushEvent } from "@/utils/pushClient";
+import { deleteAttentionCall, markAttentionCallViewed, sendPushEvent } from "@/utils/pushClient";
 
 // --- Interfaces ---
 interface MessageTimer {
@@ -57,6 +57,15 @@ interface MessageTimer {
   status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
   currentText?: string;
   messageType: 'text' | 'audio' | 'media';
+}
+
+interface AttentionTimer {
+  callId: string;
+  timeLeft: number;
+  expiryTime: number;
+  status: 'counting' | 'deleting' | 'showingUndoing' | 'deleted';
+  originalText: string;
+  currentText?: string;
 }
 
 interface TranslationState {
@@ -86,6 +95,7 @@ interface AttentionCallRow {
   sender_id: string;
   receiver_id: string;
   message: string | null;
+  viewed_at: string | null;
   created_at: string;
 }
 
@@ -352,6 +362,9 @@ export default function Messages() {
 
   const [messageTimers, setMessageTimers] = useState<MessageTimer[]>([]);
   const [deletedMessages, setDeletedMessages] = useState<Set<string>>(new Set());
+
+  const [attentionTimers, setAttentionTimers] = useState<AttentionTimer[]>([]);
+  const [deletedAttentionCalls, setDeletedAttentionCalls] = useState<Set<string>>(new Set());
   
   const [translations, setTranslations] = useState<TranslationState[]>([]);
   const [openMenuId, setOpenMenuId] = useState<string | null>(null);
@@ -663,7 +676,7 @@ export default function Messages() {
       const since = new Date(Date.now() - 1000 * 60 * 60 * 24 * 7).toISOString();
       const { data, error } = await supabase
         .from("attention_calls")
-        .select("id,sender_id,receiver_id,message,created_at")
+        .select("id,sender_id,receiver_id,message,viewed_at,created_at")
         .or(
           `and(sender_id.eq.${user!.id},receiver_id.eq.${privatePeerId}),and(sender_id.eq.${privatePeerId},receiver_id.eq.${user!.id})`
         )
@@ -855,6 +868,140 @@ export default function Messages() {
     return () => clearInterval(interval);
   }, [messages, user]);
 
+  // Attention calls: auto-destrói 2min após o destinatário visualizar (mesma lógica das mensagens)
+  useEffect(() => {
+    if (!attentionCalls || !user?.id) return;
+
+    const receiverId = user.id;
+    const senderDisplayName = privatePeerProfile?.username || privatePeerProfile?.full_name || 'Usuário';
+
+    // Init timers (somente para o destinatário)
+    setAttentionTimers(prev => {
+      const now = Date.now();
+      const next = [...prev];
+
+      attentionCalls.forEach(call => {
+        if (call.receiver_id !== receiverId) return;
+        if (deletedAttentionCalls.has(call.id)) return;
+        if (next.some(t => t.callId === call.id)) return;
+
+        const storageKey = `timer_attention_${receiverId}_${call.id}`;
+        const stored = localStorage.getItem(storageKey);
+        const expiry = stored ? Number(stored) : NaN;
+        const expiryTime = Number.isFinite(expiry) ? expiry : now + 2 * 60 * 1000;
+
+        if (!stored) {
+          localStorage.setItem(storageKey, String(expiryTime));
+          if (!call.viewed_at) {
+            void markAttentionCallViewed(call.id).catch(() => undefined);
+          }
+        }
+
+        const title = `${senderDisplayName} chamou sua atenção`;
+        const originalText = call.message ? `${title}: ${call.message}` : title;
+        const timeLeft = Math.max(0, Math.ceil((expiryTime - now) / 1000));
+
+        next.push({
+          callId: call.id,
+          timeLeft,
+          expiryTime,
+          status: 'counting',
+          originalText,
+        });
+      });
+
+      return next;
+    });
+
+    // Loop de contagem
+    const interval = setInterval(() => {
+      setAttentionTimers(prev => {
+        if (prev.length === 0) return prev;
+
+        const now = Date.now();
+        const updated: AttentionTimer[] = [];
+        const callsToDelete: string[] = [];
+        let hasChanges = false;
+
+        prev.forEach(timer => {
+          if (timer.status === 'deleted') return;
+
+          if (timer.status === 'counting') {
+            const realTimeLeft = Math.max(0, Math.ceil((timer.expiryTime - now) / 1000));
+            if (realTimeLeft <= 0) {
+              hasChanges = true;
+              updated.push({
+                ...timer,
+                status: 'deleting',
+                timeLeft: 5,
+                currentText: timer.originalText,
+              });
+            } else if (timer.timeLeft !== realTimeLeft) {
+              hasChanges = true;
+              updated.push({ ...timer, timeLeft: realTimeLeft });
+            } else {
+              updated.push(timer);
+            }
+            return;
+          }
+
+          if (timer.status === 'deleting') {
+            const timeSinceExpiry = Math.floor((now - timer.expiryTime) / 1000);
+            if (timeSinceExpiry > 5) {
+              hasChanges = true;
+              updated.push({
+                ...timer,
+                status: 'showingUndoing',
+                timeLeft: 5,
+                currentText: undefined,
+              });
+              return;
+            }
+
+            const ratio = Math.min(1, Math.max(0, timeSinceExpiry / 5));
+            const lettersToKeep = Math.floor(timer.originalText.length * (1 - ratio));
+            hasChanges = true;
+            updated.push({
+              ...timer,
+              timeLeft: Math.max(0, 5 - timeSinceExpiry),
+              currentText: timer.originalText.slice(0, lettersToKeep),
+            });
+            return;
+          }
+
+          if (timer.status === 'showingUndoing') {
+            const nextTimeLeft = timer.timeLeft - 1;
+            if (nextTimeLeft <= 0) {
+              hasChanges = true;
+              callsToDelete.push(timer.callId);
+              updated.push({ ...timer, status: 'deleted', timeLeft: 0 });
+            } else {
+              hasChanges = true;
+              updated.push({ ...timer, timeLeft: nextTimeLeft });
+            }
+            return;
+          }
+        });
+
+        if (callsToDelete.length > 0 && user) {
+          callsToDelete.forEach(callId => {
+            localStorage.removeItem(`timer_attention_${user.id}_${callId}`);
+            setDeletedAttentionCalls(prevSet => {
+              const s = new Set(prevSet);
+              s.add(callId);
+              return s;
+            });
+            void deleteAttentionCall(callId).catch(() => undefined);
+          });
+        }
+
+        return hasChanges ? updated : prev;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [attentionCalls, deletedAttentionCalls, privatePeerProfile, user]);
+
   const deleteMessages = async (messageIds: string[]) => {
     if (messageIds.length === 0) return;
     try {
@@ -870,6 +1017,7 @@ export default function Messages() {
   };
 
   const getMessageState = (messageId: string) => messageTimers.find(timer => timer.messageId === messageId);
+  const getAttentionState = (callId: string) => attentionTimers.find(timer => timer.callId === callId);
 
   // --- Realtime & View Update ---
   useEffect(() => {
@@ -1197,9 +1345,34 @@ export default function Messages() {
                       ? `Você chamou a atenção de ${receiverName}`
                       : `${senderName} chamou sua atenção`;
 
+	                    const attentionTimer = (call.receiver_id === user?.id) ? getAttentionState(call.id) : undefined;
+	                    if (call.receiver_id === user?.id && (attentionTimer?.status === 'deleted' || deletedAttentionCalls.has(call.id))) return null;
+
+	                    const baseText = `${title}${call.message ? ` — ${call.message}` : ''}`;
+	                    const displayAttentionText = (attentionTimer?.status === 'deleting' && attentionTimer.currentText)
+	                      ? attentionTimer.currentText
+	                      : baseText;
+
                     return (
-                      <div key={`attention-${call.id}`} className="flex w-full justify-center">
-                        <div className="max-w-[95%] sm:max-w-[75%] rounded-xl border bg-muted/40 backdrop-blur px-3 py-2 flex items-center gap-3 shadow-sm">
+	                      <div key={`attention-${call.id}`} className="flex w-full justify-center">
+	                        <div className="max-w-[95%] sm:max-w-[75%]">
+	                          {attentionTimer && attentionTimer.status !== 'deleted' && attentionTimer.status !== 'showingUndoing' && (
+	                            <div className="flex items-center justify-center gap-1 mb-1 text-xs text-muted-foreground">
+	                              <Clock className="h-3 w-3" />
+	                              <span>
+	                                {attentionTimer.status === 'counting' && formatTime(attentionTimer.timeLeft)}
+	                                {attentionTimer.status === 'deleting' && `Apagando...`}
+	                              </span>
+	                            </div>
+	                          )}
+
+	                          {attentionTimer?.status === 'showingUndoing' ? (
+	                            <div className="text-center text-sm font-bold text-green-500 animate-pulse py-2">
+	                              UnDoInG
+	                              <div className="text-xs font-normal text-muted-foreground mt-1">Restaurando...</div>
+	                            </div>
+	                          ) : (
+	                            <div className="rounded-xl border bg-muted/40 backdrop-blur px-3 py-2 flex items-center gap-3 shadow-sm">
                           <img src="/icon-192.png" alt="UnDoInG" className="h-7 w-7 rounded-md border bg-background" />
                           {!isOwnCall && privatePeerProfile?.avatar_url ? (
                             <img
@@ -1220,10 +1393,12 @@ export default function Messages() {
                               </span>
                             </div>
                             <div className="text-sm text-muted-foreground break-words">
-                              {title}{call.message ? ` — ${call.message}` : ''}
+	                              {displayAttentionText}
                             </div>
                           </div>
-                        </div>
+	                            </div>
+	                          )}
+	                        </div>
                       </div>
                     );
                   }

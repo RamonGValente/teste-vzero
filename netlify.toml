@@ -1,5 +1,6 @@
 [build]
-  command = "npm run build"
+  # Inject commit SHA into Vite bundle so the app can compare with the latest deploy.
+  command = "VITE_BUILD_ID=$COMMIT_REF npm run build"
   publish = "dist"
 
 [build.environment]

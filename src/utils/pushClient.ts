@@ -99,3 +99,28 @@ export async function sendPushEvent(payload: SendPushEventPayload): Promise<void
 export async function sendTestPush(): Promise<void> {
   await sendPushEvent({ eventType: 'test' });
 }
+
+async function postNetlifyJson(path: string, body: unknown): Promise<Response> {
+  const headers = await getSupabaseAuthHeaders();
+  return fetch(`/.netlify/functions/${path}`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(body),
+  });
+}
+
+export async function markAttentionCallViewed(attentionCallId: string): Promise<void> {
+  const res = await postNetlifyJson('attention-call-viewed', { attentionCallId });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`attention-call-viewed falhou: ${res.status} ${text}`);
+  }
+}
+
+export async function deleteAttentionCall(attentionCallId: string): Promise<void> {
+  const res = await postNetlifyJson('delete-attention-call', { attentionCallId });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`delete-attention-call falhou: ${res.status} ${text}`);
+  }
+}

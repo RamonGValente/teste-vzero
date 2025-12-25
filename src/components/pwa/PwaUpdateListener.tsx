@@ -16,6 +16,20 @@ let _registered = false;
 let _updateSW: ((reloadPage?: boolean) => Promise<void> | void) | null = null;
 let _swRegistration: ServiceWorkerRegistration | null = null;
 
+async function fetchLatestDeployBuildId(): Promise<string | null> {
+  try {
+    const res = await fetch("/.netlify/functions/build-info", {
+      cache: "no-store",
+      headers: { "cache-control": "no-cache" },
+    });
+    if (!res.ok) return null;
+    const json = await res.json();
+    return json?.buildId || null;
+  } catch {
+    return null;
+  }
+}
+
 async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
   if (_swRegistration) return _swRegistration;
   try {
@@ -56,6 +70,10 @@ export function PwaUpdateListener() {
   const userRef = useRef(user);
   const shownRef = useRef(false);
   const pendingRef = useRef(false);
+  const latestBuildIdRef = useRef<string | null>(null);
+
+  // Injetado pelo Netlify via netlify.toml: VITE_BUILD_ID=$COMMIT_REF
+  const localBuildId = (import.meta as any)?.env?.VITE_BUILD_ID as string | undefined;
 
   useEffect(() => {
     toastRef.current = toast;
@@ -99,6 +117,13 @@ export function PwaUpdateListener() {
               } catch {
                 // ignore
               }
+              // Usa buildId do último deploy (se disponível) para quebrar cache.
+              const base = window.location.href.split("?")[0];
+              const buildId = latestBuildIdRef.current;
+              if (buildId) {
+                window.location.replace(`${base}?build=${encodeURIComponent(buildId)}`);
+                return;
+              }
               await hardReload();
             })();
           }}
@@ -111,7 +136,27 @@ export function PwaUpdateListener() {
   }, []);
 
   const checkAndPromptIfNeeded = useCallback(async () => {
-    // Evita falso positivo no primeiro install (sem controller)
+    // Primeiro: compara o commit do bundle atual (VITE_BUILD_ID) com o último deploy (Netlify).
+    // Isso evita o bug de "botão aparece mesmo atualizado".
+    const latest = await fetchLatestDeployBuildId();
+    if (latest) latestBuildIdRef.current = latest;
+
+    const hasBuildMismatch = !!(latest && localBuildId && latest !== localBuildId);
+
+    // Se detectamos mismatch, já podemos avisar (mesmo sem waiting visível).
+    if (hasBuildMismatch) {
+      if (!userRef.current) {
+        pendingRef.current = true;
+        return;
+      }
+      showUpdateToast();
+      return;
+    }
+
+    // Se temos buildId e ele bate, não mostramos update (mesmo que waiting apareça por bug).
+    if (latest && localBuildId && latest === localBuildId) return;
+
+    // Fallback: lógica clássica do SW waiting.
     if (!navigator.serviceWorker.controller) return;
 
     const reg = await getRegistration();
@@ -123,7 +168,6 @@ export function PwaUpdateListener() {
       // ignore
     }
 
-    // Só mostra se realmente existe SW em waiting
     if (!reg.waiting) return;
 
     if (!userRef.current) {
@@ -132,7 +176,7 @@ export function PwaUpdateListener() {
     }
 
     showUpdateToast();
-  }, [showUpdateToast]);
+  }, [localBuildId, showUpdateToast]);
 
   useEffect(() => {
     if (_registered) return;
