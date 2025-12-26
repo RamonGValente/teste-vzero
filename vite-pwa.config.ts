@@ -30,7 +30,15 @@ export const pwaOptions: Partial<VitePWAOptions> = {
   },
   workbox: {
     importScripts: ['sw-push.js'],
+    // IMPORTANT: never precache build.json.
+    // We must always fetch it from the network to compare deploy version.
+    globIgnores: ['build.json'],
     runtimeCaching: [
+      // Always go to network for build metadata (prevents false update loops)
+      {
+        urlPattern: ({ url }) => url.pathname === '/build.json',
+        handler: 'NetworkOnly',
+      },
       {
         urlPattern: /^https:\/\/.*\.supabase\.co\/storage\/v1\/object\/public\/.*$/,
         handler: 'CacheFirst',

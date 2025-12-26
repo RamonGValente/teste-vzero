@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef } from "react";
-import { registerSW } from "virtual:pwa-register";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
+import { applyPWAUpdate, checkForPWAUpdate } from "@/utils/pwaUpdate";
 
 /**
  * Listener global de update do PWA.
@@ -11,32 +11,20 @@ import { useAuth } from "@/hooks/useAuth";
  * - Pensado para ser montado APÓS login (para não atrapalhar o fluxo inicial)
  */
 
-// Mantém registro único, mesmo se o componente for montado mais de uma vez.
-let _registered = false;
-let _updateSW: ((reloadPage?: boolean) => Promise<void> | void) | null = null;
-let _swRegistration: ServiceWorkerRegistration | null = null;
-
 async function fetchLatestDeployBuildId(): Promise<string | null> {
   try {
-    // Cache-bust: alguns PWAs/navegadores podem insistir em cachear respostas.
-    const res = await fetch(`/.netlify/functions/build-info?ts=${Date.now()}`, {
+    // IMPORTANT:
+    // We use a STATIC file (dist/build.json) written at BUILD TIME.
+    // Netlify Functions do NOT reliably expose COMMIT_REF at runtime.
+    // This was causing "update available" loops even when up-to-date.
+    const res = await fetch(`/build.json?ts=${Date.now()}`, {
       cache: "no-store",
       headers: { "cache-control": "no-store, no-cache, must-revalidate" },
     });
     if (!res.ok) return null;
-    const json = await res.json();
-    return json?.buildId || null;
-  } catch {
-    return null;
-  }
-}
-
-async function getRegistration(): Promise<ServiceWorkerRegistration | null> {
-  if (_swRegistration) return _swRegistration;
-  try {
-    const reg = await navigator.serviceWorker.getRegistration();
-    _swRegistration = reg ?? null;
-    return _swRegistration;
+    const json = await res.json().catch(() => null);
+    const id = (json as any)?.buildId;
+    return id ? String(id) : null;
   } catch {
     return null;
   }
@@ -101,31 +89,18 @@ export function PwaUpdateListener() {
             // Atualiza e garante recarregar mesmo em navegadores que falham no helper.
             (async () => {
               try {
-                const reg = await getRegistration();
-                // Se existe um SW aguardando (waiting), ativamos ele.
-                if (reg?.waiting) {
-                  try {
-                    reg.waiting.postMessage({ type: "SKIP_WAITING" });
-                  } catch {
-                    // ignore
-                  }
-                }
-
-                // Sempre tentamos atualizar o registro antes do hard reload.
+                // 1) Ask the SW to check for updates (best-effort)
                 try {
-                  await reg?.update();
+                  await checkForPWAUpdate();
                 } catch {
                   // ignore
                 }
 
-                // Helper do vite-plugin-pwa (se disponível). Em alguns PWAs ele pode falhar,
-                // então mesmo assim fazemos um hard reload como fallback.
-                if (_updateSW) {
-                  try {
-                    await _updateSW(true);
-                  } catch {
-                    // ignore
-                  }
+                // 2) Try the standard update flow (skipWaiting + reload)
+                try {
+                  await applyPWAUpdate();
+                } catch {
+                  // ignore
                 }
               } catch {
                 // ignore
@@ -146,8 +121,8 @@ export function PwaUpdateListener() {
   }, []);
 
   const checkAndPromptIfNeeded = useCallback(async () => {
-    // Primeiro: compara o commit do bundle atual (VITE_BUILD_ID) com o último deploy (Netlify).
-    // Isso evita o bug de "botão aparece mesmo atualizado".
+    // Compare current bundle build (VITE_BUILD_ID) vs latest deploy build (build.json).
+    // Show update ONLY when we can confidently detect a mismatch.
     const latest = await fetchLatestDeployBuildId();
     if (latest) latestBuildIdRef.current = latest;
 
@@ -164,69 +139,16 @@ export function PwaUpdateListener() {
       return;
     }
 
-    // Se temos buildId e ele bate, não mostramos update (mesmo que waiting apareça por bug).
-    // Se conseguimos comparar e está igual, não há update.
+    // If we can compare and it's equal, there is no update.
     if (latest && local && latest === local) return;
 
-    // Se NÃO temos VITE_BUILD_ID (caso raro), evitamos falsos positivos do "waiting".
-    // Nesse caso, só avisamos se o build do servidor mudou vs o último visto.
-    if (latest && !local) {
-      const lastSeen = localStorage.getItem("udg:lastServerBuild") || "";
-      if (lastSeen && latest !== lastSeen) {
-        localStorage.setItem("udg:lastServerBuild", latest);
-        if (!userRef.current) {
-          pendingRef.current = true;
-          return;
-        }
-        showUpdateToast();
-      } else {
-        localStorage.setItem("udg:lastServerBuild", latest);
-      }
-      return;
-    }
-
-    // Fallback: lógica clássica do SW waiting.
-    if (!navigator.serviceWorker.controller) return;
-
-    const reg = await getRegistration();
-    if (!reg) return;
-
-    try {
-      await reg.update();
-    } catch {
-      // ignore
-    }
-
-    if (!reg.waiting) return;
-
-    if (!userRef.current) {
-      pendingRef.current = true;
-      return;
-    }
-
-    showUpdateToast();
+    // If we cannot compare (missing local or server id), do NOT show.
+    // (Prevents false positives / loops in some browsers.)
+    return;
   }, [localBuildId, showUpdateToast]);
 
+  // Força checagem periódica (útil em PWAs que ficam abertos por muito tempo)
   useEffect(() => {
-    if (_registered) return;
-    _registered = true;
-
-    // Registra SW e recebe callbacks de atualização
-    _updateSW = registerSW({
-      immediate: true,
-      onRegistered(r) {
-        _swRegistration = r ?? null;
-        // expõe para debug
-        (window as any).__swRegistration = r;
-      },
-      onNeedRefresh() {
-        // Em alguns navegadores, o onNeedRefresh pode disparar no primeiro install.
-        // Só exibimos se o app já tem um controller (ou seja, não é first install).
-        void checkAndPromptIfNeeded();
-      },
-    });
-
-    // Força checagem periódica (útil em PWAs que ficam abertos por muito tempo)
     const interval = window.setInterval(() => {
       void checkAndPromptIfNeeded();
     }, 10 * 60 * 1000); // 10 minutos

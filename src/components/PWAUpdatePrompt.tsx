@@ -16,21 +16,8 @@ async function safeJson(res: Response) {
 }
 
 async function fetchBuildInfo(): Promise<BuildInfo | null> {
-  // 1) Prefer a Netlify Function (network fetch, not precached)
-  try {
-    const r = await fetch(`/.netlify/functions/build-info?ts=${Date.now()}`, {
-      cache: "no-store",
-      headers: { "cache-control": "no-store" },
-    });
-    if (r.ok) {
-      const j = await safeJson(r);
-      if (j && typeof j === "object") return j as BuildInfo;
-    }
-  } catch {
-    // ignore
-  }
-
-  // 2) Fallback: static build.json (written in postbuild)
+  // Always use static build.json (written in postbuild) because
+  // Netlify Functions do NOT reliably receive COMMIT_REF at runtime.
   try {
     const r = await fetch(`/build.json?ts=${Date.now()}`, {
       cache: "no-store",
