@@ -1,18 +1,12 @@
 [build]
-  # Inject commit SHA into Vite bundle so the app can compare with the latest deploy.
-  command = "npm run build"publish = "dist"
+  command = "npm run build"
+  publish = "dist"
 
-[build.environment]
-  NODE_VERSION = "20"
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
 
-# OBS: Variáveis do Netlify (Environment variables)
-# - SUPABASE_URL
-# - SUPABASE_SERVICE_ROLE_KEY
-# - ONESIGNAL_APP_ID
-# - ONESIGNAL_REST_API_KEY
-# - SUPABASE_DB_WEBHOOK_SECRET (recomendado: validar requests do Supabase Database Webhooks)
-# Se você alterar ENV vars, faça "Clear cache and deploy".
-
+# Mantém os arquivos do PWA/Workbox acessíveis diretamente
 [[redirects]]
   from = "/sw.js"
   to = "/sw.js"
@@ -38,16 +32,13 @@
   to = "/assets/:splat"
   status = 200
 
+# SPA fallback
 [[redirects]]
   from = "/*"
   to = "/index.html"
   status = 200
 
-[functions]
-  node_bundler = "esbuild"
-
-
-# Service worker scripts should never be aggressively cached.
+# (Opcional, mas recomendado) Evita cache agressivo do SW e do build.json
 [[headers]]
   for = "/sw.js"
   [headers.values]
@@ -59,6 +50,6 @@
     Cache-Control = "no-cache"
 
 [[headers]]
-  for = "/workbox-*"
+  for = "/build.json"
   [headers.values]
     Cache-Control = "no-cache"
