@@ -307,9 +307,7 @@ export default function News() {
       user_id: user.id,
       push_enabled: settings.push_enabled,
       messages: settings.types.message,
-      mentions: settings.types.mention,
       attention_calls: settings.types.attention_call,
-      friend_requests: settings.types.friend_request,
       comments: settings.types.comment,
       posts: settings.types.post,
       updated_at: new Date().toISOString(),
@@ -335,7 +333,7 @@ export default function News() {
     (async () => {
       const { data, error } = await supabase
         .from('notification_preferences')
-        .select('push_enabled,messages,mentions,attention_calls,friend_requests,comments,posts')
+        .select('push_enabled,messages,attention_calls,comments,posts')
         .eq('user_id', user.id)
         .maybeSingle();
 
@@ -368,9 +366,7 @@ export default function News() {
         types: {
           ...prev.types,
           message: data.messages ?? prev.types.message,
-          mention: data.mentions ?? prev.types.mention,
           attention_call: data.attention_calls ?? prev.types.attention_call,
-          friend_request: data.friend_requests ?? prev.types.friend_request,
           comment: data.comments ?? prev.types.comment,
           post: data.posts ?? prev.types.post,
         },

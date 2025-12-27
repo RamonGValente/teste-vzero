@@ -25,8 +25,7 @@ import { PWAInstallPrompt } from "./components/PWAInstallPrompt";
 import { useAuth } from "@/hooks/useAuth";
 import Rankings from "@/pages/Rankings";
 import { MovementStatusProvider } from "@/contexts/MovementStatusContext";
-import { PwaUpdateListener } from "@/components/pwa/PwaUpdateListener";
-
+import { AutoPwaUpdateAfterLogin } from "@/components/pwa/AutoPwaUpdateAfterLogin";
 const queryClient = new QueryClient();
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -53,7 +52,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
       <RealtimeMessageListener />
       <PushNotificationsBootstrap />
       {/* Checagem de nova versão / update do PWA (monta somente após login) */}
-      <PwaUpdateListener />
+      <AutoPwaUpdateAfterLogin />
       {children}
     </MovementStatusProvider>
   );

@@ -200,9 +200,16 @@ export async function handler(event) {
     return { statusCode: 200, headers, body: JSON.stringify({ ok: true, skipped: true, reason: 'not-insert' }) };
   }
 
+  // Push simplificado: apenas estas tabelas geram PUSH
+  const ALLOWED_PUSH_TABLES = new Set(['messages', 'comments', 'attention_calls', 'posts']);
+  if (!ALLOWED_PUSH_TABLES.has(table)) {
+    return { statusCode: 200, headers, body: JSON.stringify({ ok: true, skipped: true, reason: 'push-simplified-skip', table }) };
+  }
+
+
   const supabaseAdmin = createAdminClient();
   const baseUrl = getBaseUrl(event);
-	const appIconUrl = `${baseUrl}/icons/icon-192.png`;
+	const appIconUrl = `${baseUrl}/push-icon.png`;
 
   try {
     let receiverIds = [];
@@ -476,8 +483,17 @@ export async function handler(event) {
 	    receiverIds = uniqStrings(receiverIds);
 	    receiverIds = await filterByPreferences(supabaseAdmin, receiverIds, eventType);
 	    receiverIds = uniqStrings(receiverIds);
+    
+    // Push simplificado (texto genérico)
+    title = 'UnDoInG';
+    if (table === 'messages') message = 'Você recebeu uma nova mensagem.';
+    else if (table === 'comments') message = 'Você recebeu um novo comentário.';
+    else if (table === 'attention_calls') message = 'Você recebeu um alerta de atenção.';
+    else if (table === 'posts') message = 'Um amigo fez uma nova postagem na Arena.';
 
-    const result = await sendOneSignalNotification({
+    // Ícone/imagem padrão
+    imageUrl = appIconUrl;
+const result = await sendOneSignalNotification({
       appId: ONESIGNAL_APP_ID,
       restApiKey: ONESIGNAL_REST_API_KEY,
       targetExternalIds: receiverIds,

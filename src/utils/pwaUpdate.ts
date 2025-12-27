@@ -1,83 +1,92 @@
 import { registerSW } from 'virtual:pwa-register';
 
 /**
- * Minimal PWA update helper.
+ * PWA registration + auto-update (sem botão/alerta de versão).
  *
- * - `initPWAUpdate()` should be called once (in main.tsx)
- * - components can subscribe via `subscribeToPWAUpdate()`
- * - when `needRefresh` becomes true, show a button that calls `applyPWAUpdate()`
+ * O fluxo é simples:
+ * - registra o Service Worker no início da app
+ * - após o login, chamamos `autoUpdateAfterLogin()` para:
+ *   - pedir para o browser verificar update do SW
+ *   - se achar update (updatefound/controllerchange), recarrega 1 vez
+ *
+ * Isso mantém o usuário sempre na versão mais recente sem precisar clicar em nada.
  */
 
-type UpdateSWFn = (reloadPage?: boolean) => Promise<void> | void;
-
 let initialized = false;
-let updateSW: UpdateSWFn | null = null;
-let needRefresh = false;
-
-const listeners = new Set<() => void>();
-
-const emit = () => {
-  listeners.forEach((fn) => {
-    try {
-      fn();
-    } catch {
-      // ignore listener errors
-    }
-  });
-};
 
 export function initPWAUpdate() {
   if (initialized) return;
   initialized = true;
 
-  updateSW = registerSW({
+  // Registra o SW gerado pelo vite-plugin-pwa
+  registerSW({
     immediate: true,
-    onRegisteredSW(_swUrl, registration) {
-      // Try to check updates right away (some devices need a manual update() call).
-      try {
-        registration?.update();
-      } catch {
-        // ignore
-      }
-      // eslint-disable-next-line no-console
-      console.log('[PWA] Service worker registered');
-    },
-    onNeedRefresh() {
-      needRefresh = true;
-      emit();
-    },
-    onOfflineReady() {
-      // Optional: could show a toast “offline ready”
-    },
-    onRegisterError(error) {
-      // eslint-disable-next-line no-console
-      console.log('[PWA] Service worker register error', error);
-    },
   });
 }
 
-export function getPWAUpdateState() {
-  return { needRefresh };
+function oncePerSession(key: string): boolean {
+  try {
+    if (sessionStorage.getItem(key) === '1') return false;
+    sessionStorage.setItem(key, '1');
+    return true;
+  } catch {
+    return true;
+  }
 }
 
-export function subscribeToPWAUpdate(callback: () => void) {
-  listeners.add(callback);
-  return () => listeners.delete(callback);
-}
-
-export async function applyPWAUpdate() {
-  if (!updateSW) return;
-  // Passing true triggers skipWaiting and reload.
-  await updateSW(true);
-}
-
-export async function checkForPWAUpdate() {
+export async function autoUpdateAfterLogin() {
   if (typeof window === 'undefined') return;
   if (!('serviceWorker' in navigator)) return;
+
+  // Só roda uma vez por sessão (evita loops de reload)
+  if (!oncePerSession('pwa:autoUpdateAfterLogin:ran')) return;
+
   try {
-    const reg = await navigator.serviceWorker.getRegistration();
-    await reg?.update();
+    // Só faz sentido se a página já está controlada por SW
+    if (!navigator.serviceWorker.controller) return;
+
+    const registration = await navigator.serviceWorker.ready;
+
+    let updateFound = false;
+
+    const onUpdateFound = () => {
+      updateFound = true;
+    };
+
+    registration.addEventListener('updatefound', onUpdateFound, { once: true });
+
+    // Pede para o browser checar updates do SW
+    await registration.update();
+
+    // Se não encontrou update, termina sem recarregar
+    if (!updateFound) return;
+
+    // Se encontrou update, aguarda o novo SW controlar a página e recarrega
+    await new Promise<void>((resolve) => {
+      let done = false;
+      const timeout = window.setTimeout(() => {
+        if (done) return;
+        done = true;
+        resolve();
+      }, 4000);
+
+      navigator.serviceWorker.addEventListener(
+        'controllerchange',
+        () => {
+          if (done) return;
+          done = true;
+          window.clearTimeout(timeout);
+          resolve();
+        },
+        { once: true }
+      );
+    });
+
+    // Evita recarregar mais de 1 vez na mesma sessão
+    if (!oncePerSession('pwa:autoUpdateAfterLogin:reloaded')) return;
+
+    window.location.reload();
   } catch {
-    // ignore
+    // Se falhar, não quebra o app.
   }
 }

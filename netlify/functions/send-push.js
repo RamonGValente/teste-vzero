@@ -147,7 +147,7 @@ export async function handler(event) {
 
   const { eventType } = payload;
   const baseUrl = getBaseUrl(event);
-  const appIconUrl = `${baseUrl}/icons/icon-192.png`;
+  const appIconUrl = `${baseUrl}/push-icon.png`;
 
   try {
     let receiverIds = [];
@@ -226,11 +226,10 @@ export async function handler(event) {
 	          .eq('id', msg.user_id)
 	          .maybeSingle();
 	        senderName = prof?.username || prof?.full_name || senderName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-	      } catch {}
+	        } catch {}
 
 	      title = senderName;
-	      message = safePreview(msg.content || 'Você recebeu uma nova mensagem');
+	      message = 'Você recebeu uma nova mensagem.';
       url = `${baseUrl}/messages?conversation=${encodeURIComponent(msg.conversation_id)}`;
       data = {
         eventType: 'message',
@@ -262,8 +261,7 @@ export async function handler(event) {
 	          .eq('id', fr.sender_id)
 	          .maybeSingle();
 	        senderName = prof?.username || prof?.full_name || senderName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-	      } catch {}
+	        } catch {}
 	      title = `${senderName} quer ser seu amigo`;
 	      message = 'Toque para abrir o UnDoInG.';
       url = `${baseUrl}/news`;
@@ -291,8 +289,7 @@ export async function handler(event) {
 	          .eq('id', mention.user_id)
 	          .maybeSingle();
 	        actorName = prof?.username || prof?.full_name || actorName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-	      } catch {}
+	        } catch {}
 
 	      title = `${actorName} mencionou você`;
 	      message = 'Toque para ver.';
@@ -330,8 +327,7 @@ export async function handler(event) {
 	          .eq('id', call.sender_id)
 	          .maybeSingle();
 	        senderName = prof?.username || prof?.full_name || senderName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-	      } catch {}
+	        } catch {}
 	      title = `${senderName} chamou sua atenção`;
 	      message = safePreview(call.message || 'Toque para abrir o UnDoInG.');
       url = `${baseUrl}/messages`;
@@ -370,11 +366,10 @@ export async function handler(event) {
           .eq('id', comment.user_id)
           .maybeSingle();
         commenterName = prof?.username || prof?.full_name || commenterName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-      } catch {}
+	        } catch {}
 
 	      title = `${commenterName} comentou`;
-	      message = safePreview(comment.content || 'Novo comentário');
+	      message = 'Você recebeu um novo comentário.';
       url = `${baseUrl}/arena`;
       data = {
         eventType: 'comment',
@@ -430,11 +425,10 @@ export async function handler(event) {
           .eq('id', post.user_id)
           .maybeSingle();
         authorName = prof?.username || prof?.full_name || authorName;
-	        if (prof?.avatar_url) imageUrl = prof.avatar_url;
-      } catch {}
+	        } catch {}
 
 	      title = `${authorName} postou na Arena`;
-	      message = safePreview(post.content || 'Novo post');
+	      message = 'Um amigo fez uma nova postagem na Arena.';
       url = `${baseUrl}/arena`;
       data = { eventType: 'post', postId: post.id, authorId: post.user_id, url };
     }
@@ -456,12 +450,8 @@ export async function handler(event) {
           switch (eventType) {
             case 'message':
               return p.messages !== false;
-            case 'mention':
-              return p.mentions !== false;
             case 'attention_call':
               return p.attention_calls !== false;
-            case 'friend_request':
-              return p.friend_requests !== false;
             case 'comment':
               return p.comments !== false;
             case 'post':
@@ -481,7 +471,9 @@ export async function handler(event) {
 	    // Log útil no Netlify (para investigar "foi para todos")
 	    console.log('[push] event=', eventType, 'receivers=', receiverIds.length, receiverIds.slice(0, 5));
 
-	    const result = await sendOneSignalNotification({
+	    const imageUrl = appIconUrl;
+
+    const result = await sendOneSignalNotification({
       appId: ONESIGNAL_APP_ID,
       restApiKey: ONESIGNAL_REST_API_KEY,
       targetExternalIds: receiverIds,
